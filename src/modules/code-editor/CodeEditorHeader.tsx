@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Code2, Copy, Download, Eye, Maximize2, Minimize2, Save, Settings as SettingsIcon, X } from 'lucide-react';
+import { Check, Code2, Copy, Download, ExternalLink, Eye, Maximize2, Minimize2, Save, Settings as SettingsIcon, X } from 'lucide-react';
 
 import { copyTextToClipboard } from '@/shared/utils';
 import type { CodeEditorFile } from '@/shared/types';
@@ -11,10 +11,12 @@ type CodeEditorHeaderProps = {
   isMarkdownFile: boolean;
   isHtmlPreviewFile: boolean;
   markdownPreview: boolean;
+  htmlPreview: boolean;
   saving: boolean;
   saveSuccess: boolean;
   hasUnsavedChanges: boolean;
   onToggleMarkdownPreview: () => void;
+  onToggleHtmlPreview: () => void;
   onOpenHtmlPreview: () => void;
   onOpenSettings: () => void;
   onDownload: () => void;
@@ -28,6 +30,8 @@ type CodeEditorHeaderProps = {
     editMarkdown: string;
     previewMarkdown: string;
     previewHtml: string;
+    showHtmlPreview: string;
+    editHtml: string;
     settings: string;
     download: string;
     save: string;
@@ -48,10 +52,12 @@ export default function CodeEditorHeader({
   isMarkdownFile,
   isHtmlPreviewFile,
   markdownPreview,
+  htmlPreview,
   saving,
   saveSuccess,
   hasUnsavedChanges,
   onToggleMarkdownPreview,
+  onToggleHtmlPreview,
   onOpenHtmlPreview,
   onOpenSettings,
   onDownload,
@@ -142,11 +148,26 @@ export default function CodeEditorHeader({
         {isHtmlPreviewFile && (
           <button
             type="button"
+            onClick={onToggleHtmlPreview}
+            className={`flex items-center justify-center rounded-md p-1.5 transition-colors ${
+              htmlPreview
+                ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white'
+            }`}
+            title={htmlPreview ? labels.editHtml : labels.showHtmlPreview}
+          >
+            {htmlPreview ? <Code2 className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        )}
+
+        {isHtmlPreviewFile && (
+          <button
+            type="button"
             onClick={onOpenHtmlPreview}
             className="flex items-center justify-center rounded-md p-1.5 text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
             title={labels.previewHtml}
           >
-            <Eye className="h-4 w-4" />
+            <ExternalLink className="h-4 w-4" />
           </button>
         )}
 
