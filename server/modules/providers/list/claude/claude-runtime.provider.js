@@ -77,6 +77,18 @@ const BG_WAIT_CEILING_MS = 30 * 60 * 1000;
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
+// Sessions started in the Claude desktop app and resumed here still "remember"
+// that app's tools (SendUserFile, Artifact, ...): without this note the model
+// tries them first on every turn and only then falls back.
+const CLOUDCLI_SESSION_PROMPT = [
+  '# CloudCLI',
+  'This session runs in CloudCLI (web/mobile UI), not in the Claude desktop app.',
+  'Tools provided by the desktop app (SendUserFile, Artifact, mcp__ccd_* and similar) are not available here,',
+  'even if earlier turns of this conversation used them: never call them.',
+  'To show a file to the user (report, HTML mock, image, PDF) call mcp__cloudcli-send-file__send_user_file',
+  'directly, with absolute paths; it appears as a card in chat and opens in the side panel.',
+].join('\n');
+
 // Ultracode is a session-scoped setting rather than an SDK effort level: it pairs xhigh
 // effort with standing dynamic-workflow orchestration, and the CLI only honours it when
 // Workflows are enabled. The catalog offers it as an effort choice for the picker, so the
@@ -286,7 +298,8 @@ function mapCliOptionsToSDK(options = {}) {
 
   sdkOptions.systemPrompt = {
     type: 'preset',
-    preset: 'claude_code'
+    preset: 'claude_code',
+    append: CLOUDCLI_SESSION_PROMPT
   };
 
   sdkOptions.settingSources = ['project', 'user', 'local'];
