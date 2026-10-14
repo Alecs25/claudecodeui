@@ -53,6 +53,9 @@ import { fileTreeRoutes } from './modules/file-tree/index.js';
 import { worktreesRoutes } from './modules/worktrees/index.js';
 import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js';
 import { browserUseService } from './modules/browser-use/browser-use.service.js';
+import sentFilesRoutes from './modules/sent-files/sent-files.routes.js';
+import sentFilesMcpRoutes from './modules/sent-files/sent-files-mcp.routes.js';
+import { sentFilesService } from './modules/sent-files/index.js';
 import { initializeDatabase, sessionsDb } from './modules/database/index.js';
 import { configureWebPush } from './modules/notifications/index.js';
 
@@ -250,6 +253,10 @@ app.use('/api/browser-use-mcp', browserUseMcpRoutes);
 // Browser API Routes (protected)
 app.use('/api/browser-use', authenticateToken, browserUseRoutes);
 
+// Files sent to the user by agents (send_user_file MCP tool): MCP side uses its own token.
+app.use('/api/sent-files-mcp', sentFilesMcpRoutes);
+app.use('/api/sent-files', authenticateToken, sentFilesRoutes);
+
 // Unified provider MCP routes (protected)
 app.use('/api/providers', authenticateToken, providerRoutes);
 app.use('/api/scheduled-messages', authenticateToken, scheduledMessagesRoutes);
@@ -407,6 +414,9 @@ async function startServer() {
             const appInstallPath = APP_ROOT;
             await writeLocalServerMarker().catch((error) => {
                 console.warn('[WARN] Could not write local server marker:', error.message);
+            });
+            await sentFilesService.registerAgentMcp().catch((error: Error) => {
+                console.warn('[WARN] Could not register the send_user_file MCP server:', error.message);
             });
 
             console.log('');

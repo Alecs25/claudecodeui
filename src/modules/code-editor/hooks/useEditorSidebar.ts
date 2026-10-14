@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import type { Project,CodeEditorDiffInfo,CodeEditorFile } from '@/shared/types';
+import type { Project,CodeEditorDiffInfo,CodeEditorFile, SentFileSummary } from '@/shared/types';
+import { OPEN_SENT_FILE_EVENT } from '@/modules/code-editor/utils/sentFiles';
 
 type UseEditorSidebarOptions = {
   selectedProject: Project | null;
@@ -79,6 +80,38 @@ export const useEditorSidebar = ({
     },
     [selectedProject?.projectId, t],
   );
+
+  // A file an agent sent with send_user_file: read-only, loaded from the
+  // sent-files store rather than the project, so no projectId.
+  const handleSentFileOpen = useCallback((sentFile: SentFileSummary): boolean => {
+    if (
+      editingFileRef.current !== null
+      && editingFileRef.current.sentFileId !== sentFile.id
+      && hasUnsavedChangesRef.current
+      && !window.confirm(t('unsavedChanges.confirmClose'))
+    ) {
+      return false;
+    }
+    setEditingFile({
+      name: sentFile.name,
+      path: `sent-files/${sentFile.id}/${sentFile.name}`,
+      sentFileId: sentFile.id,
+    });
+    return true;
+  }, [t]);
+
+  // The chat card dispatches this event instead of receiving a callback, so
+  // the transcript components don't need another prop threaded through them.
+  useEffect(() => {
+    const handleOpenRequest = (event: Event) => {
+      const sentFile = (event as CustomEvent<SentFileSummary>).detail;
+      if (sentFile?.id) {
+        handleSentFileOpen(sentFile);
+      }
+    };
+    window.addEventListener(OPEN_SENT_FILE_EVENT, handleOpenRequest);
+    return () => window.removeEventListener(OPEN_SENT_FILE_EVENT, handleOpenRequest);
+  }, [handleSentFileOpen]);
 
   const handleCloseEditor = useCallback(() => {
     setEditingFile(null);

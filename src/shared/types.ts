@@ -904,7 +904,19 @@ export type CodeEditorFile = {
   diffInfo?: CodeEditorDiffInfo | null;
   // 1-based line to reveal when the file opens (from a `path:line` reference).
   line?: number | null;
+  // Set for a file an agent sent to the user: content comes from the sent-files
+  // store instead of the project, and the editor is read-only.
+  sentFileId?: string;
   [key: string]: unknown;
+};
+
+/** One file an agent sent to the user, as announced by the server (`sent_files` event) and returned by the send_user_file tool. */
+export type SentFileSummary = {
+  id: string;
+  name: string;
+  size: number;
+  mimeType: string;
+  caption?: string | null;
 };
 
 /** One request to reveal a line in the editor. The code editor builds a new object per opened file so the surface can tell a fresh request apart from a re-render, and jump only once per request. */

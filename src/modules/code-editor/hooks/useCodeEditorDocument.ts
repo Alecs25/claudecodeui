@@ -43,6 +43,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
   const fileProjectId = file.projectId ?? projectPath;
   const filePath = file.path;
   const fileName = file.name;
+  const sentFileId = file.sentFileId;
   const fileDiffNewString = file.diffInfo?.new_string;
   const fileDiffOldString = file.diffInfo?.old_string;
   // Counts the loads this editor has performed. A read or save still in flight
@@ -94,6 +95,19 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
           return;
         }
 
+        if (sentFileId) {
+          const sentResponse = await api.readSentFileContent(sentFileId);
+          if (!sentResponse.ok) {
+            throw new Error(`Unable to read the sent file (${sentResponse.status})`);
+          }
+          const text = await sentResponse.text();
+          if (isStaleLoad()) {
+            return;
+          }
+          applyLoadedContent(text);
+          return;
+        }
+
         if (!fileProjectId) {
           throw new Error('Missing project identifier');
         }
@@ -122,12 +136,13 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
     };
 
     loadFileContent();
-  }, [file.diffInfo, file.name, fileDiffNewString, fileDiffOldString, fileName, filePath, fileProjectId]);
+  }, [file.diffInfo, file.name, fileDiffNewString, fileDiffOldString, fileName, filePath, fileProjectId, sentFileId]);
 
   const handleSave = useCallback(async () => {
     // Preview-only and binary files have no editable text buffer; never write
     // them back (e.g. via Cmd/Ctrl+S) or we'd corrupt the file on disk.
-    if (previewKind || isBinaryFile(fileName)) {
+    // Sent files are read-only copies: there is no file on disk to write back to.
+    if (previewKind || isBinaryFile(fileName) || sentFileId) {
       return;
     }
 
@@ -180,7 +195,7 @@ export const useCodeEditorDocument = ({ file, projectPath }: UseCodeEditorDocume
         setSaving(false);
       }
     }
-  }, [content, filePath, fileProjectId, previewKind, fileName]);
+  }, [content, filePath, fileProjectId, previewKind, fileName, sentFileId]);
 
   const handleDownload = useCallback(() => {
     const blob = new Blob([content], { type: 'text/plain' });

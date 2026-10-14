@@ -10,6 +10,8 @@ type CodeEditorHeaderProps = {
   isFullscreen: boolean;
   isMarkdownFile: boolean;
   isHtmlPreviewFile: boolean;
+  // Sent files are read-only copies: no save button.
+  readOnly?: boolean;
   markdownPreview: boolean;
   htmlPreview: boolean;
   saving: boolean;
@@ -51,6 +53,7 @@ export default function CodeEditorHeader({
   isFullscreen,
   isMarkdownFile,
   isHtmlPreviewFile,
+  readOnly = false,
   markdownPreview,
   htmlPreview,
   saving,
@@ -189,6 +192,7 @@ export default function CodeEditorHeader({
           <Download className="h-4 w-4" />
         </button>
 
+        {!readOnly && (
         <button
           type="button"
           onClick={onSave}
@@ -208,6 +212,7 @@ export default function CodeEditorHeader({
             <Save className="h-4 w-4" />
           )}
         </button>
+        )}
 
         {!isSidebar && (
           <button

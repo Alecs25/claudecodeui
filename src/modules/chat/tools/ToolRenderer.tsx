@@ -2,6 +2,7 @@ import React, { memo, useMemo, useCallback } from 'react';
 
 import type { DiffLine, Project,ToolStatus } from '@/shared/types';
 import { formatToolDisplayName, getToolConfig } from '@/modules/chat/tools/configs/toolConfigs';
+import { SentFilesCard, isSendUserFileTool, parseSentFilesResult } from '@/modules/code-editor';
 import { OneLineDisplay } from '@/modules/chat/tools/OneLineDisplay';
 import { BashCommandDisplay } from '@/modules/chat/tools/BashCommandDisplay';
 import { BashEditDiff } from '@/modules/chat/tools/BashEditDiff';
@@ -114,6 +115,17 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
   }, [displayConfig, parsedData, onFileOpen]);
 
   if (!displayConfig) return null;
+
+  // send_user_file: the files the agent sent, as cards that open in the side panel.
+  if (mode === 'result' && isSendUserFileTool(toolName)) {
+    const sentFiles = parseSentFilesResult(toolResult);
+    if (sentFiles.length > 0) {
+      const caption = typeof toolInput === 'object' && toolInput !== null && typeof toolInput.caption === 'string'
+        ? toolInput.caption
+        : null;
+      return <SentFilesCard files={sentFiles} caption={caption} />;
+    }
+  }
 
   // Bash renders as a Codex-style command row: the command on a single line with
   // a chevron that expands to show the output inline. The combined view lives on

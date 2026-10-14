@@ -41,5 +41,9 @@
   "unsavedChanges": {
     "confirmClose": "Ci sono modifiche non salvate. Chiudere questo file e scartarle?",
     "indicator": "Modifiche non salvate"
+  },
+  "sentFiles": {
+    "open": "Apri nel pannello laterale",
+    "downloadError": "Download non riuscito"
   }
 }

@@ -299,6 +299,7 @@ export default function CodeEditor({
             isFullscreen={isFullscreen}
             isMarkdownFile={isMarkdownFile}
             isHtmlPreviewFile={isHtmlPreviewFile}
+            readOnly={Boolean(file.sentFileId)}
             markdownPreview={markdownPreview}
             htmlPreview={htmlPreview}
             saving={saving}

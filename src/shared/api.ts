@@ -307,6 +307,10 @@ export const api = {
   // media call sites fetch a blob through here instead of using a bare `src`.
   readFileBlob: (projectId: string, filePath: string, options: ApiRequestOptions = {}) =>
     get(fileContentPath(projectId, filePath), options),
+  // Files an agent sent to the user (send_user_file). Read-only copies kept by
+  // the server; content needs the auth header like any workspace file.
+  readSentFileContent: (sentFileId: string, options: ApiRequestOptions = {}) =>
+    get(`/api/sent-files/${encodeURIComponent(sentFileId)}/content`, options),
   saveFile: (projectId: string, filePath: string, content: string) =>
     put(`/api/file-tree/projects/${projectId}/file`, { filePath, content }),
   getFiles: (projectId: string, options: ApiRequestOptions = {}) =>
