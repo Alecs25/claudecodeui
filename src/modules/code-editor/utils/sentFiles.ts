@@ -14,7 +14,17 @@ export const requestSentFileOpen = (sentFile: SentFileSummary): void => {
 export const isSendUserFileTool = (toolName: string): boolean => toolName.endsWith(SEND_USER_FILE_TOOL_SUFFIX);
 
 const contentToText = (content: unknown): string => {
-  if (typeof content === 'string') return content;
+  if (typeof content === 'string') {
+    // History ships MCP content blocks as a JSON-encoded array string.
+    if (content.trimStart().startsWith('[')) {
+      try {
+        return contentToText(JSON.parse(content));
+      } catch {
+        return content;
+      }
+    }
+    return content;
+  }
   if (Array.isArray(content)) {
     return content
       .map((block) => (block && typeof block === 'object' && 'text' in block ? String((block as { text: unknown }).text) : ''))

@@ -195,6 +195,10 @@ export function useChatRealtimeHandlers({
         // Sidebar/global events — owned by useProjectsState.
         case 'session_upserted':
         case 'loading_progress':
+        // Files sent by an agent — owned by the code editor (useSentFilesAutoOpen).
+        // It carries no sessionId, so falling through would file it into the
+        // viewed session's transcript as a bogus message.
+        case 'sent_files':
           return;
 
         default:

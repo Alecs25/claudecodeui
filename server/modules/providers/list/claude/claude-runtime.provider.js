@@ -77,6 +77,8 @@ const BG_WAIT_CEILING_MS = 30 * 60 * 1000;
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
+const SEND_USER_FILE_TOOL = 'mcp__cloudcli-send-file__send_user_file';
+
 // Sessions started in the Claude desktop app and resumed here still "remember"
 // that app's tools (SendUserFile, Artifact, ...): without this note the model
 // tries them first on every turn and only then falls back.
@@ -269,6 +271,13 @@ function mapCliOptionsToSDK(options = {}) {
   }
 
   let allowedTools = [...(settings.allowedTools || [])];
+
+  // send_user_file only shows the user a file the agent can already read: an
+  // approval prompt protects nothing and, missed on a phone, leaves the turn
+  // waiting forever.
+  if (!allowedTools.includes(SEND_USER_FILE_TOOL)) {
+    allowedTools.push(SEND_USER_FILE_TOOL);
+  }
 
   if (permissionMode === 'plan') {
     const planModeTools = ['Read', 'Task', 'exit_plan_mode', 'TodoRead', 'TodoWrite', 'WebFetch', 'WebSearch'];

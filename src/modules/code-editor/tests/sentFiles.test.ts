@@ -36,3 +36,11 @@ test('a result without the block or with broken JSON yields no files', () => {
   assert.deepEqual(parseSentFilesResult({ content: '{"sentFiles": [ {"id": ' }), []);
   assert.deepEqual(parseSentFilesResult(undefined), []);
 });
+
+test('files are read from the JSON-encoded block array that history returns', () => {
+  const content = JSON.stringify([
+    { type: 'text', text: resultText },
+    { type: 'text', text: JSON.stringify({ sentFiles: [sentFile] }) },
+  ]);
+  assert.deepEqual(parseSentFilesResult({ content }), [sentFile]);
+});
