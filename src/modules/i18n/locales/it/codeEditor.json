@@ -24,7 +24,10 @@
     "fullscreen": "Schermo intero",
     "close": "Chiudi",
     "previewMarkdown": "Anteprima markdown",
-    "editMarkdown": "Modifica markdown"
+    "editMarkdown": "Modifica markdown",
+    "previewHtml": "Apri anteprima HTML in una nuova scheda",
+    "showHtmlPreview": "Anteprima HTML",
+    "editHtml": "Modifica HTML"
   },
   "footer": {
     "lines": "Righe:",

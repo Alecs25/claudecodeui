@@ -49,6 +49,8 @@ export default function CodeEditor({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showDiff, setShowDiff] = useState(Boolean(file.diffInfo));
   const [markdownPreview, setMarkdownPreview] = useState(false);
+  // HTML opens rendered: in the sidebar the source is rarely what the user wants to see.
+  const [htmlPreview, setHtmlPreview] = useState(true);
 
   // The code editor follows the app-wide theme; it has no theme of its own.
   const { isDarkMode } = useTheme();
@@ -298,10 +300,12 @@ export default function CodeEditor({
             isMarkdownFile={isMarkdownFile}
             isHtmlPreviewFile={isHtmlPreviewFile}
             markdownPreview={markdownPreview}
+            htmlPreview={htmlPreview}
             saving={saving}
             saveSuccess={saveSuccess}
             hasUnsavedChanges={hasUnsavedChanges}
             onToggleMarkdownPreview={() => setMarkdownPreview((previous) => !previous)}
+            onToggleHtmlPreview={() => setHtmlPreview((previous) => !previous)}
             onOpenHtmlPreview={openHtmlPreview}
             onOpenSettings={() => paletteOps.openSettings('appearance')}
             onDownload={handleDownload}
@@ -315,6 +319,8 @@ export default function CodeEditor({
               editMarkdown: t('actions.editMarkdown'),
               previewMarkdown: t('actions.previewMarkdown'),
               previewHtml: t('actions.previewHtml', 'Open HTML preview in new tab'),
+              showHtmlPreview: t('actions.showHtmlPreview', 'Preview HTML'),
+              editHtml: t('actions.editHtml', 'Edit HTML'),
               settings: t('toolbar.settings'),
               download: t('actions.download'),
               save: t('actions.save'),
@@ -339,6 +345,9 @@ export default function CodeEditor({
               onChange={setContent}
               markdownPreview={markdownPreview}
               isMarkdownFile={isMarkdownFile}
+              htmlPreview={htmlPreview}
+              isHtmlPreviewFile={isHtmlPreviewFile}
+              fileName={file.name}
               isDarkMode={isDarkMode}
               fontSize={fontSize}
               showLineNumbers={showLineNumbers}

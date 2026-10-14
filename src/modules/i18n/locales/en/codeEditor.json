@@ -24,7 +24,10 @@
     "fullscreen": "Fullscreen",
     "close": "Close",
     "previewMarkdown": "Preview markdown",
-    "editMarkdown": "Edit markdown"
+    "editMarkdown": "Edit markdown",
+    "previewHtml": "Open HTML preview in new tab",
+    "showHtmlPreview": "Preview HTML",
+    "editHtml": "Edit HTML"
   },
   "footer": {
     "lines": "Lines:",
