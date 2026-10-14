@@ -29,6 +29,6 @@ test('a stored width is restored, and a broken one falls back to the default', (
   assert.equal(parseSidebarWidth(''), SIDEBAR_WIDTH_DEFAULT);
 });
 
-test('the default width matches the previous fixed sidebar', () => {
-  assert.equal(SIDEBAR_WIDTH_DEFAULT, 288); // md:w-72
+test('the default width leaves room for session titles', () => {
+  assert.equal(SIDEBAR_WIDTH_DEFAULT, 360); // was 288 (md:w-72)
 });
