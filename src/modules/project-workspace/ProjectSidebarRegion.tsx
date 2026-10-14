@@ -131,14 +131,18 @@ function ProjectSidebarRegion({
             aria-valuemin={SIDEBAR_WIDTH_MIN}
             aria-valuemax={SIDEBAR_WIDTH_MAX}
             tabIndex={0}
-            className="absolute inset-y-0 -right-0.5 z-10 w-1 cursor-col-resize hover:bg-primary/40 focus-visible:bg-primary/60 focus-visible:outline-none"
+            // 16px hit area for fingers, 4px visible line; touch-none keeps the
+            // browser from turning the drag into a scroll and cancelling it.
+            className="group absolute inset-y-0 -right-2 z-10 w-4 cursor-col-resize touch-none focus-visible:outline-none"
             onPointerDown={handleResizeStart}
             onPointerMove={handleResizeMove}
             onPointerUp={handleResizeEnd}
             onPointerCancel={handleResizeEnd}
             onDoubleClick={resetSidebarWidth}
             onKeyDown={handleResizeKeyDown}
-          />
+          >
+            <span className="pointer-events-none absolute inset-y-0 left-1/2 w-1 -translate-x-1/2 group-hover:bg-primary/40 group-focus-visible:bg-primary/60 group-active:bg-primary/60" />
+          </div>
         )}
       </div>
     );

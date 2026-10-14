@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { MouseEvent as ReactMouseEvent } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { Project,CodeEditorDiffInfo,CodeEditorFile, SentFileSummary } from '@/shared/types';
@@ -123,7 +123,7 @@ export const useEditorSidebar = ({
   }, []);
 
   const handleResizeStart = useCallback(
-    (event: ReactMouseEvent<HTMLDivElement>) => {
+    (event: ReactPointerEvent<HTMLDivElement>) => {
       if (isMobile) {
         return;
       }
@@ -156,7 +156,9 @@ export const useEditorSidebar = ({
       }
     };
 
-    const handleMouseMove = (event: globalThis.MouseEvent) => {
+    // Pointer events, so touch screens (e.g. a tablet or foldable in the
+    // desktop layout) can drag the handle as well as a mouse.
+    const handlePointerMove = (event: globalThis.PointerEvent) => {
       // Get the main container (parent of EditorSidebar's parent) that contains both left content and editor
       const editorContainer = resizeHandleRef.current?.parentElement;
       const mainContainer = editorContainer?.parentElement;
@@ -179,12 +181,13 @@ export const useEditorSidebar = ({
       }
     };
 
-    const handleMouseUp = () => {
+    const handlePointerUp = () => {
       setIsResizing(false);
     };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('pointermove', handlePointerMove);
+    document.addEventListener('pointerup', handlePointerUp);
+    document.addEventListener('pointercancel', handlePointerUp);
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
 
@@ -195,8 +198,9 @@ export const useEditorSidebar = ({
       // Land on the last position the pointer reached rather than the last
       // frame that happened to commit.
       commitPendingWidth();
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', handlePointerUp);
+      document.removeEventListener('pointercancel', handlePointerUp);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };

@@ -1,5 +1,5 @@
 import { useCallback, useState, useEffect, useRef } from 'react';
-import type { MouseEvent, MutableRefObject } from 'react';
+import type { MutableRefObject, PointerEvent } from 'react';
 
 import type { CodeEditorFile } from '@/shared/types';
 import CodeEditor from '@/modules/code-editor/CodeEditor';
@@ -11,7 +11,7 @@ type EditorSidebarProps = {
   editorWidth: number;
   hasManualWidth: boolean;
   resizeHandleRef: MutableRefObject<HTMLDivElement | null>;
-  onResizeStart: (event: MouseEvent<HTMLDivElement>) => void;
+  onResizeStart: (event: PointerEvent<HTMLDivElement>) => void;
   onCloseEditor: () => void;
   onToggleEditorExpand: () => void;
   // Forwarded to CodeEditor so useEditorSidebar can refuse to swap a dirty
@@ -122,11 +122,13 @@ export default function EditorSidebar({
       {!isFloating && !editorExpanded && (
         <div
           ref={resizeHandleRef}
-          onMouseDown={onResizeStart}
-          className="group relative w-1 flex-shrink-0 cursor-col-resize bg-gray-200 transition-colors hover:bg-blue-500 dark:bg-gray-700 dark:hover:bg-blue-600"
+          onPointerDown={onResizeStart}
+          className="group relative w-1 flex-shrink-0 cursor-col-resize touch-none bg-gray-200 transition-colors hover:bg-blue-500 dark:bg-gray-700 dark:hover:bg-blue-600"
           title="Drag to resize"
         >
-          <div className="absolute inset-y-0 left-1/2 w-1 -translate-x-1/2 bg-blue-500 opacity-0 transition-opacity group-hover:opacity-100 dark:bg-blue-600" />
+          {/* Wider invisible grab area for touch; the visible line stays 4px. */}
+          <div className="absolute inset-y-0 -left-2 -right-2 z-10" />
+          <div className="absolute inset-y-0 left-1/2 w-1 -translate-x-1/2 bg-blue-500 opacity-0 transition-opacity group-hover:opacity-100 group-active:opacity-100 dark:bg-blue-600" />
         </div>
       )}
 
