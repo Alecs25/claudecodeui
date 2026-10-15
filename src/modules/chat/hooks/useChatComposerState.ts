@@ -27,6 +27,7 @@ import {
   writeQueuedMessage,
 } from '@/shared/chatDrafts';
 import { escapeRegExp } from '@/modules/chat/utils/chatFormatting';
+import { WIDGET_SEND_PROMPT_EVENT } from '@/modules/chat/utils/inlineWidget';
 import { describeBackgroundTask, ownBackgroundTasks } from '@/modules/chat/utils/backgroundTasks';
 import { useFileMentions } from '@/modules/chat/hooks/useFileMentions';
 import { useInputHistory } from '@/modules/chat/hooks/useInputHistory';
@@ -1047,6 +1048,22 @@ export function useChatComposerState({
     setInput(next);
     inputValueRef.current = next;
     if (send) handleSubmitRef.current?.(createFakeSubmitEvent());
+  }, [setInput]);
+
+  // An inline widget's sendPrompt() sends its text as if the user had typed it,
+  // as in Claude's apps. Same synchronous ref mirror as the voice path above.
+  useEffect(() => {
+    const handleWidgetPrompt = (event: Event) => {
+      const text = (event as CustomEvent<string>).detail;
+      if (typeof text !== 'string' || !text.trim()) {
+        return;
+      }
+      setInput(text);
+      inputValueRef.current = text;
+      handleSubmitRef.current?.(createFakeSubmitEvent());
+    };
+    window.addEventListener(WIDGET_SEND_PROMPT_EVENT, handleWidgetPrompt);
+    return () => window.removeEventListener(WIDGET_SEND_PROMPT_EVENT, handleWidgetPrompt);
   }, [setInput]);
 
   useEffect(() => {

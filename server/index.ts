@@ -56,6 +56,7 @@ import { browserUseService } from './modules/browser-use/browser-use.service.js'
 import sentFilesRoutes from './modules/sent-files/sent-files.routes.js';
 import sentFilesMcpRoutes from './modules/sent-files/sent-files-mcp.routes.js';
 import { sentFilesService } from './modules/sent-files/index.js';
+import { visualizeService } from './modules/visualize/index.js';
 import { initializeDatabase, sessionsDb } from './modules/database/index.js';
 import { configureWebPush } from './modules/notifications/index.js';
 
@@ -417,6 +418,9 @@ async function startServer() {
             });
             await sentFilesService.registerAgentMcp().catch((error: Error) => {
                 console.warn('[WARN] Could not register the send_user_file MCP server:', error.message);
+            });
+            await visualizeService.registerAgentMcp().catch((error: Error) => {
+                console.warn('[WARN] Could not register the show_widget MCP server:', error.message);
             });
 
             console.log('');

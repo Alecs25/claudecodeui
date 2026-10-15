@@ -19,6 +19,8 @@ import { ToolStatusBadge } from '@/modules/chat/tools/ToolStatusBadge';
 import { DiffStatsBadge } from '@/modules/chat/tools/DiffStatsBadge';
 import { parseToolPayload, summarizeDiff } from '@/modules/chat/utils/messageTransforms';
 import { isShellTool } from '@/modules/chat/utils/toolActivity';
+import { isShowWidgetTool, readWidgetInput } from '@/modules/chat/utils/inlineWidget';
+import { InlineWidget } from '@/modules/chat/tools/InlineWidget';
 
 type ToolRendererProps = {
   toolName: string;
@@ -125,6 +127,16 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
         ? toolInput.caption
         : null;
       return <SentFilesCard files={sentFiles} caption={caption} />;
+    }
+  }
+
+  // show_widget: the fragment itself is the content, drawn inline; its result is
+  // only an acknowledgement for the model.
+  if (isShowWidgetTool(toolName)) {
+    if (mode === 'result') return null;
+    const widget = readWidgetInput(toolInput);
+    if (widget.code) {
+      return <InlineWidget widgetCode={widget.code} title={widget.title} />;
     }
   }
 
