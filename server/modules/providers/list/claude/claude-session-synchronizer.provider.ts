@@ -11,6 +11,10 @@ import {
   readFileTimestamps,
 } from '@/shared/utils.js';
 import type { IProviderSessionSynchronizer } from '@/shared/interfaces.js';
+import { getDesktopSessionTitle } from '@/modules/providers/list/claude/claude-desktop-titles.js';
+import type { DesktopSessionTitle } from '@/modules/providers/list/claude/claude-desktop-titles.js';
+
+const UNTITLED_SESSION_NAME = 'Untitled Claude Session';
 
 type ParsedSession = {
   sessionId: string;
@@ -135,15 +139,36 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       return null;
     }
 
+    // A title chosen in the Claude desktop app (typed by the user, or set by the
+    // agent's session-title tool) wins over everything: it is the name of this
+    // conversation wherever it is opened.
+    const desktopTitle = await getDesktopSessionTitle(parsed.sessionId);
+    if (desktopTitle?.isChosenTitle) {
+      return {
+        ...parsed,
+        sessionName: normalizeSessionName(desktopTitle.title, UNTITLED_SESSION_NAME),
+      };
+    }
+
     // App-created sessions are keyed by an app id, so disk-discovered provider
     // ids must be resolved through the provider-id mapping first.
     const existingSession = sessionsDb.getSessionByProviderSessionId(parsed.sessionId)
       ?? sessionsDb.getSessionById(parsed.sessionId);
     const existingSessionName = existingSession?.custom_name;
-    if (existingSessionName && existingSessionName !== 'Untitled Claude Session') {
+    if (existingSessionName && existingSessionName !== UNTITLED_SESSION_NAME) {
       return {
         ...parsed,
-        sessionName: normalizeSessionName(existingSessionName, 'Untitled Claude Session'),
+        sessionName: normalizeSessionName(
+          await this.preferDesktopGeneratedTitle(existingSessionName, desktopTitle, filePath, parsed.sessionId),
+          UNTITLED_SESSION_NAME,
+        ),
+      };
+    }
+
+    if (desktopTitle) {
+      return {
+        ...parsed,
+        sessionName: normalizeSessionName(desktopTitle.title, UNTITLED_SESSION_NAME),
       };
     }
 
@@ -154,8 +179,28 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
 
     return {
       ...parsed,
-      sessionName: normalizeSessionName(sessionName, 'Untitled Claude Session'),
+      sessionName: normalizeSessionName(sessionName, UNTITLED_SESSION_NAME),
     };
+  }
+
+  /**
+   * The stored name, unless it is only the transcript's own title and the
+   * desktop app generated a better one: a name that differs from the
+   * transcript title was set in CloudCLI and is kept.
+   */
+  private async preferDesktopGeneratedTitle(
+    existingSessionName: string,
+    desktopTitle: DesktopSessionTitle | null,
+    filePath: string,
+    sessionId: string,
+  ): Promise<string> {
+    if (!desktopTitle || desktopTitle.title === existingSessionName) {
+      return existingSessionName;
+    }
+    const transcriptTitle = await this.extractSessionTitle(filePath, sessionId);
+    const storedNameIsTranscriptTitle = !transcriptTitle
+      || normalizeSessionName(transcriptTitle, UNTITLED_SESSION_NAME) === existingSessionName;
+    return storedNameIsTranscriptTitle ? desktopTitle.title : existingSessionName;
   }
 
   /**
