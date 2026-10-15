@@ -392,5 +392,24 @@
     "effortLevels": "Reasoning levels",
     "effortLevelsHint": "Select the reasoning-effort levels this model accepts. If none are selected, no effort level can be chosen for this model in the composer.",
     "effortSummary": "Reasoning: {{levels}}"
+  },
+  "toolSummary": {
+    "command_one": "ran a command",
+    "command_other": "ran {{count}} commands",
+    "read_one": "read a file",
+    "read_other": "read {{count}} files",
+    "search_one": "ran a search",
+    "search_other": "ran {{count}} searches",
+    "edit_one": "edited a file",
+    "edit_other": "edited {{count}} files",
+    "web_one": "used the web",
+    "web_other": "used the web {{count}} times",
+    "todo_one": "updated the task list",
+    "todo_other": "updated the task list",
+    "other_one": "used a tool",
+    "other_other": "used {{count}} tools",
+    "failed_one": "{{count}} failed",
+    "failed_other": "{{count}} failed",
+    "running": "Running"
   }
 }

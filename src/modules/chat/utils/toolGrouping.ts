@@ -1,7 +1,10 @@
 import type { ChatMessage, ToolGroupItem } from '@/shared/types';
 import { getToolConfig } from '@/modules/chat/tools/configs/toolConfigs';
+import { countToolActivity, isAlwaysVisibleTool } from '@/modules/chat/utils/toolActivity';
 
-export const TOOL_GROUP_THRESHOLD = 2;
+// One call already collapses, as in Claude's apps: the transcript reads as the
+// agent's prose with a quiet "Read a file" line between paragraphs.
+export const TOOL_GROUP_THRESHOLD = 1;
 
 /** How many of a group's tool inputs the collapsed summary line spells out. */
 const PREVIEWED_TOOL_COUNT = 2;
@@ -46,6 +49,7 @@ function getToolGroup(run: GroupableToolRun, showThinking: boolean): ToolGroupIt
     toolName: first.toolName,
     messages: run,
     timestamp: first.timestamp,
+    activity: countToolActivity(run.map((message) => message.toolName)),
     preview: buildGroupPreview(run),
   };
   toolGroupCache.set(first, { run, showThinking, group });
@@ -57,9 +61,15 @@ export function isToolGroupItem(item: MessageListItem): item is ToolGroupItem {
 }
 
 // An agent's or a workflow's row is its whole card — status, timeline, result —
-// so it never folds into a collapsed run with its neighbours.
+// so it never folds into a collapsed run with its neighbours; neither do the
+// tools the user has to answer or look at (questions, plans, sent files, widgets).
 function isGroupableToolMessage(message: ChatMessage): message is ChatMessage & { toolName: string } {
-  return Boolean(message.isToolUse && message.toolName && !message.isSubagentContainer && message.toolName !== 'Workflow');
+  return Boolean(
+    message.isToolUse
+    && message.toolName
+    && !message.isSubagentContainer
+    && !isAlwaysVisibleTool(message.toolName),
+  );
 }
 
 // Messages that render nothing (e.g. reasoning hidden when showThinking is off)
@@ -148,7 +158,7 @@ export function groupConsecutiveTools(
         continue;
       }
 
-      if (isGroupableToolMessage(candidate) && candidate.toolName === message.toolName) {
+      if (isGroupableToolMessage(candidate)) {
         run.push(candidate);
         nextIndex += 1;
         continue;

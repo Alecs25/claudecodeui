@@ -60,21 +60,41 @@ test('a group of more than two calls reports the remainder', () => {
   assert.equal(group.preview, '/a.ts, /b.ts, +2 more');
 });
 
-test('a single tool call is not grouped', () => {
+test('a single tool call already collapses into a summary row, as in Claude’s apps', () => {
   const items = groupConsecutiveTools([toolMessage('Read', { file_path: '/a.ts' })]);
 
   assert.equal(items.length, 1);
-  assert.equal(isToolGroupItem(items[0]), false);
+  const [group] = items;
+  assert.ok(isToolGroupItem(group));
+  assert.deepEqual(group.activity, { read: 1 });
 });
 
-test('different tools are not grouped together', () => {
+test('different tools in a row share one group, counted by kind', () => {
   const items = groupConsecutiveTools([
+    toolMessage('Bash', { command: 'ls' }),
     toolMessage('Read', { file_path: '/a.ts' }),
+    toolMessage('PowerShell', { command: 'dir' }),
     toolMessage('Write', { file_path: '/b.ts' }),
+    toolMessage('mcp__odoo__cerca_contatti', { query: 'x' }),
   ]);
 
-  assert.equal(items.length, 2);
-  assert.equal(items.every((item) => !isToolGroupItem(item)), true);
+  assert.equal(items.length, 1);
+  const [group] = items;
+  assert.ok(isToolGroupItem(group));
+  assert.deepEqual(group.activity, { command: 2, read: 1, edit: 1, other: 1 });
+});
+
+test('tools the user has to answer or look at stay out of the summary', () => {
+  const items = groupConsecutiveTools([
+    toolMessage('Read', { file_path: '/a.ts' }),
+    toolMessage('AskUserQuestion', { questions: [] }),
+    toolMessage('mcp__cloudcli-send-file__send_user_file', { files: ['/a.html'] }),
+    toolMessage('ExitPlanMode', { plan: 'p' }),
+    toolMessage('Read', { file_path: '/b.ts' }),
+  ]);
+
+  assert.equal(items.length, 5);
+  assert.deepEqual(items.map(isToolGroupItem), [true, false, false, false, true]);
 });
 
 test('a text turn splits a run', () => {
@@ -85,7 +105,7 @@ test('a text turn splits a run', () => {
   ]);
 
   assert.equal(items.length, 3);
-  assert.equal(items.filter(isToolGroupItem).length, 0);
+  assert.deepEqual(items.map(isToolGroupItem), [true, false, true]);
 });
 
 test('an unparsable tool input does not throw while grouping', () => {
@@ -193,7 +213,7 @@ test('reasoning the user can see does split the run', () => {
   ], true);
 
   assert.equal(items.length, 3);
-  assert.equal(items.filter(isToolGroupItem).length, 0);
+  assert.deepEqual(items.map(isToolGroupItem), [true, false, true]);
 });
 
 test('showThinking defaults to on, so a caller that omits it does not collapse a visible turn', () => {
@@ -215,7 +235,7 @@ test('a subagent container is never absorbed into a group', () => {
   ]);
 
   assert.equal(items.length, 2);
-  assert.equal(items.filter(isToolGroupItem).length, 0);
+  assert.equal(isToolGroupItem(items[1]), false);
 });
 
 test('consecutive workflow launches keep their own cards instead of folding into a run', () => {

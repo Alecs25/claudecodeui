@@ -284,5 +284,24 @@
     "effortLevels": "Livelli di ragionamento",
     "effortLevelsHint": "Seleziona i livelli di sforzo di ragionamento accettati da questo modello. Senza selezione, nel composer non si potrà scegliere alcun livello per questo modello.",
     "effortSummary": "Ragionamento: {{levels}}"
+  },
+  "toolSummary": {
+    "command_one": "eseguito un comando",
+    "command_other": "eseguiti {{count}} comandi",
+    "read_one": "letto un file",
+    "read_other": "letti {{count}} file",
+    "search_one": "fatta una ricerca",
+    "search_other": "fatte {{count}} ricerche",
+    "edit_one": "modificato un file",
+    "edit_other": "modificati {{count}} file",
+    "web_one": "consultato il web",
+    "web_other": "consultato il web {{count}} volte",
+    "todo_one": "aggiornato l'elenco attività",
+    "todo_other": "aggiornato l'elenco attività",
+    "other_one": "usato uno strumento",
+    "other_other": "usati {{count}} strumenti",
+    "failed_one": "{{count}} non riuscito",
+    "failed_other": "{{count}} non riusciti",
+    "running": "In corso"
   }
 }

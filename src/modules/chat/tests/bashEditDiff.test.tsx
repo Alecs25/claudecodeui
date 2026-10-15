@@ -421,7 +421,8 @@ describe('a live Bash result reaching the transcript', () => {
       </UiPreferencesProvider>,
     );
 
-    expect(container.textContent).toContain("sed -i 's/two/TWO/' g.txt");
+    // The collapsed row reads as its description; the command opens with the row.
+    expect(container.textContent).toContain('Edit g.txt');
     expect(diffLineTexts(container)).toContain('+TWO');
     expect(container.querySelectorAll('[aria-label="1 lines added, 1 removed"]')).toHaveLength(1);
   });

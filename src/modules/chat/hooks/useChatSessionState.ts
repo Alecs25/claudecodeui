@@ -25,6 +25,9 @@ const SEARCH_TARGET_CONTEXT_MESSAGES = 20;
 const SEARCH_SCROLL_RETRIES = 20;
 const SEARCH_SCROLL_RETRY_DELAY_MS = 150;
 
+/** Overflow below which the pane counts as unscrollable, so older pages load without a scroll. */
+const SCROLLABLE_SLACK_PX = 100;
+
 /**
  * Finds the rendered row for a resolved search target.
  *
@@ -1022,6 +1025,19 @@ export function useChatSessionState({
     container.addEventListener('scroll', handleScroll);
     return () => container.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
+
+  // Older pages load on scroll-to-top, which never fires while the loaded rows
+  // fit the pane — and with tool runs collapsed into one summary line, a page
+  // of 20 messages often does. Keep loading until the pane can scroll.
+  useEffect(() => {
+    if (!isActive || !hasMoreMessages || isLoadingMoreMessages || allMessagesLoadedRef.current) return;
+    const container = scrollContainerRef.current;
+    if (!container || chatMessages.length === 0) return;
+    const canScroll = container.scrollHeight - container.clientHeight > SCROLLABLE_SLACK_PX;
+    if (!canScroll) {
+      void loadOlderMessages(container);
+    }
+  }, [chatMessages.length, hasMoreMessages, isActive, isLoadingMoreMessages, loadOlderMessages]);
 
   // "Load all" overlay visibility is driven by scroll-to-top in handleScroll;
   // timers are cleared on session change via the reset effect above.

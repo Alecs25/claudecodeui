@@ -16,6 +16,7 @@ import MessageModelLabel from '@/modules/chat/transcript/MessageModelLabel';
 import MessageSpeakControl from '@/modules/chat/transcript/MessageSpeakControl';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 import { MemoryCitations } from '@/modules/chat/transcript/MemoryCitations';
+import { isShellTool } from '@/modules/chat/utils/toolActivity';
 
 type MessageComponentProps = {
   message: ChatMessage;
@@ -41,7 +42,7 @@ type MessageComponentProps = {
   onForkFromMessage?: (message: ChatMessage) => void;
 };
 
-const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
+const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'PowerShell', 'Edit', 'Write', 'ApplyPatch']);
 
 /**
  * Rendered by chat's ChatMessagesPane and ToolGroupContainer to draw one
@@ -49,11 +50,14 @@ const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'Edit', 'Write', 'ApplyPatch']);
  */
 const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, showRawParameters, showThinking, selectedProject, provider, onEditMessage, onForkFromMessage }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
-  const isGrouped = prevMessage && prevMessage.type === message.type &&
+  // Tool calls belong to the assistant's turn, as in Claude's apps: prose after a
+  // run of tools continues the same turn instead of opening a new "Claude" header.
+  const continuesAssistantTurn = message.type === 'assistant' && prevMessage?.type === 'tool';
+  const isGrouped = Boolean(prevMessage) && (continuesAssistantTurn || (prevMessage?.type === message.type &&
     ((prevMessage.type === 'assistant') ||
       (prevMessage.type === 'user') ||
       (prevMessage.type === 'tool') ||
-      (prevMessage.type === 'error'));
+      (prevMessage.type === 'error'))));
   const messageRef = useRef<HTMLDivElement | null>(null);
   const userCopyContent = String(message.content || '');
   const formattedMessageContent = useMemo(
@@ -203,15 +207,13 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
       ) : (
         /* Claude/Error/Tool messages on the left */
         <div className="w-full">
-          {!isGrouped && (
+          {/* Tool rows carry no header of their own: they read as part of the
+              assistant's turn, the way Claude's apps show them. */}
+          {!isGrouped && message.type !== 'tool' && (
             <div className="mb-2 flex items-center space-x-3">
               {message.type === 'error' ? (
                 <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-red-600 text-sm text-white">
                   !
-                </div>
-              ) : message.type === 'tool' ? (
-                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-600 text-sm text-white dark:bg-gray-700">
-                  🔧
                 </div>
               ) : (
                 <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full p-1 text-sm text-foreground">
@@ -221,9 +223,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
               <div className="text-sm font-medium text-gray-900 dark:text-white">
                 {message.type === 'error'
                   ? t('messageTypes.error')
-                  : message.type === 'tool'
-                    ? t('messageTypes.tool')
-                    : (provider === 'cursor'
+                  : (provider === 'cursor'
                         ? t('messageTypes.cursor')
                         : provider === 'codex'
                           ? t('messageTypes.codex')
@@ -279,7 +279,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                   // Bash draws its output inside this row rather than in the
                   // result section below, so for a backgrounded command this is
                   // the row the background-tasks strip scrolls to.
-                  <div id={message.toolName === 'Bash' ? `tool-result-${message.toolId}` : undefined} className="scroll-mt-4">
+                  <div id={isShellTool(message.toolName || '') ? `tool-result-${message.toolId}` : undefined} className="scroll-mt-4">
                     <ToolRenderer
                       toolName={message.toolName || 'UnknownTool'}
                       toolInput={message.toolInput}
@@ -297,7 +297,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                 )}
 
                 {/* Tool Result Section — Bash renders its output inside the command row above. */}
-                {message.toolResult && message.toolName !== 'Bash' && !shouldHideToolResult(message.toolName || 'UnknownTool', message.toolResult) && (
+                {message.toolResult && !isShellTool(message.toolName || '') && !shouldHideToolResult(message.toolName || 'UnknownTool', message.toolResult) && (
                   message.toolResult.isError ? (
                     // Error results — collapsed red row that expands to the content
                     <div id={`tool-result-${message.toolId}`} className="scroll-mt-4">
@@ -409,7 +409,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
               <MemoryCitations citations={message.memoryCitations} />
             )}
 
-            {(shouldShowAssistantCopyControl || !isGrouped) && (
+            {(shouldShowAssistantCopyControl || (!isGrouped && message.type !== 'tool')) && (
               <div className="mt-1 flex w-full items-center gap-2 text-[11px] text-gray-400 dark:text-gray-500">
                 {shouldShowAssistantCopyControl && (
                   <MessageCopyControl content={assistantCopyContent} messageType="assistant" />

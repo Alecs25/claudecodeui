@@ -18,6 +18,7 @@ import { PlanDisplay } from '@/modules/chat/tools/PlanDisplay';
 import { ToolStatusBadge } from '@/modules/chat/tools/ToolStatusBadge';
 import { DiffStatsBadge } from '@/modules/chat/tools/DiffStatsBadge';
 import { parseToolPayload, summarizeDiff } from '@/modules/chat/utils/messageTransforms';
+import { isShellTool } from '@/modules/chat/utils/toolActivity';
 
 type ToolRendererProps = {
   toolName: string;
@@ -132,7 +133,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
   // the input render; the separate result section is suppressed in MessageComponent.
   // Files the command changed are listed under the row, outside its collapse, so
   // they read like the Edit rows they stand in for.
-  if (toolName === 'Bash' && mode === 'input') {
+  if (isShellTool(toolName) && mode === 'input') {
     const command = typeof parsedData === 'object' && parsedData !== null && 'command' in parsedData
       ? String(parsedData.command || '')
       : typeof toolInput === 'string'

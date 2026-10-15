@@ -96,6 +96,7 @@ describe('diff stats on a collapsed tool group', () => {
       toolName,
       messages,
       timestamp: messages[0].timestamp,
+      activity: toolName === 'Edit' ? { edit: messages.length } : { read: messages.length },
       preview: 'a.js',
     } as ToolGroupItem;
 
