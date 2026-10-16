@@ -6,6 +6,7 @@ import { sessionSynchronizerService } from '@/modules/providers/index.js';
 import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
 import type { RealtimeClientConnection } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
+import { getMostUsedTitlePrefix, isDefaultProjectName } from '@/modules/projects/services/project-name-from-titles.js';
 
 type SessionSummary = {
   id: string;
@@ -105,6 +106,26 @@ export async function generateDisplayName(projectName: string, actualProjectDir:
   }
 
   return projectPath;
+}
+
+/**
+ * The name shown for a project: the user's own rename in CloudCLI, otherwise
+ * the prefix its session titles share ("HT" for "HT \ CLOUDCLI"), otherwise the
+ * folder-based name.
+ */
+async function resolveProjectDisplayName(customProjectName: string | null | undefined, projectPath: string): Promise<string> {
+  if (!isDefaultProjectName(customProjectName, projectPath)) {
+    return String(customProjectName).trim();
+  }
+  const titlePrefix = getMostUsedTitlePrefix(
+    sessionsDb.getSessionsByProjectPath(projectPath).map((session) => session.custom_name),
+  );
+  if (titlePrefix) {
+    return titlePrefix;
+  }
+  return customProjectName && customProjectName.trim().length > 0
+    ? customProjectName
+    : generateDisplayName(path.basename(projectPath) || projectPath, projectPath);
 }
 
 function normalizeSessionPagination(options: SessionPaginationOptions = {}): { limit: number; offset: number } {
@@ -207,10 +228,7 @@ export async function getProjectsWithSessions(
       currentProject: projectPath,
     });
 
-    const displayName =
-      row.custom_project_name && row.custom_project_name.trim().length > 0
-        ? row.custom_project_name
-        : await generateDisplayName(path.basename(projectPath) || projectPath, projectPath);
+    const displayName = await resolveProjectDisplayName(row.custom_project_name, projectPath);
 
     const sessionsPage = readProjectSessionsPageByPath(projectPath, {
       limit: options.sessionsLimit,
@@ -262,10 +280,7 @@ export async function getArchivedProjectsWithSessions(
   const archivedProjects: ArchivedProjectListItem[] = [];
 
   for (const row of projectRows) {
-    const displayName =
-      row.custom_project_name && row.custom_project_name.trim().length > 0
-        ? row.custom_project_name
-        : await generateDisplayName(path.basename(row.project_path) || row.project_path, row.project_path);
+    const displayName = await resolveProjectDisplayName(row.custom_project_name, row.project_path);
 
     const sessionsPage = readProjectSessionsIncludingArchived(row.project_path);
 
