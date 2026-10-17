@@ -239,7 +239,8 @@
   "message": {
     "editAndResend": "Modifica e reinvia",
     "forkFromHere": "Dirama da qui",
-    "answeredBy": "Risposto da {{model}}"
+    "answeredBy": "Risposto da {{model}}",
+    "rewindToHere": "Torna a qui"
   },
   "composer": {
     "editing": {
@@ -308,5 +309,35 @@
     "failed_one": "{{count}} non riuscito",
     "failed_other": "{{count}} non riusciti",
     "running": "In corso"
+  },
+  "rewind": {
+    "title": "Torna a qui",
+    "conversationOnly": "Solo conversazione",
+    "filesOnly": "Solo file",
+    "conversationAndFiles": "Conversazione e file",
+    "confirmFiles_one": "Ripristinare {{count}} file (+{{insertions}} −{{deletions}})?",
+    "confirmFiles_other": "Ripristinare {{count}} file (+{{insertions}} −{{deletions}})?",
+    "noFileChanges": "Nessun file da ripristinare.",
+    "unavailable": "Nessun checkpoint dei file per questo messaggio.",
+    "restoreFiles": "Ripristina file",
+    "restoreBoth": "Ripristina file e conversazione",
+    "cancel": "Annulla"
+  },
+  "turnChanges": {
+    "button_one": "Modifiche ({{count}} file)",
+    "button_other": "Modifiche ({{count}} file)",
+    "title_one": "Modifiche ({{count}} file)",
+    "title_other": "Modifiche ({{count}} file)",
+    "edit": "Modifica",
+    "written": "Scritto",
+    "close": "Chiudi"
+  },
+  "contextUsage": {
+    "label": "Uso del contesto",
+    "summary": "{{used}} / {{total}} ({{percent}}%)",
+    "details": "Dettaglio token",
+    "instructions": "Istruzioni (facoltative)",
+    "compact": "Compatta",
+    "compacting": "Compattazione…"
   }
 }

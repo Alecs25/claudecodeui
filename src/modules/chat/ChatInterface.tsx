@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowDownIcon } from 'lucide-react';
 
@@ -11,6 +11,7 @@ import { TranscriptSessionContext } from '@/modules/chat/context/TranscriptSessi
 import { api } from '@/shared/api';
 import type {
   ChatMessage,
+  FileRewindResult,
   Project,
   ProjectSession,
   SessionEstablishedContext,
@@ -29,6 +30,7 @@ import {
 import ChatMessagesPane from '@/modules/chat/transcript/ChatMessagesPane';
 import ChatComposer from '@/modules/chat/composer/ChatComposer';
 import CommandResultModal from '@/modules/chat/modals/CommandResultModal';
+import RewindDialog from '@/modules/chat/modals/RewindDialog';
 
 type ChatInterfaceProps = {
   isActive: boolean;
@@ -125,6 +127,7 @@ function ChatInterface({
     resolvePermissionModeForProvider,
     supportsMessageEditing,
     supportsSessionForking,
+    supportsFileRewind,
   } = useChatProviderState({
     selectedSession,
     selectedProject,
@@ -239,6 +242,7 @@ function ChatInterface({
     editingAnchorId,
     beginEditMessage,
     cancelEditMessage,
+    sendCompactCommand,
   } = useChatComposerState({
     selectedProject,
     selectedSession,
@@ -373,6 +377,52 @@ function ChatInterface({
       console.error('Error forking session:', error);
     }
   }, [onNavigateToSession, selectedSession?.id]);
+
+  // The user message "Rewind to here" was opened on; null while it is closed.
+  const [rewindTarget, setRewindTarget] = useState<ChatMessage | null>(null);
+
+  const rewindSessionFiles = useCallback(async (anchorId: string, dryRun: boolean): Promise<FileRewindResult> => {
+    const sessionId = selectedSession?.id || currentSessionId;
+    if (!sessionId) {
+      throw new Error('No session');
+    }
+    const response = await api.rewindSessionFiles(sessionId, { anchorId, dryRun });
+    const payload = await response.json();
+    if (!response.ok || !payload?.data) {
+      throw new Error(payload?.error?.message || payload?.message || `HTTP ${response.status}`);
+    }
+    return payload.data as FileRewindResult;
+  }, [currentSessionId, selectedSession?.id]);
+
+  // True from a Compact click until that compaction's turn has run and ended.
+  const [isCompacting, setIsCompacting] = useState(false);
+  // Whether the compaction turn has been seen running, so the moment before it
+  // starts is not mistaken for its end.
+  const compactTurnStartedRef = useRef(false);
+
+  const handleCompact = useCallback((instructions: string) => {
+    if (sendCompactCommand(instructions)) {
+      compactTurnStartedRef.current = false;
+      setIsCompacting(true);
+    }
+  }, [sendCompactCommand]);
+
+  useEffect(() => {
+    if (!isCompacting) return;
+    if (isProcessing) {
+      compactTurnStartedRef.current = true;
+      return;
+    }
+    if (compactTurnStartedRef.current) {
+      setIsCompacting(false);
+    }
+  }, [isCompacting, isProcessing]);
+
+  // A compaction belongs to the session it was started in.
+  useEffect(() => {
+    setIsCompacting(false);
+    setRewindTarget(null);
+  }, [selectedSession?.id]);
 
   const { scheduledMessages, schedule: scheduleMessage, cancel: cancelScheduledMessage } =
     useScheduledMessages(currentSessionId || selectedSession?.id || null);
@@ -515,6 +565,9 @@ function ChatInterface({
               // a live stream writing into it is not recoverable.
               onEditMessage={supportsMessageEditing && !isProcessing ? beginEditMessage : undefined}
               onForkFromMessage={supportsSessionForking ? handleForkFromMessage : undefined}
+              // Rewinding the conversation is the edit flow, so it follows the
+              // same rule: offered only while the session is idle.
+              onRewindMessage={supportsMessageEditing && !isProcessing ? setRewindTarget : undefined}
               onLoadFullTranscript={loadFullTranscript}
             />
           </TranscriptSessionContext.Provider>
@@ -555,6 +608,10 @@ function ChatInterface({
           modelsLoading={providerModelsLoading}
           tokenBudget={tokenBudget}
           onShowTokenUsage={showCostModal}
+          // Compaction is the Claude CLI's built-in command; other providers
+          // would take "/compact" as a plain prompt.
+          onCompact={provider === 'claude' && (selectedSession?.id || currentSessionId) ? handleCompact : undefined}
+          isCompacting={isCompacting}
           isEditingSentMessage={Boolean(editingAnchorId)}
           onCancelEditMessage={cancelEditMessage}
           scheduledMessages={scheduledMessages}
@@ -620,6 +677,14 @@ function ChatInterface({
         activeProviderModel={currentProviderModel}
         currentSessionId={currentSessionId || selectedSession?.id || null}
         onSelectProviderModel={selectProviderModel}
+      />
+
+      <RewindDialog
+        message={rewindTarget}
+        supportsFiles={supportsFileRewind}
+        onClose={() => setRewindTarget(null)}
+        onRewindConversation={beginEditMessage}
+        rewindFiles={rewindSessionFiles}
       />
     </PermissionContext.Provider>
   );

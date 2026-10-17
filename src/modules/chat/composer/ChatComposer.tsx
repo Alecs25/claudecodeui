@@ -67,6 +67,10 @@ type ChatComposerProps = {
   modelsLoading: boolean;
   tokenBudget: Record<string, unknown> | null;
   onShowTokenUsage: () => void;
+  /** Compacts the session (`/compact`), offered from the context ring; absent before the chat has a session. */
+  onCompact?: (instructions: string) => void;
+  /** True from a Compact click until that compaction turn ends. */
+  isCompacting?: boolean;
   slashCommandsCount: number;
   onToggleCommandMenu: () => void;
   hasInput: boolean;
@@ -144,6 +148,8 @@ export default function ChatComposer({
   modelsLoading,
   tokenBudget,
   onShowTokenUsage,
+  onCompact,
+  isCompacting = false,
   slashCommandsCount,
   onToggleCommandMenu,
   hasInput,
@@ -455,8 +461,6 @@ export default function ChatComposer({
               <VoiceInputButton state={voiceState} onToggle={voiceToggle} errorMsg={voiceError} />
             )}
 
-            <TokenUsageSummary usage={tokenBudget} onClick={onShowTokenUsage} />
-
             <PromptInputButton
               tooltip={{ content: t('input.showAllCommands') }}
               onClick={onToggleCommandMenu}
@@ -488,6 +492,15 @@ export default function ChatComposer({
             <ScheduleMessagePopover
               disabled={!input.trim()}
               onSchedule={onScheduleMessage}
+            />
+
+            {/* Beside the model picker, as in Claude Code: the window it fills belongs to that model. */}
+            <TokenUsageSummary
+              usage={tokenBudget}
+              onClick={onShowTokenUsage}
+              onCompact={onCompact}
+              canCompact={!isLoading}
+              isCompacting={isCompacting}
             />
 
             <ComposerModelMenu

@@ -1397,6 +1397,45 @@ export function useChatComposerState({
     [],
   );
 
+  /**
+   * Compacts the conversation, as typing `/compact [instructions]` does: the
+   * text goes to the provider as an ordinary turn, which the Claude CLI runs as
+   * its built-in command (the composer only intercepts commands it lists, and
+   * `/compact` is not one). Sent without touching the composer, so a draft in
+   * the box survives. Refused while a turn runs — a compaction is a turn of its
+   * own, and the button is disabled then — and before the chat has a session.
+   */
+  const sendCompactCommand = useCallback((instructions: string): boolean => {
+    const targetSessionId = selectedSession?.id || currentSessionId || null;
+    if (isLoading || !selectedProject || !targetSessionId) {
+      return false;
+    }
+
+    const content = instructions.trim() ? `/compact ${instructions.trim()}` : '/compact';
+    addMessage({ type: 'user', content, timestamp: new Date() });
+    onSessionProcessing?.(targetSessionId, { statusText: null, canInterrupt: true });
+    setIsUserScrolledUp(false);
+    setTimeout(() => scrollToBottom(), 100);
+    sendMessage({
+      type: 'chat.send',
+      sessionId: targetSessionId,
+      content,
+      options: { ...buildSendOptions(content), attachments: [] },
+    });
+    return true;
+  }, [
+    addMessage,
+    buildSendOptions,
+    currentSessionId,
+    isLoading,
+    onSessionProcessing,
+    scrollToBottom,
+    selectedProject,
+    selectedSession?.id,
+    sendMessage,
+    setIsUserScrolledUp,
+  ]);
+
   /** Loads an already-sent message back into the composer to be replaced. */
   const beginEditMessage = useCallback((message: ChatMessage) => {
     if (!message.transcriptAnchorId) return;
@@ -1418,6 +1457,7 @@ export function useChatComposerState({
     editingAnchorId,
     beginEditMessage,
     cancelEditMessage,
+    sendCompactCommand,
     textareaRef,
     inputHighlightRef,
     isTextareaExpanded,
