@@ -373,6 +373,11 @@ function mapCliOptionsToSDK(options = {}) {
   // parent_tool_use_id, the same way it folds the agent's tool calls.
   sdkOptions.forwardSubagentText = true;
 
+  // Lets "Rewind to here" restore the files a turn edited. The CLI backs a file
+  // up under ~/.claude/file-history before its first edit in a turn, the same
+  // checkpoints Claude Code keeps interactively; it does not change what runs.
+  sdkOptions.enableFileCheckpointing = true;
+
   if (permissionMode && permissionMode !== 'default') {
     sdkOptions.permissionMode = permissionMode;
   }
@@ -1829,6 +1834,128 @@ async function stopClaudeSDKTask(sessionId, taskId) {
   return true;
 }
 
+// A control request written after the held stdin has closed is dropped
+// silently and its promise never settles, so live-process calls are bounded.
+const LIVE_CONTROL_REQUEST_TIMEOUT_MS = 10_000;
+
+function withControlTimeout(promise, label) {
+  let timer = null;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out`)), LIVE_CONTROL_REQUEST_TIMEOUT_MS);
+    timer.unref?.();
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * The flag-settings patch that switches a live process to an effort choice.
+ * `effortLevel` set through apply_flag_settings overrides the `--effort` the
+ * process was started with from its next request on (checked against the
+ * effort a PreToolUse hook reports). Ultracode is the same xhigh level plus
+ * the session-scoped settings `applyClaudeEffort` adds at spawn time, so
+ * leaving it has to clear those again.
+ * @param {string} effort - Catalog effort value, or `default`
+ * @returns {Object} Settings patch for `Query.applyFlagSettings`
+ */
+export function buildLiveEffortSettings(effort) {
+  if (!effort || effort === 'default') {
+    return { effortLevel: null, ultracode: null };
+  }
+  if (effort === CLAUDE_ULTRACODE_EFFORT) {
+    return { effortLevel: ULTRACODE_SDK_EFFORT, ultracode: true, enableWorkflows: true };
+  }
+  return { effortLevel: effort, ultracode: null };
+}
+
+/**
+ * Applies a model or effort picked mid-session to the session's live process,
+ * so the request it makes next — the rest of a running turn, or a turn a held
+ * process runs to relay background work — already uses it. Runs spawned
+ * later read the stored choice and need nothing from here.
+ * @param {string} sessionId - App session id
+ * @param {{ model?: string, effort?: string }} settings - The new choice
+ * @returns {Promise<boolean>} False when no live process took it
+ */
+async function applyClaudeSDKSessionSettings(sessionId, settings = {}) {
+  const session = getSession(sessionId);
+  if (!session || session.status !== 'active' || !session.instance) {
+    return false;
+  }
+
+  let applied = false;
+  try {
+    if (settings.model && typeof session.instance.setModel === 'function') {
+      await withControlTimeout(session.instance.setModel(settings.model), 'set_model');
+      applied = true;
+    }
+    if (settings.effort && typeof session.instance.applyFlagSettings === 'function') {
+      await withControlTimeout(
+        session.instance.applyFlagSettings(buildLiveEffortSettings(settings.effort)),
+        'apply_flag_settings',
+      );
+      applied = true;
+    }
+  } catch (error) {
+    // The stored choice still applies from the next run, so a process that
+    // is already winding down is not worth failing the selection over.
+    console.warn(`[Claude SDK] Session ${sessionId}: could not apply settings to the live process:`, error?.message || error);
+    return false;
+  }
+  return applied;
+}
+
+/**
+ * Restores the files a session edited to their state at one of its user
+ * messages, through the SDK's file checkpoints.
+ *
+ * A live process (one held open for background work) answers the control
+ * request itself. Otherwise a short-lived process resumes the session with
+ * checkpointing on and an empty, held prompt: it loads the transcript's
+ * file-history snapshots, answers `rewind_files` without calling the model,
+ * and is closed right after.
+ * @param {{ sessionId: string, providerSessionId: string, cwd: string, userMessageId: string, dryRun: boolean }} input
+ * @param {{ createQuery?: Function }} [dependencies] - Test seam for the SDK query
+ * @returns {Promise<import('@/shared/types.js').ProviderFileRewindResult>}
+ */
+async function rewindClaudeSDKFiles(input, dependencies = {}) {
+  const { sessionId, providerSessionId, cwd, userMessageId, dryRun } = input;
+  const live = getSession(sessionId);
+  if (live && live.status === 'active' && live.instance?.rewindFiles) {
+    if (hasActiveHeldTurn(sessionId)) {
+      return { canRewind: false, error: 'The session is busy; try again when it is idle.' };
+    }
+    return withControlTimeout(live.instance.rewindFiles(userMessageId, { dryRun }), 'rewind_files');
+  }
+
+  const sdkOptions = {
+    cwd,
+    resume: providerSessionId,
+    enableFileCheckpointing: true,
+    env: { ...process.env },
+    // No settings sources: nothing from the user's hooks or plugins should run
+    // for a process that only restores files.
+    settingSources: [],
+  };
+  const claudeExecutablePath = resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH);
+  if (claudeExecutablePath) {
+    sdkOptions.pathToClaudeCodeExecutable = claudeExecutablePath;
+  }
+
+  const heldPrompt = createHeldPromptStream([]);
+  const createQuery = dependencies.createQuery ?? query;
+  const instance = createQuery({ prompt: heldPrompt.stream, options: sdkOptions });
+  try {
+    return await withControlTimeout(instance.rewindFiles(userMessageId, { dryRun }), 'rewind_files');
+  } finally {
+    heldPrompt.release();
+    try {
+      instance.close?.();
+    } catch (error) {
+      console.warn(`[Claude SDK] Session ${sessionId}: closing the rewind process failed:`, error?.message || error);
+    }
+  }
+}
+
 /**
  * Checks if an SDK session is currently active
  * @param {string} sessionId - Session identifier
@@ -1909,6 +2036,8 @@ export const claudeRuntime = {
   listBackgroundWork: listClaudeSDKBackgroundWork,
   hasActiveHeldTurn,
   stopBackgroundTask: stopClaudeSDKTask,
+  rewindFiles: rewindClaudeSDKFiles,
+  applySessionSettings: applyClaudeSDKSessionSettings,
 };
 
 // Export public API
@@ -1919,6 +2048,8 @@ export {
   hasActiveHeldTurn,
   readHeldTurnWaitMs,
   stopClaudeSDKTask,
+  rewindClaudeSDKFiles,
+  applyClaudeSDKSessionSettings,
   isClaudeSDKSessionActive,
   getClaudeSDKSessionStartTime,
   getActiveClaudeSDKSessions,

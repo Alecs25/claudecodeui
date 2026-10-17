@@ -13,6 +13,7 @@ import type {
   FetchHistoryResult,
   LLMProvider,
   NormalizedMessage,
+  ProviderFileRewindResult,
   WorkflowAgentActivity,
 } from '@/shared/types.js';
 import { AppError, sliceTailPage } from '@/shared/utils.js';
@@ -479,6 +480,59 @@ export const sessionsService = {
     }
 
     return Boolean(providerRegistry.resolveProvider(session.provider as LLMProvider).sessions.rewindSession);
+  },
+
+  /**
+   * Restores the files a session edited to their state just before one of its
+   * user messages ("Rewind to here" with files). `dryRun` only reports what
+   * would change, which is what the confirmation shows.
+   *
+   * Refused while a run is in flight: the process would be editing the very
+   * files being restored. The conversation half of a rewind is the edit flow
+   * (`chat.edit-send`), so nothing here touches the transcript.
+   */
+  async rewindSessionFiles(
+    sessionId: string,
+    options: { anchorId: string; dryRun: boolean },
+  ): Promise<ProviderFileRewindResult> {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    const provider = session.provider as LLMProvider;
+    const { runtime } = providerRegistry.resolveProvider(provider);
+    if (!runtime.rewindFiles) {
+      throw new AppError(`Files cannot be rewound for provider "${provider}".`, {
+        code: 'FILE_REWIND_NOT_SUPPORTED',
+        statusCode: 409,
+      });
+    }
+
+    if (!session.provider_session_id) {
+      throw new AppError('This session has not produced a transcript yet.', {
+        code: 'FILE_REWIND_SOURCE_NOT_READY',
+        statusCode: 409,
+      });
+    }
+
+    if (chatRunRegistry.isProcessing(sessionId)) {
+      throw new AppError('Stop the running turn before rewinding files.', {
+        code: 'SESSION_RUNNING',
+        statusCode: 409,
+      });
+    }
+
+    return runtime.rewindFiles({
+      sessionId,
+      providerSessionId: session.provider_session_id,
+      cwd: session.project_path ?? process.cwd(),
+      userMessageId: options.anchorId,
+      dryRun: options.dryRun,
+    });
   },
 
   /**

@@ -42,6 +42,11 @@ type ProviderCapabilities = {
    * Whether a session's transcript can be branched into an independent one.
    */
   supportsSessionForking: boolean;
+  /**
+   * Whether the files a session edited can be restored to their state at an
+   * earlier user message ("Rewind to here" with files).
+   */
+  supportsFileRewind: boolean;
 };
 
 /**
@@ -66,6 +71,8 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     // `forkSession` copies a transcript prefix into a new session file.
     supportsMessageEditing: true,
     supportsSessionForking: true,
+    // Runs are spawned with `enableFileCheckpointing`; `rewindFiles` restores.
+    supportsFileRewind: true,
   },
   cursor: {
     provider: 'cursor',
@@ -80,6 +87,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     effortLevels: [],
     supportsMessageEditing: false,
     supportsSessionForking: false,
+    supportsFileRewind: false,
   },
   codex: {
     provider: 'codex',
@@ -98,6 +106,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     // which is how Codex's own IDE clients do it.
     supportsMessageEditing: true,
     supportsSessionForking: true,
+    supportsFileRewind: false,
   },
   opencode: {
     provider: 'opencode',
@@ -117,6 +126,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     effortLevels: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'thinking'],
     supportsMessageEditing: false,
     supportsSessionForking: false,
+    supportsFileRewind: false,
   },
 };
 
