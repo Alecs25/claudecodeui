@@ -10,6 +10,23 @@ export const requestSentFileOpen = (sentFile: SentFileSummary): void => {
   window.dispatchEvent(new CustomEvent<SentFileSummary>(OPEN_SENT_FILE_EVENT, { detail: sentFile }));
 };
 
+export const isPdfSentFile = (sentFile: Pick<SentFileSummary, 'name' | 'mimeType'>): boolean =>
+  sentFile.mimeType === 'application/pdf' || sentFile.name.toLowerCase().endsWith('.pdf');
+
+/**
+ * Mobile browsers (Chrome on Android above all) have no inline PDF viewer, so
+ * a PDF in the side panel's <iframe> stays blank there: on touch devices the
+ * chat card opens PDFs straight in a new tab, where the system viewer takes over.
+ */
+export const shouldOpenSentFileInNewTab = (
+  sentFile: Pick<SentFileSummary, 'name' | 'mimeType'>,
+  isTouchDevice: boolean,
+): boolean => isTouchDevice && isPdfSentFile(sentFile);
+
+export const isTouchDevice = (): boolean =>
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+  && window.matchMedia('(pointer: coarse)').matches;
+
 /** Matches the send_user_file tool whatever MCP namespace prefix the provider gives it. */
 export const isSendUserFileTool = (toolName: string): boolean => toolName.endsWith(SEND_USER_FILE_TOOL_SUFFIX);
 

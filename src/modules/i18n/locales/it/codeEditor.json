@@ -44,6 +44,7 @@
   },
   "sentFiles": {
     "open": "Apri nel pannello laterale",
-    "downloadError": "Download non riuscito"
+    "downloadError": "Download non riuscito",
+    "openError": "Impossibile aprire il file"
   }
 }

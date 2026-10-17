@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 
 import { test } from 'vitest';
 
-import { isSendUserFileTool, parseSentFilesResult } from '@/modules/code-editor/utils/sentFiles';
+import { isSendUserFileTool, parseSentFilesResult, shouldOpenSentFileInNewTab } from '@/modules/code-editor/utils/sentFiles';
 
 /**
  * send_user_file results carry the sent files as a JSON text block after the
@@ -43,4 +43,12 @@ test('files are read from the JSON-encoded block array that history returns', ()
     { type: 'text', text: JSON.stringify({ sentFiles: [sentFile] }) },
   ]);
   assert.deepEqual(parseSentFilesResult({ content }), [sentFile]);
+});
+
+test('on touch devices PDFs open in a new tab, everything else in the side panel', () => {
+  const pdf = { name: 'Offerta.pdf', mimeType: 'application/pdf' };
+  assert.ok(shouldOpenSentFileInNewTab(pdf, true));
+  assert.ok(shouldOpenSentFileInNewTab({ name: 'OFFERTA.PDF', mimeType: 'application/octet-stream' }, true));
+  assert.ok(!shouldOpenSentFileInNewTab(pdf, false));
+  assert.ok(!shouldOpenSentFileInNewTab({ name: 'pagina-1.png', mimeType: 'image/png' }, true));
 });

@@ -49,6 +49,7 @@
   },
   "sentFiles": {
     "open": "Open in side panel",
-    "downloadError": "Download failed"
+    "downloadError": "Download failed",
+    "openError": "Could not open the file"
   }
 }
