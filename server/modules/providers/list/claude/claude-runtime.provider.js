@@ -765,15 +765,50 @@ function readNumber(value) {
 
 /**
  * The window a budget is measured against: the one the SDK reported for the
- * session's model when known, else the server-wide CONTEXT_WINDOW setting.
+ * session when known, else the server-wide CONTEXT_WINDOW setting — never
+ * smaller than the prompt it already holds, which only a larger model serves.
+ * A reported window is taken as is: it may be lowered on purpose
+ * (autoCompactWindow), and a prompt can briefly pass it before compaction.
  * @param {number|null|undefined} reportedContextWindow - SDK-reported window
+ * @param {number} [usedTokens] - Prompt size the window must hold
  * @returns {number} Context window in tokens
  */
-function resolveContextWindow(reportedContextWindow) {
+function resolveContextWindow(reportedContextWindow, usedTokens = 0) {
   if (Number.isFinite(reportedContextWindow) && reportedContextWindow > 0) {
     return reportedContextWindow;
   }
-  return parseInt(process.env.CONTEXT_WINDOW, 10) || 160000;
+  return fitClaudeContextWindow(parseInt(process.env.CONTEXT_WINDOW, 10) || 160000, usedTokens);
+}
+
+// A context-usage request answers from the CLI's own state, without a model
+// call; past this the turn's own report is used instead.
+const CONTEXT_USAGE_TIMEOUT_MS = 3000;
+
+/**
+ * The effective context window of a live process, as `/context` reports it:
+ * `maxTokens` already honours a lowered auto-compact window, which the
+ * per-model `contextWindow` of a turn's `result` does not.
+ * @param {Object} instance - SDK query instance
+ * @returns {Promise<number|null>} Window in tokens, or null when unavailable
+ */
+async function readEffectiveContextWindow(instance) {
+  if (typeof instance?.getContextUsage !== 'function') {
+    return null;
+  }
+  let timer = null;
+  try {
+    const usage = await Promise.race([
+      instance.getContextUsage(),
+      new Promise((resolve) => { timer = setTimeout(() => resolve(null), CONTEXT_USAGE_TIMEOUT_MS); }),
+    ]);
+    const maxTokens = readNumber(usage?.maxTokens);
+    return maxTokens > 0 ? maxTokens : null;
+  } catch {
+    // An ended process cannot answer; the turn's own report stands.
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -823,7 +858,7 @@ function buildTokenBudget(messageUsage, reportedContextWindow) {
   const cacheTokens = cacheCreationTokens + cacheReadTokens;
   const inputTokens = directInputTokens + cacheTokens;
   const outputTokens = readNumber(messageUsage.output_tokens ?? messageUsage.outputTokens);
-  const contextWindow = fitClaudeContextWindow(resolveContextWindow(reportedContextWindow), inputTokens + outputTokens);
+  const contextWindow = resolveContextWindow(reportedContextWindow, inputTokens + outputTokens);
 
   return {
     used: inputTokens + outputTokens,
@@ -1608,8 +1643,12 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         mainThreadModel = message.message.model;
       }
 
-      // Only a turn's `result` states the window of the model that served it.
-      const turnContextWindow = readReportedContextWindow(message, mainThreadModel);
+      // Only a turn's `result` states the window of the model that served it;
+      // the process itself knows the effective one (a lowered auto-compact
+      // window included), so ask it first while it is still up.
+      const turnContextWindow = message.type === 'result'
+        ? (await readEffectiveContextWindow(queryInstance)) ?? readReportedContextWindow(message, mainThreadModel)
+        : null;
       const contextWindowChanged = Boolean(turnContextWindow) && turnContextWindow !== reportedContextWindow;
       if (turnContextWindow) {
         reportedContextWindow = turnContextWindow;

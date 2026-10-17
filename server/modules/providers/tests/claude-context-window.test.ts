@@ -25,6 +25,7 @@ async function runScripted(
   appSessionId: string,
   stream: Emitted[],
   resumeProviderSessionId: string | null = null,
+  instanceExtras: Record<string, unknown> = {},
 ): Promise<NormalizedMessage[]> {
   const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-context-window-'));
   const sent: NormalizedMessage[] = [];
@@ -40,7 +41,7 @@ async function runScripted(
       // Drain the held prompt like the CLI would read its stdin.
       void (async () => { for await (const _message of prompt) { /* read */ } })();
       const iterator = (async function* () { yield* stream; })();
-      return Object.assign(iterator, { interrupt: async () => {} }) as never;
+      return Object.assign(iterator, { interrupt: async () => {} }, instanceExtras) as never;
     },
   };
 
@@ -126,6 +127,50 @@ test('the live budget reports the window the SDK measured for a [1m] model', asy
     assert.equal(last.total, 1_000_000);
     // The reading itself is still the last request's prompt, not the turn's bill.
     assert.equal(last.used, 42_512);
+  });
+});
+
+test('the process effective window wins over the model window, so a lowered auto-compact window shows', async () => {
+  await withContextWindowEnv(undefined, async () => {
+    const nativeId = 'native-autocompact';
+    const sent = await runScripted('app-autocompact', [
+      { type: 'system', subtype: 'init', session_id: nativeId },
+      assistant(nativeId, 'claude-opus-5-5'),
+      result(nativeId, { 'claude-opus-5-5': modelUsageEntry(1_000_000) }),
+    ], null, {
+      // As the real CLI answers with CLAUDE_CODE_AUTO_COMPACT_WINDOW=400000.
+      getContextUsage: async () => ({ totalTokens: 42_512, maxTokens: 400_000, rawMaxTokens: 400_000 }),
+    });
+
+    assert.equal(tokenBudgets(sent).at(-1)!.total, 400_000);
+  });
+});
+
+test('the turn reported window stands when the process cannot report its own', async () => {
+  await withContextWindowEnv(undefined, async () => {
+    const nativeId = 'native-no-usage';
+    const sent = await runScripted('app-no-usage', [
+      { type: 'system', subtype: 'init', session_id: nativeId },
+      assistant(nativeId, 'claude-opus-5-5'),
+      result(nativeId, { 'claude-opus-5-5': modelUsageEntry(1_000_000) }),
+    ], null, {
+      getContextUsage: async () => { throw new Error('stdin closed'); },
+    });
+
+    assert.equal(tokenBudgets(sent).at(-1)!.total, 1_000_000);
+  });
+});
+
+test('a fallback window is widened to hold a prompt larger than it', async () => {
+  await withContextWindowEnv('160000', async () => {
+    const nativeId = 'native-large-prompt';
+    const largeUsage = { input_tokens: 4, cache_read_input_tokens: 700_000, cache_creation_input_tokens: 0, output_tokens: 100 };
+    const sent = await runScripted('app-large-prompt', [
+      { type: 'system', subtype: 'init', session_id: nativeId },
+      assistant(nativeId, 'claude-opus-5-5', { message: { role: 'assistant', model: 'claude-opus-5-5', content: [{ type: 'text', text: 'ok' }], usage: largeUsage } }),
+    ]);
+
+    assert.equal(tokenBudgets(sent).at(-1)!.total, 1_000_000);
   });
 });
 

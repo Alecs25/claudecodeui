@@ -367,14 +367,16 @@ export function summarizeClaudeTokenUsage(
 
   const parsedContextWindow = Number.parseInt(configuredContextWindow ?? '', 10);
   const configuredOrDefaultContextWindow = Number.isFinite(parsedContextWindow) ? parsedContextWindow : 160_000;
+  // A reported window is taken as is (it may be lowered for auto-compaction);
+  // only the fallback is widened to hold the prompt it is measured against.
   const contextWindow = reportedContextWindow && reportedContextWindow > 0
     ? reportedContextWindow
-    : configuredOrDefaultContextWindow;
+    : fitClaudeContextWindow(configuredOrDefaultContextWindow, inputTokens + outputTokens);
   const cacheTokens = cacheReadTokens + cacheCreationTokens;
 
   return {
     used: inputTokens + outputTokens,
-    total: fitClaudeContextWindow(contextWindow, inputTokens + outputTokens),
+    total: contextWindow,
     inputTokens,
     outputTokens,
     cacheReadTokens,
