@@ -9,3 +9,11 @@ export { broadcastSessionUpserted, broadcastSessionUpsertedBatch } from './servi
 // from a timer, with no socket to stream to or report errors on.
 export { runDetachedChatTurn } from './services/chat-websocket.service.js';
 export type { ProviderRuntimeGateway } from './services/chat-websocket.service.js';
+// sessionRunStatus: used by the providers module's sessions service to apply
+// sidebar status changes (pin, unread, completed), and by the server
+// entrypoint as the run registry's start/end listener.
+export { sessionRunStatus } from './services/session-run-status.service.js';
+export type { SessionStatusFlags } from './services/session-run-status.service.js';
+// viewerPresence: used by the server entrypoint to tell the notification
+// orchestrator which sessions are on screen in a visible tab.
+export { viewerPresence } from './services/viewer-presence.service.js';

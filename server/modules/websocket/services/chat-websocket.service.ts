@@ -6,6 +6,8 @@ import { sessionDraftsDb, sessionsDb } from '@/modules/database/index.js';
 import { providerModelsService, sessionsService } from '@/modules/providers/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
+import { sessionRunStatus } from '@/modules/websocket/services/session-run-status.service.js';
+import { viewerPresence } from '@/modules/websocket/services/viewer-presence.service.js';
 import {
   getGlobalImageAssetsDir,
   isImageAttachmentDescriptor,
@@ -811,6 +813,27 @@ export async function runDetachedChatTurn(
   );
 }
 
+/**
+ * Records which sessions this socket's tab shows and whether the tab is
+ * visible. Malformed frames are ignored rather than answered with an error:
+ * presence is advisory, and a client that sends nothing is simply "not
+ * viewing", which errs on the side of notifying.
+ */
+function handleClientPresence(
+  ws: WebSocket,
+  userId: string | number | null,
+  data: AnyRecord,
+): void {
+  const sessionIds = Array.isArray(data.sessionIds)
+    ? data.sessionIds.filter((value): value is string => typeof value === 'string' && value.length > 0)
+    : [];
+  const visible = data.visible === true;
+  viewerPresence.update(ws, { userId, sessionIds, visible });
+  if (visible) {
+    sessionRunStatus.markViewedSessionsRead(sessionIds);
+  }
+}
+
 export function handleChatConnection(
   ws: WebSocket,
   request: AuthenticatedWebSocketRequest,
@@ -856,6 +879,9 @@ export function handleChatConnection(
         case 'chat.permission-response':
           handlePermissionResponse(data, dependencies);
           return;
+        case 'client.presence':
+          handleClientPresence(ws, userId, data);
+          return;
         default:
           sendProtocolError(ws, 'UNKNOWN_MESSAGE_TYPE', `Unknown message type "${messageType}".`);
           return;
@@ -870,5 +896,6 @@ export function handleChatConnection(
   ws.on('close', () => {
     console.log('[INFO] Chat client disconnected');
     connectedClients.delete(ws);
+    viewerPresence.remove(ws);
   });
 }

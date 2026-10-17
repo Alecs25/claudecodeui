@@ -470,6 +470,19 @@ const addProviderModelEffortColumns = (db: Database): void => {
   addColumnToTableIfNotExists(db, 'provider_models', columnNames, 'effort_default', 'TEXT DEFAULT NULL');
 };
 
+/**
+ * Adds the sidebar status flags: pinned, unread and completed.
+ *
+ * Existing rows start unpinned, read and open, which is how the sidebar showed
+ * them before these states existed.
+ */
+const addSessionStatusColumns = (db: Database): void => {
+  const columnNames = getTableInfo(db, 'sessions').map((column) => column.name);
+  addColumnToTableIfNotExists(db, 'sessions', columnNames, 'isPinned', 'BOOLEAN DEFAULT 0');
+  addColumnToTableIfNotExists(db, 'sessions', columnNames, 'isUnread', 'BOOLEAN DEFAULT 0');
+  addColumnToTableIfNotExists(db, 'sessions', columnNames, 'isCompleted', 'BOOLEAN DEFAULT 0');
+};
+
 const ensureProjectsForSessionPaths = (db: Database): void => {
   if (!tableExists(db, 'sessions')) {
     return;
@@ -533,6 +546,7 @@ export const runMigrations = (db: Database) => {
     addSessionModelColumn(db);
     addSessionEffortColumn(db);
     addForkedFromSessionIdColumn(db);
+    addSessionStatusColumns(db);
     ensureProjectsForSessionPaths(db);
     db.exec(SCHEDULED_MESSAGES_TABLE_SCHEMA_SQL);
 

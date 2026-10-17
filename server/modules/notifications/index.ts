@@ -11,6 +11,8 @@ export {
   notifyRunStopped,
   // Used by provider runtimes to report background work that finished after its turn ended.
   notifyBackgroundWorkCompleted,
+  // Used by the server entrypoint to skip completion notifications for a session on screen.
+  setSessionViewedCheck,
 } from '@/modules/notifications/services/notification-orchestrator.service.js';
 export {
   registerDesktopNotificationClient,

@@ -3,7 +3,8 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
-import { broadcastSessionUpserted, chatRunRegistry } from '@/modules/websocket/index.js';
+import { broadcastSessionUpserted, chatRunRegistry, sessionRunStatus } from '@/modules/websocket/index.js';
+import type { SessionStatusFlags } from '@/modules/websocket/index.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { listBusyClaudeCliSessions } from '@/modules/providers/services/claude-cli-liveness.service.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
@@ -67,7 +68,11 @@ type ArchivedSessionListItem = {
 type RecentSessionListItem = Pick<
   ArchivedSessionListItem,
   'sessionId' | 'provider' | 'projectId' | 'projectDisplayName' | 'sessionTitle' | 'lastActivity'
->;
+> & {
+  isPinned: boolean;
+  isUnread: boolean;
+  isCompleted: boolean;
+};
 
 type RecentSessionsPage = {
   conversations: RecentSessionListItem[];
@@ -233,8 +238,19 @@ export const sessionsService = {
   /**
    * Returns the active conversation feed in true global activity order.
    */
-  listRecentSessions(limit: number, offset: number): RecentSessionsPage {
-    const page = sessionsDb.getRecentSessionsPage(limit, offset);
+  async listRecentSessions(
+    limit: number,
+    offset: number,
+    status: 'running' | 'unread' | 'pinned' | 'completed' | null = null,
+  ): Promise<RecentSessionsPage> {
+    // "Running" is the same set the Running tab shows, background work
+    // included, and only the runtime knows it; the other filters are columns.
+    const filter = status === 'running'
+      ? { status, sessionIds: (await this.listRunningSessions()).map((entry) => entry.sessionId) }
+      : status
+        ? { status }
+        : null;
+    const page = sessionsDb.getRecentSessionsPage(limit, offset, filter);
     const projectCache = new Map<string, ReturnType<typeof projectsDb.getProjectPath>>();
     const conversations = page.sessions.map((session) => {
       const projectPath = session.project_path?.trim() ? session.project_path : null;
@@ -254,6 +270,9 @@ export const sessionsService = {
         projectDisplayName: resolveProjectDisplayName(projectPath, project?.custom_project_name),
         sessionTitle: session.custom_name?.trim() || session.session_id,
         lastActivity: session.updated_at ?? session.created_at ?? null,
+        isPinned: Boolean(session.isPinned),
+        isUnread: Boolean(session.isUnread),
+        isCompleted: Boolean(session.isCompleted),
       };
     });
 
@@ -821,6 +840,24 @@ export const sessionsService = {
 
     sessionsDb.updateSessionIsArchived(sessionId, false);
     return { sessionId, isArchived: false };
+  },
+
+  /**
+   * Pins, marks read/unread or completed one session, and tells every open
+   * tab. Returns the flags as they stand afterwards.
+   */
+  setSessionStatusById(
+    sessionId: string,
+    patch: { isPinned?: boolean; isUnread?: boolean; isCompleted?: boolean },
+  ): SessionStatusFlags {
+    const flags = sessionRunStatus.setStatus(sessionId, patch);
+    if (!flags) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+    return flags;
   },
 
   /**

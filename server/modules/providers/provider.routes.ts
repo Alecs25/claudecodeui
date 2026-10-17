@@ -365,6 +365,67 @@ const parseFileRewindPayload = (payload: unknown): { anchorId: string; dryRun: b
   return { anchorId, dryRun: body.dryRun === true };
 };
 
+const SESSION_STATUS_KEYS = ['isPinned', 'isUnread', 'isCompleted'] as const;
+
+/**
+ * Reads a sidebar status change. Only boolean flags are accepted, and at
+ * least one must be present so an empty body is a client bug, not a no-op.
+ */
+export const parseSessionStatusPatch = (
+  payload: unknown,
+): Partial<Record<(typeof SESSION_STATUS_KEYS)[number], boolean>> => {
+  if (!payload || typeof payload !== 'object') {
+    throw new AppError('Request body must be an object.', {
+      code: 'INVALID_REQUEST_BODY',
+      statusCode: 400,
+    });
+  }
+
+  const body = payload as Record<string, unknown>;
+  const patch: Partial<Record<(typeof SESSION_STATUS_KEYS)[number], boolean>> = {};
+  for (const key of SESSION_STATUS_KEYS) {
+    if (body[key] === undefined) {
+      continue;
+    }
+    if (typeof body[key] !== 'boolean') {
+      throw new AppError(`${key} must be a boolean.`, {
+        code: 'INVALID_SESSION_STATUS',
+        statusCode: 400,
+      });
+    }
+    patch[key] = body[key] as boolean;
+  }
+
+  if (Object.keys(patch).length === 0) {
+    throw new AppError('At least one of isPinned, isUnread or isCompleted is required.', {
+      code: 'INVALID_SESSION_STATUS',
+      statusCode: 400,
+    });
+  }
+
+  return patch;
+};
+
+const RECENT_SESSION_STATUS_FILTERS = ['running', 'unread', 'pinned', 'completed'] as const;
+
+/** Reads the recent feed's `status` filter; absent or `all` means no filter. */
+export const parseRecentSessionsStatus = (
+  value: unknown,
+): (typeof RECENT_SESSION_STATUS_FILTERS)[number] | null => {
+  const normalized = readOptionalQueryString(value);
+  if (!normalized || normalized === 'all') {
+    return null;
+  }
+  const match = RECENT_SESSION_STATUS_FILTERS.find((status) => status === normalized);
+  if (!match) {
+    throw new AppError('status must be one of all, running, unread, pinned, completed.', {
+      code: 'INVALID_QUERY_PARAMETER',
+      statusCode: 400,
+    });
+  }
+  return match;
+};
+
 const parseSessionRenameSummary = (payload: unknown): string => {
   if (!payload || typeof payload !== 'object') {
     throw new AppError('Request body must be an object.', {
@@ -907,7 +968,8 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const limit = parseBoundedIntegerQuery(req.query.limit, 'limit', 40, 1, 100);
     const offset = parseBoundedIntegerQuery(req.query.offset, 'offset', 0, 0);
-    const page = sessionsService.listRecentSessions(limit, offset);
+    const status = parseRecentSessionsStatus(req.query.status);
+    const page = await sessionsService.listRecentSessions(limit, offset, status);
     res.json(createApiSuccessResponse(page));
   }),
 );
@@ -996,6 +1058,16 @@ router.put(
     const sessionId = parseSessionId(req.params.sessionId);
     const summary = parseSessionRenameSummary(req.body);
     const result = sessionsService.renameSessionById(sessionId, summary);
+    res.json(createApiSuccessResponse(result));
+  }),
+);
+
+router.patch(
+  '/sessions/:sessionId/status',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const patch = parseSessionStatusPatch(req.body);
+    const result = sessionsService.setSessionStatusById(sessionId, patch);
     res.json(createApiSuccessResponse(result));
   }),
 );

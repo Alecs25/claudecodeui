@@ -33,7 +33,30 @@ type ChatRun = {
   writer: ChatSessionWriter;
   startedAt: number;
   completedAt: number | null;
+  /** Who started the run; null for a scheduled message fired by a timer. */
+  userId: string | number | null;
 };
+
+/**
+ * Observers of a run's start and end, installed once at startup. The sidebar
+ * status (completed cleared by a new run, unread set by one that ends unseen)
+ * hangs off these so the registry itself stays free of persistence.
+ */
+type ChatRunLifecycleListeners = {
+  onRunStarted?: (appSessionId: string) => void;
+  onRunCompleted?: (appSessionId: string, userId: string | number | null) => void;
+};
+
+let lifecycleListeners: ChatRunLifecycleListeners = {};
+
+// A listener failure must never break the stream it observes.
+function notifyLifecycleListener(name: keyof ChatRunLifecycleListeners, invoke: () => void): void {
+  try {
+    invoke();
+  } catch (error) {
+    console.error(`[ChatRunRegistry] ${name} listener failed:`, error);
+  }
+}
 
 /**
  * How long a completed run stays available for replay. Covers the window
@@ -124,6 +147,10 @@ function decorateAndRecordEvent(run: ChatRun, message: NormalizedMessage): Norma
     run.status = 'completed';
     run.completedAt = Date.now();
     evictRunLater(run);
+    const { onRunCompleted } = lifecycleListeners;
+    if (onRunCompleted) {
+      notifyLifecycleListener('onRunCompleted', () => onRunCompleted(run.appSessionId, run.userId));
+    }
   }
 
   run.events.push(outbound);
@@ -184,6 +211,11 @@ export const chatRunRegistry = {
     retainCompletedRun = guard;
   },
 
+  /** Installs the run start/end observers. Called once by the server entrypoint. */
+  setLifecycleListeners(listeners: ChatRunLifecycleListeners): void {
+    lifecycleListeners = listeners;
+  },
+
   /**
    * Starts tracking a run and returns it, or `null` when a run is already in
    * progress for the session (callers must reject the duplicate send).
@@ -216,6 +248,7 @@ export const chatRunRegistry = {
       writer: null as unknown as ChatSessionWriter,
       startedAt: Date.now(),
       completedAt: null,
+      userId: input.userId,
     };
 
     run.writer = new ChatSessionWriter({
@@ -230,6 +263,10 @@ export const chatRunRegistry = {
     });
 
     runs.set(input.appSessionId, run);
+    const { onRunStarted } = lifecycleListeners;
+    if (onRunStarted) {
+      notifyLifecycleListener('onRunStarted', () => onRunStarted(input.appSessionId));
+    }
     return run;
   },
 
