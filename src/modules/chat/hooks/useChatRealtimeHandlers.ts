@@ -207,6 +207,11 @@ export function useChatRealtimeHandlers({
             }
             return;
           }
+          if (msg.code === 'NO_FOREGROUND_TASK') {
+            // The call settled before the request to background it arrived;
+            // the turn goes on regardless, so there is nothing to report.
+            return;
+          }
           console.error('[Chat] Protocol error:', msg.code, msg.error);
           if (sid) {
             // Surface the failure in the conversation and stop the spinner —

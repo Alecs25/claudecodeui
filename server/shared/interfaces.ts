@@ -58,6 +58,12 @@ export interface IProviderRuntime {
    * settled, or the id was never one of its own.
    */
   stopBackgroundTask?(sessionId: string, taskId: string): Promise<boolean>;
+  /**
+   * Moves the session's in-flight foreground tasks (a blocking command or
+   * subagent) to the background — all of them, or the one `toolUseId` started.
+   * Resolves false when the session has no live process or nothing matched.
+   */
+  backgroundTasks?(sessionId: string, toolUseId?: string): Promise<boolean>;
 }
 
 /**

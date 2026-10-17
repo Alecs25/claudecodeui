@@ -74,6 +74,8 @@ export type ProviderRuntimeGateway = {
   ): Promise<unknown>;
   abort(provider: LLMProvider, sessionId: string): Promise<boolean>;
   stopBackgroundTask(provider: LLMProvider, sessionId: string, taskId: string): Promise<boolean>;
+  /** Moves a session's in-flight foreground tasks to the background; optional for runtimes without them. */
+  backgroundTasks?(provider: LLMProvider, sessionId: string, toolUseId?: string): Promise<boolean>;
   /**
    * Whether a provider runtime still holds background work for the session
    * after its turn ended, including the turn in which the held process relays
@@ -498,6 +500,44 @@ async function handleChatStopTask(
 }
 
 /**
+ * Handles `chat.background-tasks`: moves the blocking command or subagent the
+ * session's turn is waiting on to the background, so the turn goes on while
+ * it runs. The provider reports the task on the session's stream like any
+ * background task, so nothing is echoed back on success.
+ */
+async function handleChatBackgroundTasks(
+  ws: WebSocket,
+  data: AnyRecord,
+  dependencies: ChatWebSocketDependencies
+): Promise<void> {
+  const sessionId = readRequiredSessionId(data);
+  if (!sessionId) {
+    sendProtocolError(ws, 'SESSION_ID_REQUIRED', 'chat.background-tasks requires a sessionId.');
+    return;
+  }
+
+  const session = sessionsDb.getSessionById(sessionId);
+  if (!session) {
+    sendProtocolError(ws, 'SESSION_NOT_FOUND', `Session "${sessionId}" was not found.`, sessionId);
+    return;
+  }
+
+  const toolUseId = typeof data.toolUseId === 'string' && data.toolUseId.trim() ? data.toolUseId.trim() : undefined;
+  const moved = await dependencies.runtime.backgroundTasks?.(session.provider as LLMProvider, sessionId, toolUseId);
+  if (!moved) {
+    // The call settled, or was already in the background, before the request
+    // arrived: nothing to do, and nothing about the run itself went wrong.
+    sendProtocolError(
+      ws,
+      'NO_FOREGROUND_TASK',
+      `Session "${sessionId}" has no foreground task to move to the background.`,
+      sessionId,
+      toolUseId ? { toolUseId } : {},
+    );
+  }
+}
+
+/**
  * Handles `chat.subscribe`: for each requested session, reports whether a run
  * is processing, re-attaches the live stream to this socket, replays missed
  * events (seq > lastSeq), and includes pending permission requests.
@@ -592,6 +632,7 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  * - `chat.send`                { sessionId, content, options? }
  * - `chat.abort`               { sessionId }
  * - `chat.stop-task`           { sessionId, taskId, toolUseId? }
+ * - `chat.background-tasks`    { sessionId, toolUseId? }
  * - `chat.subscribe`           { sessions: [{ sessionId, lastSeq? }] }
  * - `chat.permission-response` { requestId, allow, updatedInput?, message?, rememberEntry? }
  *
@@ -697,6 +738,9 @@ export function handleChatConnection(
           return;
         case 'chat.stop-task':
           await handleChatStopTask(ws, data, dependencies);
+          return;
+        case 'chat.background-tasks':
+          await handleChatBackgroundTasks(ws, data, dependencies);
           return;
         case 'chat.subscribe':
           handleChatSubscribe(ws, data, dependencies);

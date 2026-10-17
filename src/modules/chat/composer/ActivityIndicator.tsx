@@ -9,6 +9,8 @@ import { describeBackgroundTask, ownBackgroundTasks } from '@/modules/chat/utils
 type ActivityIndicatorProps = {
   activity: SessionActivity | null;
   onAbort?: () => void;
+  /** Moves the command or subagent the turn is blocked on to the background; absent when there is none. */
+  onRunInBackground?: () => void;
   isInputFocused?: boolean;
 };
 
@@ -45,7 +47,7 @@ function describeBackgroundTasks(allTasks: BackgroundTaskSummary[], t: TFunction
  * Rendered by chat's ChatComposer above the input so the user can see and
  * interrupt the in-flight turn without leaving the composer.
  */
-export default function ActivityIndicator({ activity, onAbort, isInputFocused = false }: ActivityIndicatorProps) {
+export default function ActivityIndicator({ activity, onAbort, onRunInBackground, isInputFocused = false }: ActivityIndicatorProps) {
   const { t } = useTranslation('chat');
   const [renderedActivity, setRenderedActivity] = useState<SessionActivity | null>(activity);
   const [isExiting, setIsExiting] = useState(false);
@@ -121,6 +123,17 @@ export default function ActivityIndicator({ activity, onAbort, isInputFocused = 
           <span className="shrink-0 tabular-nums text-muted-foreground/60">{elapsedLabel}</span>
         </div>
 
+        <div className="flex items-end gap-1">
+        {!isBackground && onRunInBackground && (
+          <button
+            type="button"
+            onClick={onRunInBackground}
+            className={`${tabSurfaceClassName} pointer-events-auto gap-1.5 text-muted-foreground hover:bg-card hover:text-foreground`}
+            title={t('claudeStatus.runInBackground', { defaultValue: 'Run in background' })}
+          >
+            <span>{t('claudeStatus.background', { defaultValue: 'Background' })}</span>
+          </button>
+        )}
         {renderedActivity.canInterrupt && onAbort && (
           <button
             type="button"
@@ -137,6 +150,7 @@ export default function ActivityIndicator({ activity, onAbort, isInputFocused = 
             </kbd>
           </button>
         )}
+        </div>
       </div>
     </div>
   );

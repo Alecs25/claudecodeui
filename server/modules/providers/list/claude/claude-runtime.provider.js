@@ -1830,6 +1830,23 @@ async function stopClaudeSDKTask(sessionId, taskId) {
 }
 
 /**
+ * Moves the session's in-flight foreground tasks — a blocking Bash command or
+ * subagent — to the background, as Ctrl+B does in the terminal: each blocking
+ * call returns at once and the turn goes on while the task keeps running and
+ * later reports through `task_notification`, like any background task.
+ * @param {string} sessionId - Session identifier
+ * @param {string} [toolUseId] - The one call to move; every foreground task when omitted
+ * @returns {Promise<boolean>} False when no live process has a matching foreground task
+ */
+async function backgroundClaudeSDKTasks(sessionId, toolUseId) {
+  const session = getSession(sessionId);
+  if (!session || typeof session.instance?.backgroundTasks !== 'function') {
+    return false;
+  }
+  return Boolean(await session.instance.backgroundTasks(toolUseId));
+}
+
+/**
  * Checks if an SDK session is currently active
  * @param {string} sessionId - Session identifier
  * @returns {boolean} True if session is active
@@ -1928,6 +1945,7 @@ export const claudeRuntime = {
   listBackgroundWork: listClaudeSDKBackgroundWork,
   hasActiveHeldTurn,
   stopBackgroundTask: stopClaudeSDKTask,
+  backgroundTasks: backgroundClaudeSDKTasks,
 };
 
 // Export public API
@@ -1938,6 +1956,7 @@ export {
   hasActiveHeldTurn,
   readHeldTurnWaitMs,
   stopClaudeSDKTask,
+  backgroundClaudeSDKTasks,
   isClaudeSDKSessionActive,
   getClaudeSDKSessionStartTime,
   getClaudeSDKLiveTaskToolUseIds,
