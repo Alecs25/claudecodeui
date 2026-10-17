@@ -1855,6 +1855,25 @@ function getClaudeSDKSessionStartTime(sessionId) {
 }
 
 /**
+ * The tool-use ids of the background tasks the live run behind a session
+ * still has outstanding, or null when no run is up.
+ *
+ * The history reader pairs this with `getClaudeSDKSessionStartTime`: a launch
+ * row the live run made is still running only while the tracker holds its
+ * task. A task the CLI killed on its own, or one whose notification never
+ * reached the transcript, is otherwise read as running for as long as the
+ * process stays held.
+ * @param {string} sessionId - Session identifier
+ * @returns {Set<string>|null} Tool-use ids of the outstanding tasks, or null
+ */
+function getClaudeSDKLiveTaskToolUseIds(sessionId) {
+  if (getClaudeSDKSessionStartTime(sessionId) === null) {
+    return null;
+  }
+  return new Set(backgroundWork.outstanding(sessionId).map((task) => task.toolUseId));
+}
+
+/**
  * Gets all active SDK session IDs
  * @returns {Array<string>} Array of active session IDs
  */
@@ -1921,6 +1940,7 @@ export {
   stopClaudeSDKTask,
   isClaudeSDKSessionActive,
   getClaudeSDKSessionStartTime,
+  getClaudeSDKLiveTaskToolUseIds,
   getActiveClaudeSDKSessions,
   resolveToolApproval,
   getPendingApprovalsForSession,
