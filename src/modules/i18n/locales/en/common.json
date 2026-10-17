@@ -391,6 +391,8 @@
     "result": "Result",
     "script": "Script",
     "backgroundTasks": "Background tasks",
+    "backgroundSummary_one": "{{count}} in background",
+    "backgroundSummary_other": "{{count}} in background",
     "backgroundAgent": "Agent",
     "backgroundCommand": "Command",
     "stopTask": "Stop",
