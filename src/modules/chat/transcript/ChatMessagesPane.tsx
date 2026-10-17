@@ -19,6 +19,7 @@ import ToolGroupContainer from '@/modules/chat/transcript/ToolGroupContainer';
 import LoadAllMessagesOverlay from '@/modules/chat/transcript/LoadAllMessagesOverlay';
 import ChatExportMenu from '@/modules/chat/transcript/ChatExportMenu';
 import { BackgroundTasksStrip } from '@/modules/chat/transcript/BackgroundTasksStrip';
+import ChaptersMenu from '@/modules/chat/transcript/ChaptersMenu';
 
 /**
  * How many of the newest rows mount with real content on the first commit,
@@ -207,7 +208,13 @@ function ChatMessagesPane({
               onLoadAll={loadAllMessages}
             />
           </div>
-          <div className="pointer-events-auto">
+          <div className="pointer-events-auto flex items-center gap-1.5">
+            <ChaptersMenu
+              messages={chatMessages}
+              onReveal={revealMessage}
+              hasUnloadedHistory={hasMoreMessages && !allMessagesLoaded}
+              onLoadAll={loadAllMessages}
+            />
             <ChatExportMenu
               messages={chatMessages}
               sessionTitle={selectedSession?.summary || selectedSession?.title}

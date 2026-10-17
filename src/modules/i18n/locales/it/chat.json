@@ -308,5 +308,10 @@
     "failed_one": "{{count}} non riuscito",
     "failed_other": "{{count}} non riusciti",
     "running": "In corso"
+  },
+  "chapters": {
+    "title": "Capitoli",
+    "close": "Chiudi",
+    "loadEarlier": "Carica capitoli precedenti"
   }
 }

@@ -17,6 +17,8 @@ import MessageSpeakControl from '@/modules/chat/transcript/MessageSpeakControl';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 import { MemoryCitations } from '@/modules/chat/transcript/MemoryCitations';
 import { isShellTool } from '@/modules/chat/utils/toolActivity';
+import { getChapterAnchorId, isMarkChapterTool, readChapter } from '@/modules/chat/utils/chapters';
+import ChapterDivider from '@/modules/chat/transcript/ChapterDivider';
 
 type MessageComponentProps = {
   message: ChatMessage;
@@ -93,6 +95,17 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
 
   if (shouldHideThinkingMessage) {
     return null;
+  }
+
+  // A chapter is a divider, not a tool row: its title is the whole point and
+  // its result only acknowledges the call to the model.
+  if (message.isToolUse && isMarkChapterTool(message.toolName)) {
+    const chapter = readChapter(message);
+    return chapter ? (
+      <div data-message-timestamp={message.timestamp || undefined} className="chat-message px-3 sm:px-0">
+        <ChapterDivider anchorId={getChapterAnchorId(message)} title={chapter.title} summary={chapter.summary} />
+      </div>
+    ) : null;
   }
 
   return (

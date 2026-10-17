@@ -1,6 +1,7 @@
 import type { ChatMessage, DiffLine, LLMProvider } from '@/shared/types';
 import { getToolConfig } from '@/modules/chat/tools';
 import { parseToolPayload, summarizeDiff } from '@/modules/chat/utils/messageTransforms';
+import { isMarkChapterTool, readChapter } from '@/modules/chat/utils/chapters';
 
 type BuildTranscriptMarkdownInput = {
   messages: ChatMessage[];
@@ -102,6 +103,18 @@ export function buildTranscriptMarkdown(input: BuildTranscriptMarkdownInput): st
 
   for (const message of input.messages) {
     sections.push('');
+
+    // A chapter reads as a section heading in a document, as it does on screen.
+    if (message.isToolUse && isMarkChapterTool(message.toolName)) {
+      const chapter = readChapter(message);
+      if (chapter) {
+        sections.push(`## ${chapter.title}`);
+        if (chapter.summary) {
+          sections.push('', `_${chapter.summary}_`);
+        }
+      }
+      continue;
+    }
 
     if (message.isToolUse) {
       sections.push(renderToolCall(message, input.createDiff));

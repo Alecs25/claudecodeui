@@ -189,6 +189,8 @@ const BG_WAIT_CEILING_MS = resolveBgWaitCeilingMs(process.env.CLOUDCLI_BG_WAIT_C
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
 const SEND_USER_FILE_TOOL = 'mcp__cloudcli-send-file__send_user_file';
+// Kept in sync with MARK_CHAPTER_TOOL in modules/chapters (this file is plain JS).
+const MARK_CHAPTER_TOOL = 'mcp__cloudcli-chapters__mark_chapter';
 
 // Sessions started in the Claude desktop app and resumed here still "remember"
 // that app's tools (SendUserFile, Artifact, ...): without this note the model
@@ -200,6 +202,9 @@ const CLOUDCLI_SESSION_PROMPT = [
   'even if earlier turns of this conversation used them: never call them.',
   'To show a file to the user (report, HTML mock, image, PDF) call mcp__cloudcli-send-file__send_user_file',
   'directly, with absolute paths; it appears as a card in chat and opens in the side panel.',
+  'When the work shifts to a meaningfully different phase (exploration done, implementation starts,',
+  'verification starts, the user pivots), call mcp__cloudcli-chapters__mark_chapter with a short title:',
+  'the user gets a divider and a table of contents. Use it sparingly, 3-8 chapters per session, never for the first message.',
 ].join('\n');
 
 // Ultracode is a session-scoped setting rather than an SDK effort level: it pairs xhigh
@@ -392,8 +397,11 @@ function mapCliOptionsToSDK(options = {}) {
   // send_user_file only shows the user a file the agent can already read: an
   // approval prompt protects nothing and, missed on a phone, leaves the turn
   // waiting forever.
-  if (!allowedTools.includes(SEND_USER_FILE_TOOL)) {
-    allowedTools.push(SEND_USER_FILE_TOOL);
+  // mark_chapter only draws a divider: same reasoning.
+  for (const tool of [SEND_USER_FILE_TOOL, MARK_CHAPTER_TOOL]) {
+    if (!allowedTools.includes(tool)) {
+      allowedTools.push(tool);
+    }
   }
 
   if (permissionMode === 'plan') {
@@ -1914,6 +1922,7 @@ export const claudeRuntime = {
 // Export public API
 export {
   queryClaudeSDK,
+  mapCliOptionsToSDK,
   abortClaudeSDKSession,
   listClaudeSDKBackgroundWork,
   hasActiveHeldTurn,

@@ -14,7 +14,7 @@ const TODO_TOOLS = new Set(['TodoWrite', 'TodoRead', 'TaskCreate', 'TaskUpdate',
 // or look at what it produced. Folding them into a collapsed summary would hide
 // exactly what the agent wanted the user to see.
 const ALWAYS_VISIBLE_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode', 'exit_plan_mode', 'Workflow']);
-const ALWAYS_VISIBLE_MCP_SUFFIXES = ['__send_user_file', '__show_widget'];
+const ALWAYS_VISIBLE_MCP_SUFFIXES = ['__send_user_file', '__show_widget', '__mark_chapter'];
 
 // Claude exposes PowerShell next to Bash on Windows: the same interaction, so
 // the same command row with its output inline.

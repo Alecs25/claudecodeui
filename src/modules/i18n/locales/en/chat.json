@@ -422,5 +422,10 @@
     "failed_one": "{{count}} failed",
     "failed_other": "{{count}} failed",
     "running": "Running"
+  },
+  "chapters": {
+    "title": "Chapters",
+    "close": "Close",
+    "loadEarlier": "Load earlier chapters"
   }
 }
