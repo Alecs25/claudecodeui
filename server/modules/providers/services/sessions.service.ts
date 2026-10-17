@@ -538,6 +538,7 @@ export const sessionsService = {
     const transcriptPath = provider === 'claude' || provider === 'codex'
       ? session.jsonl_path
       : null;
+    const listHistoryDependencies = providerSessions.listHistoryDependencies?.bind(providerSessions);
     const fullHistory = await sessionHistoryCache.getFullHistory({
       sessionId,
       transcriptPath,
@@ -547,6 +548,11 @@ export const sessionsService = {
         projectPath,
         providerSessionId,
       }),
+      // Files the reader also parses, such as Claude's background agents'
+      // transcripts, which grow while the session file does not.
+      listDependencies: transcriptPath && listHistoryDependencies
+        ? () => listHistoryDependencies(transcriptPath, providerSessionId)
+        : undefined,
     });
 
     let result: FetchHistoryResult;
