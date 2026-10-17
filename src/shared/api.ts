@@ -285,6 +285,10 @@ export const api = {
   // `upToAnchorId` (all of it when omitted). The source is left untouched.
   forkSession: (sessionId: string, body: { upToAnchorId?: string; title?: string } = {}) =>
     post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/fork`, body),
+  // Restores the files the session edited to their state before the user
+  // message `anchorId`; `dryRun` only reports what would change.
+  rewindSessionFiles: (sessionId: string, body: { anchorId: string; dryRun: boolean }) =>
+    post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/rewind-files`, body),
   renameSession: (sessionId: string, summary: string) =>
     put(`/api/providers/sessions/${sessionId}`, { summary }),
   // What one agent of a workflow run did, read from its transcript on demand

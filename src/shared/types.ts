@@ -493,6 +493,15 @@ type QuestionOption = {
   description?: string;
 };
 
+/** What restoring a session's files to an earlier user message changed (or would, on a dry run); `canRewind` false with `error` when the session kept no checkpoint for it. Returned by the rewind-files endpoint and shown by chat's rewind dialog. */
+export type FileRewindResult = {
+  canRewind: boolean;
+  error?: string;
+  filesChanged?: string[];
+  insertions?: number;
+  deletions?: number;
+};
+
 // ---------------------------
 
 //----------------- CHAT SESSION STORE ------------

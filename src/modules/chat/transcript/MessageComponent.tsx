@@ -1,6 +1,6 @@
 import { memo, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { GitBranchIcon, PencilIcon } from 'lucide-react';
+import { GitBranchIcon, PencilIcon, RotateCcwIcon } from 'lucide-react';
 
 import type { ChatMessage, ClaudePermissionSuggestion, PermissionGrantResult, LLMProvider,DiffLine,Project } from '@/shared/types';
 import { formatUsageLimitText, stripProposedPlanEnvelope } from '@/modules/chat/utils/chatFormatting';
@@ -40,6 +40,11 @@ type MessageComponentProps = {
    * Absent when the provider cannot copy a transcript prefix.
    */
   onForkFromMessage?: (message: ChatMessage) => void;
+  /**
+   * Opens "Rewind to here" for this message (conversation and/or files).
+   * Absent while a turn runs or when the provider cannot re-run from a point.
+   */
+  onRewindMessage?: (message: ChatMessage) => void;
 };
 
 const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'PowerShell', 'Edit', 'Write', 'ApplyPatch']);
@@ -48,7 +53,7 @@ const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'PowerShell', 'Edit', 'Write', '
  * Rendered by chat's ChatMessagesPane and ToolGroupContainer to draw one
  * transcript entry — user turn, assistant turn, or a tool call and its result.
  */
-const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, showRawParameters, showThinking, selectedProject, provider, onEditMessage, onForkFromMessage }: MessageComponentProps) => {
+const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, showRawParameters, showThinking, selectedProject, provider, onEditMessage, onForkFromMessage, onRewindMessage }: MessageComponentProps) => {
   const { t } = useTranslation('chat');
   // Tool calls belong to the assistant's turn, as in Claude's apps: prose after a
   // run of tools continues the same turn instead of opening a new "Claude" header.
@@ -134,6 +139,17 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                       className="rounded p-1 opacity-0 transition-opacity hover:bg-muted focus-visible:opacity-100 group-hover:opacity-100"
                     >
                       <PencilIcon className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {onRewindMessage && message.transcriptAnchorId && (
+                    <button
+                      type="button"
+                      onClick={() => onRewindMessage(message)}
+                      title={t('message.rewindToHere', { defaultValue: 'Rewind to here' })}
+                      aria-label={t('message.rewindToHere', { defaultValue: 'Rewind to here' })}
+                      className="rounded p-1 opacity-0 transition-opacity hover:bg-muted focus-visible:opacity-100 group-hover:opacity-100"
+                    >
+                      <RotateCcwIcon className="h-3.5 w-3.5" />
                     </button>
                   )}
                   {onForkFromMessage && message.transcriptAnchorId && (

@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import { memo, useCallback, useMemo } from 'react';
+import { Fragment, memo, useCallback, useMemo, useState } from 'react';
+import { FileDiffIcon } from 'lucide-react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 
 import type { BackgroundTaskSummary,
@@ -19,6 +20,8 @@ import ToolGroupContainer from '@/modules/chat/transcript/ToolGroupContainer';
 import LoadAllMessagesOverlay from '@/modules/chat/transcript/LoadAllMessagesOverlay';
 import ChatExportMenu from '@/modules/chat/transcript/ChatExportMenu';
 import { BackgroundTasksStrip } from '@/modules/chat/transcript/BackgroundTasksStrip';
+import TurnChangesDialog from '@/modules/chat/modals/TurnChangesDialog';
+import { findTurnFileChanges, type TurnFileChange } from '@/modules/chat/utils/turnChanges';
 
 /**
  * How many of the newest rows mount with real content on the first commit,
@@ -79,6 +82,8 @@ type ChatMessagesPaneProps = {
   onEditMessage?: (message: ChatMessage) => void;
   /** Branches the conversation into a new session ending at a message. */
   onForkFromMessage?: (message: ChatMessage) => void;
+  /** Opens "Rewind to here" for a user message; absent while a turn runs. */
+  onRewindMessage?: (message: ChatMessage) => void;
   /** Fetches the whole transcript for an export, which otherwise only sees the loaded page. */
   onLoadFullTranscript?: () => Promise<ChatMessage[]>;
 };
@@ -138,6 +143,7 @@ function ChatMessagesPane({
   createDiff,
   onEditMessage,
   onForkFromMessage,
+  onRewindMessage,
   onLoadFullTranscript,
   onFileOpen,
   onShowSettings,
@@ -178,6 +184,32 @@ function ChatMessagesPane({
     }
     return keys;
   }, [groupedVisibleMessages]);
+
+  // Where each turn ends and which files it edited, for the "Changes" button
+  // drawn under it. A running turn gets none until it has finished.
+  const turnFileChanges = useMemo(
+    () => findTurnFileChanges(groupedVisibleMessages, !isProcessing),
+    [groupedVisibleMessages, isProcessing],
+  );
+  // The turn whose changes the dialog is showing; null while it is closed.
+  const [openTurnChanges, setOpenTurnChanges] = useState<TurnFileChange[] | null>(null);
+
+  const renderTurnChangesButton = (index: number) => {
+    const changes = turnFileChanges.get(index);
+    if (!changes) return null;
+    return (
+      <div className="flex justify-start px-3 sm:px-0">
+        <button
+          type="button"
+          onClick={() => setOpenTurnChanges(changes)}
+          className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/40 px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <FileDiffIcon className="h-3.5 w-3.5" />
+          {t('turnChanges.button', { count: changes.length, defaultValue: 'Changes ({{count}} files)' })}
+        </button>
+      </div>
+    );
+  };
 
   const getMessageKey = useCallback(
     (message: ChatMessage) =>
@@ -308,26 +340,28 @@ function ChatMessagesPane({
                 prevMessage = item.messages[item.messages.length - 1] || prevMessage;
 
                 return (
-                  <LazyMessageRow
-                    key={`tool-group-${getMessageKey(item.messages[0])}`}
-                    lazyRows={lazyRows}
-                    timestamp={item.timestamp}
-                    initiallyNearViewport={initiallyNearViewport}
-                  >
-                    <ToolGroupContainer
-                      group={item}
-                      prevMessage={groupPrevMessage}
-                      createDiff={createDiff}
-                      getMessageKey={getGroupedMessageKey}
-                      onFileOpen={onFileOpen}
-                      onShowSettings={onShowSettings}
-                      onGrantToolPermission={onGrantToolPermission}
-                      showRawParameters={showRawParameters}
-                      showThinking={showThinking}
-                      selectedProject={selectedProject}
-                      provider={provider}
-                    />
-                  </LazyMessageRow>
+                  <Fragment key={`tool-group-${getMessageKey(item.messages[0])}`}>
+                    <LazyMessageRow
+                      lazyRows={lazyRows}
+                      timestamp={item.timestamp}
+                      initiallyNearViewport={initiallyNearViewport}
+                    >
+                      <ToolGroupContainer
+                        group={item}
+                        prevMessage={groupPrevMessage}
+                        createDiff={createDiff}
+                        getMessageKey={getGroupedMessageKey}
+                        onFileOpen={onFileOpen}
+                        onShowSettings={onShowSettings}
+                        onGrantToolPermission={onGrantToolPermission}
+                        showRawParameters={showRawParameters}
+                        showThinking={showThinking}
+                        selectedProject={selectedProject}
+                        provider={provider}
+                      />
+                    </LazyMessageRow>
+                    {renderTurnChangesButton(index)}
+                  </Fragment>
                 );
               }
 
@@ -335,33 +369,42 @@ function ChatMessagesPane({
               prevMessage = item;
 
               return (
-                <LazyMessageRow
-                  key={getMessageKey(item)}
-                  lazyRows={lazyRows}
-                  timestamp={item.timestamp}
-                  initiallyNearViewport={initiallyNearViewport}
-                >
-                  <MessageComponent
-                    message={item}
-                    prevMessage={messagePrevMessage}
-                    createDiff={createDiff}
-                    onFileOpen={onFileOpen}
-                    onShowSettings={onShowSettings}
-                    onGrantToolPermission={onGrantToolPermission}
-                    showRawParameters={showRawParameters}
-                    showThinking={showThinking}
-                    selectedProject={selectedProject}
-                    provider={provider}
-                    onEditMessage={onEditMessage}
-                    onForkFromMessage={onForkFromMessage}
-                  />
-                </LazyMessageRow>
+                <Fragment key={getMessageKey(item)}>
+                  <LazyMessageRow
+                    lazyRows={lazyRows}
+                    timestamp={item.timestamp}
+                    initiallyNearViewport={initiallyNearViewport}
+                  >
+                    <MessageComponent
+                      message={item}
+                      prevMessage={messagePrevMessage}
+                      createDiff={createDiff}
+                      onFileOpen={onFileOpen}
+                      onShowSettings={onShowSettings}
+                      onGrantToolPermission={onGrantToolPermission}
+                      showRawParameters={showRawParameters}
+                      showThinking={showThinking}
+                      selectedProject={selectedProject}
+                      provider={provider}
+                      onEditMessage={onEditMessage}
+                      onForkFromMessage={onForkFromMessage}
+                      onRewindMessage={onRewindMessage}
+                    />
+                  </LazyMessageRow>
+                  {renderTurnChangesButton(index)}
+                </Fragment>
               );
             });
           })()}
         </>
       )}
       </div>
+      <TurnChangesDialog
+        changes={openTurnChanges}
+        onClose={() => setOpenTurnChanges(null)}
+        createDiff={createDiff}
+        onFileOpen={onFileOpen}
+      />
     </div>
   );
 }
