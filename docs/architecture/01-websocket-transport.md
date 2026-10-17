@@ -184,14 +184,16 @@ throws is answered with `INTERNAL_ERROR`.**
 | --- | --- | --- |
 | `chat.send` | `sessionId`, `content`, `options` | Resolves the session row, registers the run, dispatches to the provider runtime (`:146-158`). On a session whose previous turn left background work running, the new turn's CLI process supersedes the one that work runs under, so the work is stopped or finishes unheard; the composer asks the user before sending such a turn |
 | `chat.edit-send` | as above plus `anchorId` | Announces `history_truncated`, rewinds or resumes the provider transcript at the anchor, then dispatches (`:314-408`) |
+| `chat.steer` | `sessionId`, `content`, `options` | Hands the message to the session's turn in progress (Claude only, `supportsSteering`); the model reads it after its current action. Takes the matching queued message off the server queue first and puts it back if no turn took it. Always answered with `steer_result { accepted, reason? }`, never `protocol_error` |
 | `chat.abort` | `sessionId` | Aborts the runtime and emits the terminal `complete` on its behalf (`:415-438`) |
 | `chat.stop-task` | `sessionId`, `taskId` | Stops one background task (agent, workflow or backgrounded command) through the provider runtime; the runtime reports the stop on the session's stream |
 | `chat.subscribe` | `sessions: [{ sessionId, lastSeq }]` | Acks with `chat_subscribed`, attaches this socket to a running run — or to a completed one whose session still has background work — and replays what was missed for running runs (`:448-504`) |
 | `chat.permission-response` | `requestId`, `allow`, `updatedInput?`, `message?`, `rememberEntry?` | Resolves one pending tool approval (`:511-522`) |
 
-All six are built in exactly three client files: the composer builds sends, aborts and
+All seven are built in three client files: the composer builds sends, steers, aborts and
 permission answers (`useChatComposerState.ts:825-837`, `:1121-1124`, `:1149-1156`),
-`chat.stop-task` is built by the background-tasks strip's ✕ (`BackgroundTasksStrip.tsx`), and
+`chat.stop-task` is built by the background-tasks strip's ✕ (`BackgroundTasksStrip.tsx`),
+`chat.steer` by the queued message's "Send now" (`useChatComposerState.ts`), and
 `chat.subscribe` is built in `useChatSessionState.ts:668-674` and
 `ChatInterface.tsx:267-273`.
 

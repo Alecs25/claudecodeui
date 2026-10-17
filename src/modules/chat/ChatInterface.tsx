@@ -125,6 +125,7 @@ function ChatInterface({
     resolvePermissionModeForProvider,
     supportsMessageEditing,
     supportsSessionForking,
+    supportsSteering,
   } = useChatProviderState({
     selectedSession,
     selectedProject,
@@ -220,6 +221,9 @@ function ChatInterface({
     queuedDraft,
     editQueuedDraft,
     deleteQueuedDraft,
+    steerQueuedDraft,
+    isSteeringQueuedDraft,
+    handleSteerResult,
     handleVoiceTranscript,
     handleInputChange,
     handleKeyDown,
@@ -263,6 +267,7 @@ function ChatInterface({
     setIsUserScrolledUp,
     setPendingPermissionRequests,
     resolvePermissionModeForProvider,
+    supportsSteering,
   });
 
   // On WebSocket reconnect, request a bounded persisted-tail sync (deferred
@@ -303,6 +308,7 @@ function ChatInterface({
     requestLatestMessages,
     sessionStore,
     onPlanModeChange: applyPlanModeChange,
+    onSteerResult: handleSteerResult,
   });
 
   // Lets other modules (the quick settings Commands tab) hand text to the
@@ -337,6 +343,12 @@ function ChatInterface({
       }
 
       event.preventDefault();
+      // The first Esc takes a queued message back into an empty composer;
+      // the next one stops the run, as in Claude Code.
+      if (queuedDraft && !isSteeringQueuedDraft && !input.trim()) {
+        editQueuedDraft();
+        return;
+      }
       handleAbortSession();
     };
 
@@ -344,7 +356,7 @@ function ChatInterface({
     return () => {
       document.removeEventListener('keydown', handleGlobalEscape, { capture: true });
     };
-  }, [canAbortSession, handleAbortSession]);
+  }, [canAbortSession, editQueuedDraft, handleAbortSession, input, isSteeringQueuedDraft, queuedDraft]);
 
   useEffect(() => {
     return () => {
@@ -571,6 +583,9 @@ function ChatInterface({
           onResolveBackgroundSendPrompt={resolveBackgroundSendPrompt}
           onEditQueuedDraft={editQueuedDraft}
           onDeleteQueuedDraft={deleteQueuedDraft}
+          // Joining the running turn is only offered while there is one to join.
+          onSendQueuedDraftNow={supportsSteering && isProcessing ? steerQueuedDraft : undefined}
+          isSendingQueuedDraftNow={isSteeringQueuedDraft}
           attachedFiles={attachedFiles}
           onRemoveAttachment={(index) =>
             setAttachedFiles((previous) =>

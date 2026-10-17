@@ -9,6 +9,7 @@ import type {
   ProviderRunFunction,
   ProviderRuntimeContext,
   ProviderRuntimeWriter,
+  ProviderSteerInput,
 } from '@/shared/types.js';
 
 type ProviderRuntimeServiceDependencies = {
@@ -95,6 +96,11 @@ export function createProviderRuntimeService(
       // A runtime that never holds background work has no task to stop.
       const { runtime } = dependencies.resolveProvider(providerName);
       return Boolean(await runtime.stopBackgroundTask?.(sessionId, taskId));
+    },
+
+    async steer(providerName: LLMProvider, sessionId: string, input: ProviderSteerInput): Promise<boolean> {
+      const { runtime } = dependencies.resolveProvider(providerName);
+      return Boolean(await runtime.steer?.(sessionId, input));
     },
 
     hasBackgroundWork(sessionId: string): boolean {

@@ -42,6 +42,11 @@ type ProviderCapabilities = {
    * Whether a session's transcript can be branched into an independent one.
    */
   supportsSessionForking: boolean;
+  /**
+   * Whether a message can join a turn that is still running (`chat.steer`),
+   * read by the model after its current action instead of after the turn.
+   */
+  supportsSteering: boolean;
 };
 
 /**
@@ -66,6 +71,8 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     // `forkSession` copies a transcript prefix into a new session file.
     supportsMessageEditing: true,
     supportsSessionForking: true,
+    // The held prompt stream stays open into the running turn.
+    supportsSteering: true,
   },
   cursor: {
     provider: 'cursor',
@@ -80,6 +87,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     effortLevels: [],
     supportsMessageEditing: false,
     supportsSessionForking: false,
+    supportsSteering: false,
   },
   codex: {
     provider: 'codex',
@@ -98,6 +106,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     // which is how Codex's own IDE clients do it.
     supportsMessageEditing: true,
     supportsSessionForking: true,
+    supportsSteering: false,
   },
   opencode: {
     provider: 'opencode',
@@ -117,6 +126,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     effortLevels: ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'thinking'],
     supportsMessageEditing: false,
     supportsSessionForking: false,
+    supportsSteering: false,
   },
 };
 

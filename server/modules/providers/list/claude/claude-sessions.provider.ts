@@ -498,6 +498,33 @@ async function readTranscriptRows(jsonlPath: string, providerSessionId: string):
   return rows;
 }
 
+/**
+ * The text of a message the user sent into a running turn, stored as a
+ * `queued_command` attachment row; null for any other row. Only human prompts
+ * count: the CLI also queues task notifications and its own commands this way.
+ */
+function readSteeredPrompt(row: AnyRecord): string | null {
+  const attachment = row.type === 'attachment' ? row.attachment : null;
+  if (!attachment || attachment.type !== 'queued_command') {
+    return null;
+  }
+  if (attachment.commandMode !== undefined && attachment.commandMode !== 'prompt') {
+    return null;
+  }
+  if (attachment.origin?.kind !== undefined && attachment.origin.kind !== 'human') {
+    return null;
+  }
+
+  const prompt = attachment.prompt;
+  const text = Array.isArray(prompt)
+    ? prompt
+      .filter((part: AnyRecord) => part?.type === 'text' && typeof part.text === 'string')
+      .map((part: AnyRecord) => part.text)
+      .join('\n')
+    : typeof prompt === 'string' ? prompt : '';
+  return text.trim() ? text : null;
+}
+
 /** True for a row the user typed, as opposed to a tool result or an injected note. */
 function isUserPromptRow(row: AnyRecord): boolean {
   if (row.type !== 'user' || row.isMeta === true || row.isCompactSummary === true) {
@@ -1355,6 +1382,22 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       }
 
       return [];
+    }
+
+    // A message the user sent while a turn was running (a steer from CloudCLI,
+    // or typed mid-turn in the CLI) joins that turn as a `queued_command`
+    // attachment, not as a user row. It is still something the user said.
+    const steeredPrompt = readSteeredPrompt(raw);
+    if (steeredPrompt !== null) {
+      return [createNormalizedMessage({
+        id: baseId,
+        sessionId,
+        timestamp: ts,
+        provider: PROVIDER,
+        kind: 'text',
+        role: 'user',
+        content: steeredPrompt,
+      })];
     }
 
     if (raw.message?.role === 'user' && raw.message?.content && raw.isMeta !== true) {
