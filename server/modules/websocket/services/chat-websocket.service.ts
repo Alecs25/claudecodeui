@@ -2,7 +2,7 @@ import path from 'node:path';
 
 import type { WebSocket } from 'ws';
 
-import { sessionsDb } from '@/modules/database/index.js';
+import { sessionDraftsDb, sessionsDb } from '@/modules/database/index.js';
 import { providerModelsService, sessionsService } from '@/modules/providers/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
@@ -18,6 +18,7 @@ import type {
   LLMProvider,
   ProviderPermissionDecision,
   ProviderRuntimeWriter,
+  ProviderSteerInput,
 } from '@/shared/types.js';
 import { parseIncomingJsonObject } from '@/shared/utils.js';
 
@@ -76,6 +77,8 @@ export type ProviderRuntimeGateway = {
   stopBackgroundTask(provider: LLMProvider, sessionId: string, taskId: string): Promise<boolean>;
   /** Moves a session's in-flight foreground tasks to the background; optional for runtimes without them. */
   backgroundTasks?(provider: LLMProvider, sessionId: string, toolUseId?: string): Promise<boolean>;
+  /** Hands a running turn another user message; false when no turn takes it. */
+  steer?(provider: LLMProvider, sessionId: string, input: ProviderSteerInput): Promise<boolean>;
   /**
    * Whether a provider runtime still holds background work for the session
    * after its turn ended, including the turn in which the held process relays
@@ -211,6 +214,22 @@ function resolveSendTarget(
 }
 
 /**
+ * The attachments a client frame names, kept only when they live in the
+ * upload store, each path once.
+ */
+function readVerifiedAttachments(clientOptions: AnyRecord): ChatAttachmentDescriptor[] {
+  const attachmentCandidates = [
+    ...normalizeAttachmentDescriptors(clientOptions.images),
+    ...normalizeAttachmentDescriptors(clientOptions.files),
+    ...normalizeAttachmentDescriptors(clientOptions.attachments),
+  ];
+  const verifiedAttachments = filterAttachmentsToUploadStore(attachmentCandidates);
+  return verifiedAttachments.filter(
+    (descriptor, index, all) => all.findIndex((candidate) => candidate.path === descriptor.path) === index,
+  );
+}
+
+/**
  * Registers the run and hands the turn to the provider runtime.
  *
  * `extraRuntimeOptions` is how an edited message asks the provider to resume
@@ -261,15 +280,7 @@ async function dispatchRun(
     providerModelsService.setSessionEffort(provider, sessionId, clientOptions.effort);
   }
 
-  const attachmentCandidates = [
-    ...normalizeAttachmentDescriptors(clientOptions.images),
-    ...normalizeAttachmentDescriptors(clientOptions.files),
-    ...normalizeAttachmentDescriptors(clientOptions.attachments),
-  ];
-  const verifiedAttachments = filterAttachmentsToUploadStore(attachmentCandidates);
-  const uniqueAttachments = verifiedAttachments.filter(
-    (descriptor, index, all) => all.findIndex((candidate) => candidate.path === descriptor.path) === index,
-  );
+  const uniqueAttachments = readVerifiedAttachments(clientOptions);
 
   // The provider runtimes receive the stable app session id. When their
   // CLI/SDK needs the provider-native id for resume, they resolve it from the
@@ -416,6 +427,99 @@ async function handleChatEditSend(
       }
     },
   );
+}
+
+/**
+ * Takes the user's persisted queued message for a session off the queue when
+ * it is the one being steered, so the dispatcher cannot also send it as a turn
+ * of its own once the running turn ends. Returns the claim, for putting back.
+ */
+function claimSteeredQueuedMessage(
+  userId: string | number | null,
+  sessionId: string,
+  content: string,
+): ReturnType<typeof sessionDraftsDb.listQueuedMessages>[number] | null {
+  const numericUserId = typeof userId === 'number' ? userId : Number(userId);
+  if (!Number.isInteger(numericUserId)) {
+    return null;
+  }
+  const candidate = sessionDraftsDb.listQueuedMessages().find((queued) => (
+    queued.userId === numericUserId
+    && queued.sessionId === sessionId
+    && (queued.queuedMessage as AnyRecord | null)?.content === content
+  ));
+  return candidate && sessionDraftsDb.claimQueuedMessage(candidate) ? candidate : null;
+}
+
+/**
+ * Handles `chat.steer`: hands a message to the session's turn in progress,
+ * which the model reads after its current action instead of after the turn.
+ *
+ * Always answers with `steer_result`, never a protocol error: a refusal is not
+ * a failed run (the turn goes on), and the client keeps the message queued so
+ * it is sent as the next turn instead.
+ */
+async function handleChatSteer(
+  ws: WebSocket,
+  userId: string | number | null,
+  data: AnyRecord,
+  dependencies: ChatWebSocketDependencies
+): Promise<void> {
+  const sessionId = readRequiredSessionId(data);
+  const reply = (accepted: boolean, reason?: string) => sendJson(ws, {
+    kind: 'steer_result',
+    sessionId,
+    accepted,
+    ...(reason ? { reason } : {}),
+    timestamp: new Date().toISOString(),
+  });
+
+  const session = sessionId ? sessionsDb.getSessionById(sessionId) : null;
+  if (!sessionId || !session) {
+    reply(false, 'SESSION_NOT_FOUND');
+    return;
+  }
+
+  const command = typeof data.content === 'string' ? data.content : '';
+  const attachments = readVerifiedAttachments((data.options ?? {}) as AnyRecord);
+  if (!command.trim() && attachments.length === 0) {
+    reply(false, 'EMPTY_MESSAGE');
+    return;
+  }
+
+  const provider = session.provider as LLMProvider;
+  const run = chatRunRegistry.getRun(sessionId);
+  if (!run || run.status !== 'running' || !dependencies.runtime.steer) {
+    reply(false, 'NO_ACTIVE_TURN');
+    return;
+  }
+
+  const claimed = claimSteeredQueuedMessage(userId, sessionId, command);
+  let accepted = false;
+  try {
+    accepted = await dependencies.runtime.steer(provider, sessionId, {
+      command,
+      images: attachments.filter(isImageAttachmentDescriptor),
+      files: attachments.filter((descriptor) => !isImageAttachmentDescriptor(descriptor)),
+      cwd: session.project_path ?? undefined,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[Chat] Steering the running turn failed', { sessionId, error: message });
+  }
+
+  if (!accepted) {
+    // The turn ended first: the message goes out as the next turn after all.
+    if (claimed) {
+      sessionDraftsDb.restoreQueuedMessage(claimed);
+    }
+    reply(false, 'NO_ACTIVE_TURN');
+    return;
+  }
+  if (claimed) {
+    sessionDraftsDb.deleteEmptyDraft(claimed.userId, sessionId);
+  }
+  reply(true);
 }
 
 /**
@@ -630,6 +734,7 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  *
  * Inbound protocol (client to server):
  * - `chat.send`                { sessionId, content, options? }
+ * - `chat.steer`               { sessionId, content, options? }
  * - `chat.abort`               { sessionId }
  * - `chat.stop-task`           { sessionId, taskId, toolUseId? }
  * - `chat.background-tasks`    { sessionId, toolUseId? }
@@ -638,8 +743,8 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  *
  * Outbound protocol (server to client): every frame is `kind`-based — either
  * a provider `NormalizedMessage` (with `seq`) or a gateway event
- * (`chat_subscribed`, `session_upserted`, `loading_progress`,
- * `protocol_error`).
+ * (`chat_subscribed`, `steer_result`, `session_upserted`,
+ * `loading_progress`, `protocol_error`).
  */
 /**
  * Runs a turn for a session with no client attached.
@@ -732,6 +837,9 @@ export function handleChatConnection(
           return;
         case 'chat.send':
           await handleChatSend(ws, userId, data, dependencies);
+          return;
+        case 'chat.steer':
+          await handleChatSteer(ws, userId, data, dependencies);
           return;
         case 'chat.abort':
           await handleChatAbort(ws, data, dependencies);

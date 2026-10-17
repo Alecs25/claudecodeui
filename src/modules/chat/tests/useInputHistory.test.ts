@@ -235,4 +235,45 @@ describe('useInputHistory', () => {
     });
     assert.equal(handled, false);
   });
+  it('brings back a cleared draft as the newest entry, until the next send', () => {
+    const { result, setCalls } = setUp();
+
+    act(() => {
+      result.current.recordSentMessage('sent before');
+      result.current.rememberClearedDraft('half-written idea');
+    });
+
+    act(() => {
+      result.current.handleHistoryKeyDown(keyEvent('ArrowUp', '').event);
+    });
+    assert.equal(setCalls.at(-1), 'half-written idea');
+
+    act(() => {
+      result.current.handleHistoryKeyDown(keyEvent('ArrowUp', 'half-written idea').event);
+    });
+    assert.equal(setCalls.at(-1), 'sent before');
+    // The cleared draft is an undo, not history: it is never stored.
+    assert.deepEqual(readInputHistory('session-1'), ['sent before']);
+
+    act(() => {
+      result.current.recordSentMessage('something else');
+    });
+    act(() => {
+      result.current.handleHistoryKeyDown(keyEvent('ArrowUp', '').event);
+    });
+    assert.equal(setCalls.at(-1), 'something else');
+  });
+
+  it('does not remember an empty box as a cleared draft', () => {
+    const { result } = setUp();
+    let handled = true;
+
+    act(() => {
+      result.current.rememberClearedDraft('   ');
+    });
+    act(() => {
+      handled = result.current.handleHistoryKeyDown(keyEvent('ArrowUp', '').event);
+    });
+    assert.equal(handled, false);
+  });
 });

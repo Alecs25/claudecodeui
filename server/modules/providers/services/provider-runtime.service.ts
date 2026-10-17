@@ -10,6 +10,7 @@ import type {
   ProviderRunFunction,
   ProviderRuntimeContext,
   ProviderRuntimeWriter,
+  ProviderSteerInput,
 } from '@/shared/types.js';
 
 type ProviderRuntimeServiceDependencies = {
@@ -115,6 +116,11 @@ export function createProviderRuntimeService(
     ): Promise<boolean> {
       const { runtime } = dependencies.resolveProvider(providerName);
       return Boolean(await runtime.applySessionSettings?.(sessionId, settings));
+    },
+
+    async steer(providerName: LLMProvider, sessionId: string, input: ProviderSteerInput): Promise<boolean> {
+      const { runtime } = dependencies.resolveProvider(providerName);
+      return Boolean(await runtime.steer?.(sessionId, input));
     },
 
     hasBackgroundWork(sessionId: string): boolean {

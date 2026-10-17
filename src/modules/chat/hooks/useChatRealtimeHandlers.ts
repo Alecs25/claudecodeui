@@ -53,6 +53,8 @@ type UseChatRealtimeHandlersArgs = {
   sessionStore: SessionStore;
   /** Reports a plan-mode change the CLI made during a live run, so the composer can follow it instead of undoing it with the next message. `provider` is the session's own, from the event. */
   onPlanModeChange?: (sessionId: string, change: PlanModeChange, provider?: LLMProvider) => void;
+  /** Settles a queued message sent into the running turn (`chat.steer`). */
+  onSteerResult?: (sessionId: string, accepted: boolean) => void;
 };
 
 /* ------------------------------------------------------------------ */
@@ -89,6 +91,7 @@ export function useChatRealtimeHandlers({
   requestLatestMessages,
   sessionStore,
   onPlanModeChange,
+  onSteerResult,
 }: UseChatRealtimeHandlersArgs) {
   // Main-thread plan tool calls still waiting for their result, by tool-use
   // id: the call names the change, but only a successful result makes it. A
@@ -230,6 +233,14 @@ export function useChatRealtimeHandlers({
               kind: 'error',
               content: String(msg.error || 'Request failed'),
             } as NormalizedMessage);
+          }
+          return;
+        }
+
+        case 'steer_result': {
+          // Addressed to the socket that asked; a refusal leaves the run alone.
+          if (typeof msg.sessionId === 'string' && msg.sessionId) {
+            onSteerResult?.(msg.sessionId, msg.accepted === true);
           }
           return;
         }
@@ -490,5 +501,6 @@ export function useChatRealtimeHandlers({
     requestLatestMessages,
     sessionStore,
     onPlanModeChange,
+    onSteerResult,
   ]);
 }

@@ -90,6 +90,7 @@ type ProviderCapabilities = {
   supportsMessageEditing?: boolean;
   supportsSessionForking?: boolean;
   supportsFileRewind?: boolean;
+  supportsSteering?: boolean;
 };
 
 type ProviderCapabilitiesApiResponse = {
@@ -525,6 +526,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   const supportsMessageEditing = Boolean(providerCapabilities?.[provider]?.supportsMessageEditing);
   const supportsSessionForking = Boolean(providerCapabilities?.[provider]?.supportsSessionForking);
   const supportsFileRewind = Boolean(providerCapabilities?.[provider]?.supportsFileRewind);
+  const supportsSteering = Boolean(providerCapabilities?.[provider]?.supportsSteering);
 
   const resolvePermissionModeForProvider = useCallback((
     targetProvider: LLMProvider,
@@ -905,5 +907,6 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     supportsMessageEditing,
     supportsSessionForking,
     supportsFileRewind,
+    supportsSteering,
   };
 }

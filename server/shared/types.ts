@@ -625,6 +625,14 @@ export type ProviderPermissionDecision = {
   rememberEntry?: unknown;
 };
 
+/** A message the user sends into a turn that is still running. */
+export type ProviderSteerInput = {
+  command: string;
+  images?: unknown[];
+  files?: unknown[];
+  cwd?: string;
+};
+
 export type ProviderRuntimePermissionGateway = {
   resolve(requestId: string, decision: ProviderPermissionDecision): void;
   listPending(sessionId: string): unknown[];

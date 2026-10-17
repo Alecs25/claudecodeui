@@ -7,7 +7,8 @@ import { safeLocalStorage } from '@/modules/chat/utils/chatStorage';
  * Shell-style input history for the composer: ArrowUp in an empty textarea
  * recalls messages previously sent in this chat (newest first), ArrowDown
  * walks forward again and finally restores whatever draft was in the box
- * before recall.
+ * before recall. A draft the user cleared without sending is the newest entry
+ * until the next send, so ArrowUp right after clearing brings it back.
  *
  * History is kept per chat scope — the same session-or-`project:` key drafts
  * use — so recall only ever surfaces what was typed in the conversation being
@@ -98,12 +99,21 @@ export function useInputHistory({ setInput, textareaRef, scope }: UseInputHistor
   // re-render the composer.
   const navRef = useRef<HistoryNav | null>(null);
   const scopeRef = useRef(scope);
+  // Session-only on purpose: a cleared draft is an undo, not history.
+  const clearedDraftRef = useRef<string | null>(null);
 
   // A recall position from one chat means nothing in another.
   useEffect(() => {
     scopeRef.current = scope;
     navRef.current = null;
+    clearedDraftRef.current = null;
   }, [scope]);
+
+  /** Keeps text the user cleared from the box so ArrowUp can restore it. */
+  const rememberClearedDraft = useCallback((text: string) => {
+    navRef.current = null;
+    clearedDraftRef.current = text.trim() ? text : null;
+  }, []);
 
   /**
    * `scopeOverride` is for the one send that outruns the prop: the first
@@ -113,6 +123,7 @@ export function useInputHistory({ setInput, textareaRef, scope }: UseInputHistor
    */
   const recordSentMessage = useCallback((text: string, scopeOverride?: string | null) => {
     navRef.current = null;
+    clearedDraftRef.current = null;
     const targetScope = scopeOverride ?? scopeRef.current;
     if (!targetScope || !text.trim()) {
       return;
@@ -157,7 +168,11 @@ export function useInputHistory({ setInput, textareaRef, scope }: UseInputHistor
         }
         // A fresh read starts a recall; an in-progress one keeps walking its
         // own snapshot.
-        const history = untouched ? nav.history : readInputHistory(scopeRef.current);
+        const cleared = clearedDraftRef.current;
+        const sent = readInputHistory(scopeRef.current);
+        const history = untouched
+          ? nav.history
+          : cleared && sent[sent.length - 1] !== cleared ? [...sent, cleared] : sent;
         if (history.length === 0) {
           return false;
         }
@@ -191,5 +206,5 @@ export function useInputHistory({ setInput, textareaRef, scope }: UseInputHistor
     [recall, setInput],
   );
 
-  return { recordSentMessage, handleHistoryKeyDown };
+  return { recordSentMessage, rememberClearedDraft, handleHistoryKeyDown };
 }

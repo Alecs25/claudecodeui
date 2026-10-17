@@ -19,6 +19,7 @@ import type {
   ProviderRuntimeContext,
   ProviderRuntimePermissionGateway,
   ProviderRuntimeWriter,
+  ProviderSteerInput,
   UpsertProviderMcpServerInput,
   WorkflowAgentActivity,
 } from '@/shared/types.js';
@@ -85,6 +86,13 @@ export interface IProviderRuntime {
    * process — the next run starts with the stored choice anyway.
    */
   applySessionSettings?(sessionId: string, settings: ProviderLiveSessionSettings): Promise<boolean>;
+  /**
+   * Hands the session's turn in progress another user message, read after the
+   * current action instead of after the turn. Resolves false when no turn is
+   * running to take it. Only runtimes that keep an input stream open into a
+   * running turn implement it (see `supportsSteering`).
+   */
+  steer?(sessionId: string, input: ProviderSteerInput): Promise<boolean>;
 }
 
 /**

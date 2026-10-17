@@ -94,7 +94,19 @@
     "addTo": "Adds {{entry}} to Allowed Tools.",
     "retry": "Permission saved. Retry the request to use the tool.",
     "error": "Unable to update permissions. Please try again.",
-    "openSettings": "Open settings"
+    "openSettings": "Open settings",
+    "queuePosition": "{{current}} of {{total}}",
+    "subject": {
+      "command": "Command",
+      "file": "File",
+      "url": "URL",
+      "query": "Query",
+      "pattern": "Pattern",
+      "task": "Task"
+    }
+  },
+  "toolStatus": {
+    "denied": "Denied"
   },
   "todo": {
     "updated": "Todo list has been updated successfully",
@@ -167,7 +179,8 @@
       "label": "Queued",
       "willSend": "Will send when this finishes",
       "edit": "Edit queued message",
-      "delete": "Delete queued message"
+      "delete": "Delete queued message",
+      "sendNow": "Send now"
     }
   },
   "composer": {

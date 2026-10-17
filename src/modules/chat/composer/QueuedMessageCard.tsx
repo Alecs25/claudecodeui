@@ -1,22 +1,28 @@
 import { useTranslation } from 'react-i18next';
-import { PencilIcon, XIcon } from 'lucide-react';
+import { CornerDownLeftIcon, Loader2Icon, PencilIcon, XIcon } from 'lucide-react';
 
 type QueuedMessageCardProps = {
   content: string;
   attachmentCount?: number;
   onEdit: () => void;
   onDelete: () => void;
+  /** Sends it into the turn in progress instead of after it; omitted when that is not possible. */
+  onSendNow?: () => void;
+  isSendingNow?: boolean;
 };
 
 /**
  * Rendered by chat's ChatComposer to show the message queued for a busy
- * session, with edit and delete actions before it is auto-sent.
+ * session, with edit and delete actions before it is auto-sent, and "Send
+ * now" to have the model read it after its current action instead.
  */
 export default function QueuedMessageCard({
   content,
   attachmentCount = 0,
   onEdit,
   onDelete,
+  onSendNow,
+  isSendingNow = false,
 }: QueuedMessageCardProps) {
   const { t } = useTranslation('chat');
 
@@ -41,8 +47,24 @@ export default function QueuedMessageCard({
         </div>
 
         <div className="flex shrink-0 items-center gap-0.5">
+          {onSendNow && (
+            <button
+              type="button"
+              onClick={onSendNow}
+              disabled={isSendingNow}
+              aria-label={t('input.queue.sendNow', { defaultValue: 'Send now' })}
+              title={t('input.queue.sendNow', { defaultValue: 'Send now' })}
+              className="flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-60"
+            >
+              {isSendingNow
+                ? <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                : <CornerDownLeftIcon className="h-3.5 w-3.5" />}
+              <span className="hidden sm:inline">{t('input.queue.sendNow', { defaultValue: 'Send now' })}</span>
+            </button>
+          )}
           <button
             type="button"
+            disabled={isSendingNow}
             onClick={onEdit}
             aria-label={t('input.queue.edit', { defaultValue: 'Edit queued message' })}
             title={t('input.queue.edit', { defaultValue: 'Edit queued message' })}
@@ -52,6 +74,7 @@ export default function QueuedMessageCard({
           </button>
           <button
             type="button"
+            disabled={isSendingNow}
             onClick={onDelete}
             aria-label={t('input.queue.delete', { defaultValue: 'Delete queued message' })}
             title={t('input.queue.delete', { defaultValue: 'Delete queued message' })}

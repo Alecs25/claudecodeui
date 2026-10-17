@@ -69,6 +69,8 @@ type UseChatComposerStateArgs = {
   addMessage: (msg: ChatMessage) => void;
   setIsUserScrolledUp: (isScrolledUp: boolean) => void;
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
+  /** Whether the provider can take a message into the turn it is running (`chat.steer`). */
+  supportsSteering?: boolean;
 };
 
 type MentionableFile = {
@@ -203,6 +205,7 @@ export function useChatComposerState({
   addMessage,
   setIsUserScrolledUp,
   setPendingPermissionRequests,
+  supportsSteering = false,
 }: UseChatComposerStateArgs) {
   const { t } = useTranslation('chat');
   // The composer text together with the chat scope it belongs to. They are one
@@ -308,7 +311,7 @@ export function useChatComposerState({
     setInput(value);
     inputValueRef.current = value;
   }, [setInput]);
-  const { recordSentMessage, handleHistoryKeyDown } = useInputHistory({
+  const { recordSentMessage, rememberClearedDraft, handleHistoryKeyDown } = useInputHistory({
     setInput: setInputFromHistory,
     textareaRef,
     scope: draftScope,
@@ -1088,8 +1091,11 @@ export function useChatComposerState({
     }
     let cancelled = false;
     const reconcile = async () => {
+      if (pendingSteerRef.current) {
+        return;
+      }
       await hydrateChatDrafts();
-      if (!cancelled && !readQueuedMessage(sessionKey)) {
+      if (!cancelled && !pendingSteerRef.current && !readQueuedMessage(sessionKey)) {
         queuedDraftSessionRef.current = sessionKey;
         setQueuedDraft(null);
       }
@@ -1100,6 +1106,61 @@ export function useChatComposerState({
       clearInterval(timer);
     };
   }, [queuedDraft, sessionKey]);
+
+  // "Send now" on the queued card hands the message to the turn in progress.
+  // The server takes it off the queue while it tries, so the reconcile above
+  // must not read that gap as "sent" and clear the card (which would also
+  // wipe the copy the server puts back if the turn could not take it).
+  const [isSteeringQueuedDraft, setIsSteeringQueuedDraft] = useState(false);
+  const pendingSteerRef = useRef<{ sessionId: string; draft: QueuedDraft } | null>(null);
+
+  const steerQueuedDraft = useCallback(() => {
+    if (!queuedDraft || !sessionKey || !isLoading || !supportsSteering || pendingSteerRef.current) {
+      return;
+    }
+    pendingSteerRef.current = { sessionId: sessionKey, draft: queuedDraft };
+    setIsSteeringQueuedDraft(true);
+    sendMessage({
+      type: 'chat.steer',
+      sessionId: sessionKey,
+      content: queuedDraft.content,
+      options: { attachments: queuedDraft.uploadedAttachments ?? [] },
+    });
+  }, [isLoading, queuedDraft, sendMessage, sessionKey, supportsSteering]);
+
+  /** Settles a "Send now": accepted joins the transcript, refused stays queued for the next turn. */
+  const handleSteerResult = useCallback((sessionId: string, accepted: boolean) => {
+    const pending = pendingSteerRef.current;
+    if (!pending || pending.sessionId !== sessionId) {
+      return;
+    }
+    pendingSteerRef.current = null;
+    setIsSteeringQueuedDraft(false);
+    if (!accepted) {
+      return;
+    }
+
+    const attachmentRecords = (pending.draft.uploadedAttachments ?? []) as ChatAttachment[];
+    addMessage({
+      type: 'user',
+      content: pending.draft.content,
+      images: attachmentRecords.filter(isImageAttachment),
+      files: attachmentRecords.filter((attachment) => !isImageAttachment(attachment)),
+      timestamp: new Date(),
+    });
+    if (sessionKeyRef.current === sessionId) {
+      queuedDraftSessionRef.current = sessionId;
+      setQueuedDraft(null);
+    }
+    setIsUserScrolledUp(false);
+    setTimeout(() => scrollToBottom(), 100);
+  }, [addMessage, scrollToBottom, setIsUserScrolledUp]);
+
+  // A steer still out when the session changes can no longer update this card.
+  useEffect(() => {
+    pendingSteerRef.current = null;
+    setIsSteeringQueuedDraft(false);
+  }, [sessionKey]);
 
   const editQueuedDraft = useCallback(() => {
     if (!queuedDraft) {
@@ -1264,6 +1325,19 @@ export function useChatComposerState({
         return;
       }
 
+      // The queued message comes back into an empty box before history does.
+      if (
+        (event.key === 'ArrowUp' || event.key === 'Escape')
+        && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey
+        && event.currentTarget.value === ''
+        && queuedDraft
+        && !pendingSteerRef.current
+      ) {
+        event.preventDefault();
+        editQueuedDraft();
+        return;
+      }
+
       if (handleHistoryKeyDown(event)) {
         return;
       }
@@ -1295,6 +1369,8 @@ export function useChatComposerState({
       handleCommandMenuKeyDown,
       handleFileMentionsKeyDown,
       handleHistoryKeyDown,
+      editQueuedDraft,
+      queuedDraft,
       handleSubmit,
       sendByCtrlEnter,
       showCommandMenu,
@@ -1320,6 +1396,8 @@ export function useChatComposerState({
   );
 
   const handleClearInput = useCallback(() => {
+    // ArrowUp in the emptied box brings it back.
+    rememberClearedDraft(inputValueRef.current);
     setInput('');
     inputValueRef.current = '';
     resetCommandMenuState();
@@ -1328,7 +1406,7 @@ export function useChatComposerState({
       textareaRef.current.focus();
     }
     setIsTextareaExpanded(false);
-  }, [resetCommandMenuState]);
+  }, [rememberClearedDraft, resetCommandMenuState]);
 
   const handleAbortSession = useCallback(() => {
     if (!canAbortSession) {
@@ -1488,6 +1566,9 @@ export function useChatComposerState({
     queuedDraft,
     editQueuedDraft,
     deleteQueuedDraft,
+    steerQueuedDraft,
+    isSteeringQueuedDraft,
+    handleSteerResult,
     handleVoiceTranscript,
     handleInputChange,
     handleKeyDown,

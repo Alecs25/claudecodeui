@@ -3,7 +3,13 @@ import { useTranslation } from 'react-i18next';
 import { ShieldAlertIcon } from 'lucide-react';
 
 import type { PendingPermissionRequest } from '@/shared/types';
-import { buildClaudeToolPermissionEntry, formatToolInputForDisplay } from '@/modules/chat/utils/chatPermissions';
+import {
+  buildClaudeToolPermissionEntry,
+  formatToolInputForDisplay,
+  orderPermissionRequests,
+  summarizePermissionInput,
+} from '@/modules/chat/utils/chatPermissions';
+import type { PermissionSubjectKind } from '@/modules/chat/utils/chatPermissions';
 import { getClaudeSettings } from '@/modules/chat/utils/chatStorage';
 import { getPermissionPanel, registerPermissionPanel } from '@/modules/chat/tools/configs/permissionPanelRegistry';
 import { AskUserQuestionPanel } from '@/modules/chat/tools/InteractiveRenderers/AskUserQuestionPanel';
@@ -17,6 +23,15 @@ import {
 
 registerPermissionPanel('AskUserQuestion', AskUserQuestionPanel);
 
+const SUBJECT_LABELS: Record<PermissionSubjectKind, string> = {
+  command: 'Command',
+  file: 'File',
+  url: 'URL',
+  query: 'Query',
+  pattern: 'Pattern',
+  task: 'Task',
+};
+
 type PermissionRequestsBannerProps = {
   pendingPermissionRequests: PendingPermissionRequest[];
   handlePermissionDecision: (
@@ -29,6 +44,10 @@ type PermissionRequestsBannerProps = {
 /**
  * Rendered by chat's ChatComposer above the input to surface pending tool
  * permission requests and their allow/deny/remember actions.
+ *
+ * One request at a time, oldest first, with how many are waiting: a stack of
+ * prompts pushed the input off a phone screen, and answering them in the
+ * order Claude asked is the order its tool calls wait on.
  */
 export default function PermissionRequestsBanner({
   pendingPermissionRequests,
@@ -37,29 +56,42 @@ export default function PermissionRequestsBanner({
 }: PermissionRequestsBannerProps) {
   const { t } = useTranslation();
   // Filter out plan tool requests — they are handled inline by PlanDisplay
-  const filteredRequests = pendingPermissionRequests.filter(
+  const filteredRequests = orderPermissionRequests(pendingPermissionRequests.filter(
     (r) => r.toolName !== 'ExitPlanMode' && r.toolName !== 'exit_plan_mode'
-  );
+  ));
 
   if (!filteredRequests.length) {
     return null;
   }
 
+  const position = filteredRequests.length > 1 ? (
+    <span className="ml-2 text-xs text-muted-foreground" data-testid="permission-queue-position">
+      {t('chat:permissions.queuePosition', {
+        current: 1,
+        total: filteredRequests.length,
+        defaultValue: '{{current}} of {{total}}',
+      })}
+    </span>
+  ) : null;
+
   return (
     <div className="mb-3 space-y-2">
-      {filteredRequests.map((request) => {
+      {filteredRequests.slice(0, 1).map((request) => {
         const CustomPanel = getPermissionPanel(request.toolName);
         if (CustomPanel) {
           return (
-            <CustomPanel
-              key={request.requestId}
-              request={request}
-              onDecision={handlePermissionDecision}
-            />
+            <div key={request.requestId}>
+              {position && <div className="mb-1 text-right">{position}</div>}
+              <CustomPanel
+                request={request}
+                onDecision={handlePermissionDecision}
+              />
+            </div>
           );
         }
 
         const rawInput = formatToolInputForDisplay(request.input);
+        const subject = summarizePermissionInput(request.toolName, request.input);
         const permissionEntry = buildClaudeToolPermissionEntry(request.toolName, rawInput);
         const settings = getClaudeSettings();
         const alreadyAllowed = permissionEntry ? settings.allowedTools.includes(permissionEntry) : false;
@@ -83,7 +115,21 @@ export default function PermissionRequestsBanner({
                   <span className="ml-2 text-muted-foreground">
                     Tool: <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{request.toolName}</code>
                   </span>
+                  {position}
                 </div>
+                {subject && (
+                  <div className="mt-1.5">
+                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                      {t(`chat:permissions.subject.${subject.kind}`, { defaultValue: SUBJECT_LABELS[subject.kind] })}
+                    </div>
+                    <pre
+                      className="mt-0.5 max-h-32 overflow-auto whitespace-pre-wrap break-all rounded-md border bg-muted/50 px-2 py-1 font-mono text-xs text-foreground"
+                      data-testid="permission-subject"
+                    >
+                      {subject.value}
+                    </pre>
+                  </div>
+                )}
                 {permissionEntry && (
                   <div className="mt-1 text-xs text-muted-foreground">
                     Allow rule: <code className="rounded bg-muted px-1 py-0.5 text-xs">{permissionEntry}</code>

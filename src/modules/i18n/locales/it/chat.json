@@ -86,7 +86,19 @@
     "addTo": "Aggiunge {{entry}} agli strumenti consentiti.",
     "retry": "Permesso salvato. Riprova la richiesta per usare lo strumento.",
     "error": "Impossibile aggiornare i permessi. Riprova.",
-    "openSettings": "Apri impostazioni"
+    "openSettings": "Apri impostazioni",
+    "queuePosition": "{{current}} di {{total}}",
+    "subject": {
+      "command": "Comando",
+      "file": "File",
+      "url": "URL",
+      "query": "Ricerca",
+      "pattern": "Pattern",
+      "task": "Attività"
+    }
+  },
+  "toolStatus": {
+    "denied": "Negato"
   },
   "todo": {
     "updated": "Lista attività aggiornata con successo",
@@ -142,7 +154,10 @@
     "clickToChangeMode": "Clicca per cambiare modalità permessi (o premi Tab nell'input)",
     "showAllCommands": "Mostra tutti i comandi",
     "clearInput": "Cancella input",
-    "scrollToBottom": "Scorri in basso"
+    "scrollToBottom": "Scorri in basso",
+    "queue": {
+      "sendNow": "Invia ora"
+    }
   },
   "providerSelection": {
     "title": "Scegli il tuo assistente AI",

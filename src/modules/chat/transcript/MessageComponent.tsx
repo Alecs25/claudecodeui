@@ -19,6 +19,7 @@ import { MemoryCitations } from '@/modules/chat/transcript/MemoryCitations';
 import { isShellTool } from '@/modules/chat/utils/toolActivity';
 import { getChapterAnchorId, isMarkChapterTool, readChapter } from '@/modules/chat/utils/chapters';
 import ChapterDivider from '@/modules/chat/transcript/ChapterDivider';
+import { readToolDenial } from '@/modules/chat/utils/toolDenial';
 
 type MessageComponentProps = {
   message: ChatMessage;
@@ -90,6 +91,10 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
         : content;
     },
     [message.content, message.isThinking, message.type, provider]
+  );
+  const toolDenial = useMemo(
+    () => (message.isToolUse ? readToolDenial(message.toolResult, [t('misc.userDeniedTool')]) : null),
+    [message.isToolUse, message.toolResult, t],
   );
   const assistantCopyContent = message.isToolUse
     ? String(message.displayText || message.content || '')
@@ -343,12 +348,20 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                 {/* Tool Result Section — Bash renders its output inside the command row above. */}
                 {message.toolResult && !isShellTool(message.toolName || '') && !shouldHideToolResult(message.toolName || 'UnknownTool', message.toolResult) && (
                   message.toolResult.isError ? (
-                    // Error results — collapsed red row that expands to the content
+                    // Error results — collapsed red row that expands to the content.
+                    // A refused call shows why it was refused, not a failure.
                     <div id={`tool-result-${message.toolId}`} className="scroll-mt-4">
-                      <ToolErrorDisplay
-                        label={t('messageTypes.error')}
-                        content={String(message.toolResult.content || '')}
-                      />
+                      {toolDenial ? (
+                        <ToolErrorDisplay
+                          label={t('toolStatus.denied', { defaultValue: 'Denied' })}
+                          content={toolDenial.reason ?? t('misc.userDeniedTool')}
+                        />
+                      ) : (
+                        <ToolErrorDisplay
+                          label={t('messageTypes.error')}
+                          content={String(message.toolResult.content || '')}
+                        />
+                      )}
                     </div>
                   ) : (
                     // Non-error results - route through ToolRenderer (single source of truth)

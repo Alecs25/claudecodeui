@@ -47,6 +47,11 @@ type ProviderCapabilities = {
    * earlier user message ("Rewind to here" with files).
    */
   supportsFileRewind: boolean;
+  /**
+   * Whether a message can join a turn that is still running (`chat.steer`),
+   * read by the model after its current action instead of after the turn.
+   */
+  supportsSteering: boolean;
 };
 
 /**
@@ -73,6 +78,8 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsSessionForking: true,
     // Runs are spawned with `enableFileCheckpointing`; `rewindFiles` restores.
     supportsFileRewind: true,
+    // The held prompt stream stays open into the running turn.
+    supportsSteering: true,
   },
   cursor: {
     provider: 'cursor',
@@ -88,6 +95,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsMessageEditing: false,
     supportsSessionForking: false,
     supportsFileRewind: false,
+    supportsSteering: false,
   },
   codex: {
     provider: 'codex',
@@ -107,6 +115,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsMessageEditing: true,
     supportsSessionForking: true,
     supportsFileRewind: false,
+    supportsSteering: false,
   },
   opencode: {
     provider: 'opencode',
@@ -127,6 +136,7 @@ const PROVIDER_CAPABILITIES: Record<LLMProvider, ProviderCapabilities> = {
     supportsMessageEditing: false,
     supportsSessionForking: false,
     supportsFileRewind: false,
+    supportsSteering: false,
   },
 };
 
