@@ -38,6 +38,7 @@ import {
 } from '@/modules/notifications/index.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import {
+  fitClaudeContextWindow,
   getReportedClaudeContextWindow,
   rememberClaudeContextWindow
 } from '@/modules/providers/services/provider-token-usage.service.js';
@@ -822,7 +823,7 @@ function buildTokenBudget(messageUsage, reportedContextWindow) {
   const cacheTokens = cacheCreationTokens + cacheReadTokens;
   const inputTokens = directInputTokens + cacheTokens;
   const outputTokens = readNumber(messageUsage.output_tokens ?? messageUsage.outputTokens);
-  const contextWindow = resolveContextWindow(reportedContextWindow);
+  const contextWindow = fitClaudeContextWindow(resolveContextWindow(reportedContextWindow), inputTokens + outputTokens);
 
   return {
     used: inputTokens + outputTokens,

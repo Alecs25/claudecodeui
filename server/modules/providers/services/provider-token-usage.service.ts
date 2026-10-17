@@ -115,6 +115,71 @@ const reportedClaudeContextWindows = new Map<string, number>();
 const MAX_REPORTED_CLAUDE_CONTEXT_WINDOWS = 1000;
 
 /**
+ * The long-context window of current Claude models. A prompt larger than the
+ * fallback window can only have been served by such a model, so a window that
+ * is not known yet is never shown smaller than what the session already holds.
+ */
+const LONG_CONTEXT_WINDOW = 1_000_000;
+
+/** File the reported windows are kept in; null (tests, tools) keeps them in memory only. */
+let contextWindowStorePath: string | null = null;
+
+/**
+ * Loads the windows reported before the last restart and keeps saving new
+ * ones to `filePath`. Without it every session read the CONTEXT_WINDOW
+ * fallback after a restart until its next turn reported again, so a 1M
+ * session showed a 160K total with more than that already used. `null`
+ * goes back to memory only.
+ */
+export function initializeClaudeContextWindowStore(filePath: string | null): void {
+  contextWindowStorePath = filePath;
+  if (!filePath) {
+    return;
+  }
+  let saved: unknown;
+  try {
+    saved = JSON.parse(fsSync.readFileSync(filePath, 'utf8'));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.warn('[Token usage] Ignoring unreadable context window store:', (error as Error).message);
+    }
+    return;
+  }
+  if (!saved || typeof saved !== 'object') {
+    return;
+  }
+  for (const [providerSessionId, contextWindow] of Object.entries(saved as Record<string, unknown>)) {
+    if (typeof contextWindow === 'number' && Number.isFinite(contextWindow) && contextWindow > 0) {
+      reportedClaudeContextWindows.set(providerSessionId, contextWindow);
+    }
+  }
+}
+
+function saveClaudeContextWindows(): void {
+  if (!contextWindowStorePath) {
+    return;
+  }
+  try {
+    fsSync.mkdirSync(path.dirname(contextWindowStorePath), { recursive: true });
+    fsSync.writeFileSync(contextWindowStorePath, JSON.stringify(Object.fromEntries(reportedClaudeContextWindows)));
+  } catch (error) {
+    // The window is still known for this process; only a restart loses it.
+    console.warn('[Token usage] Could not save context windows:', (error as Error).message);
+  }
+}
+
+/**
+ * The window to show for a prompt of `usedTokens`: `contextWindow`, unless the
+ * prompt is already larger, which only a long-context model can serve.
+ */
+export function fitClaudeContextWindow(contextWindow: number, usedTokens: number): number {
+  if (!Number.isFinite(usedTokens) || usedTokens <= contextWindow) {
+    return contextWindow;
+  }
+  return Math.max(LONG_CONTEXT_WINDOW, usedTokens);
+}
+
+/**
  * Used by the Claude runtime provider to record the window the SDK reported for
  * a session's turn. Non-positive or non-numeric values are ignored so a build
  * that reports no window never overwrites one that did.
@@ -124,6 +189,7 @@ export function rememberClaudeContextWindow(providerSessionId: string, contextWi
     return;
   }
 
+  const changed = reportedClaudeContextWindows.get(providerSessionId) !== contextWindow;
   // Re-insert so the most recently reported sessions are the last evicted.
   reportedClaudeContextWindows.delete(providerSessionId);
   reportedClaudeContextWindows.set(providerSessionId, contextWindow);
@@ -132,6 +198,9 @@ export function rememberClaudeContextWindow(providerSessionId: string, contextWi
     if (oldestSessionId !== undefined) {
       reportedClaudeContextWindows.delete(oldestSessionId);
     }
+  }
+  if (changed) {
+    saveClaudeContextWindows();
   }
 }
 
@@ -305,7 +374,7 @@ export function summarizeClaudeTokenUsage(
 
   return {
     used: inputTokens + outputTokens,
-    total: contextWindow,
+    total: fitClaudeContextWindow(contextWindow, inputTokens + outputTokens),
     inputTokens,
     outputTokens,
     cacheReadTokens,

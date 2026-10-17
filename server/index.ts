@@ -12,6 +12,7 @@ import cors from 'cors';
 import { AppError, findApplicationRoot, getModuleDirectory, IS_PLATFORM, terminalTextStyles } from '@/shared/utils.js';
 import {
     closeSessionsWatcher,
+    initializeClaudeContextWindowStore,
     initializeSessionsWatcher,
     providerRuntimeService,
 } from '@/modules/providers/index.js';
@@ -402,6 +403,7 @@ async function startServer() {
     try {
         // Initialize authentication database
         await initializeDatabase();
+        initializeClaudeContextWindowStore(path.join(path.dirname(process.env.DATABASE_PATH || path.join(os.homedir(), '.cloudcli', 'auth.db')), 'context-windows.json'));
 
         // Configure Web Push (VAPID keys)
         configureWebPush();

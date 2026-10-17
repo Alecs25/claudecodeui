@@ -8,6 +8,10 @@ import Database from 'better-sqlite3';
 
 import {
   createProviderTokenUsageService,
+  fitClaudeContextWindow,
+  getReportedClaudeContextWindow,
+  initializeClaudeContextWindowStore,
+  rememberClaudeContextWindow,
   summarizeClaudeTokenUsage,
 } from '@/modules/providers/services/provider-token-usage.service.js';
 import { AppError } from '@/shared/utils.js';
@@ -372,5 +376,35 @@ test('Codex token usage falls back to the whole file when the tail has no token_
     assert.equal(usage.used, 6);
   } finally {
     await rm(tempDirectory, { recursive: true, force: true });
+  }
+});
+
+test('a context window is never shown smaller than the prompt it already holds', () => {
+  assert.equal(fitClaudeContextWindow(160_000, 90_000), 160_000);
+  assert.equal(fitClaudeContextWindow(160_000, 744_000), 1_000_000);
+  assert.equal(fitClaudeContextWindow(200_000, 1_200_000), 1_200_000);
+
+  const usage = summarizeClaudeTokenUsage([
+    { type: 'assistant', message: { usage: { input_tokens: 4, cache_read_input_tokens: 700_000, output_tokens: 100 } } },
+  ], undefined);
+  assert.equal(usage.total, 1_000_000);
+});
+
+test('reported context windows survive a restart through the store file', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'context-windows-'));
+  const storePath = path.join(directory, 'context-windows.json');
+  try {
+    initializeClaudeContextWindowStore(storePath);
+    rememberClaudeContextWindow('session-with-1m', 1_000_000);
+    const saved = JSON.parse(await (await import('node:fs/promises')).readFile(storePath, 'utf8'));
+    assert.equal(saved['session-with-1m'], 1_000_000);
+
+    await writeFile(storePath, JSON.stringify({ 'session-from-before': 200_000, broken: 'x' }));
+    initializeClaudeContextWindowStore(storePath);
+    assert.equal(getReportedClaudeContextWindow('session-from-before'), 200_000);
+    assert.equal(getReportedClaudeContextWindow('broken'), undefined);
+  } finally {
+    initializeClaudeContextWindowStore(null);
+    await rm(directory, { recursive: true, force: true });
   }
 });
