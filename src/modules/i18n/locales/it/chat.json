@@ -94,7 +94,17 @@
   },
   "plan": {
     "viewPlan": "📋 Vedi piano di implementazione",
-    "title": "Piano di implementazione"
+    "title": "Piano di implementazione",
+    "toggle": "Mostra o nascondi piano",
+    "generating": "Generazione del piano...",
+    "approve": "Approva",
+    "reject": "Rifiuta",
+    "sendRejection": "Rifiuta e invia",
+    "cancel": "Annulla",
+    "feedback": "Commento",
+    "feedbackPlaceholder": "Cosa va cambiato? (facoltativo)",
+    "approved": "Approvato",
+    "rejected": "Rifiutato"
   },
   "usageLimit": {
     "resetAt": "Limite di utilizzo Claude raggiunto. Il tuo limite verrà ripristinato alle **{{time}} {{timezone}}** - {{date}}"
