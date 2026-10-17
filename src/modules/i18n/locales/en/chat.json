@@ -447,5 +447,9 @@
     "thinkingDescription": "Also thinking blocks",
     "verboseDescription": "Every tool call expanded with raw input",
     "rawParameters": "Raw parameters"
+  },
+  "questions": {
+    "title": "Questions",
+    "skipped": "Skipped"
   }
 }

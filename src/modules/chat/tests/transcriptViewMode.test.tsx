@@ -93,7 +93,8 @@ describe('transcript view modes', () => {
     const verbose = renderGroup(true);
     expect(verbose.container.querySelector('[aria-expanded="true"]')).toBeTruthy();
     // The raw input of an object-shaped (history) tool input is shown, open.
-    expect(screen.getByText(/"file_path": "\/repo\/a.ts"/)).toBeTruthy();
+    const raw = screen.getByText(/"file_path": "\/repo\/a.ts"/);
+    expect(raw.closest('[data-state]')?.getAttribute('data-state')).toBe('open');
   });
 
   it('shows the raw input under a one-line tool row only with raw parameters on', () => {

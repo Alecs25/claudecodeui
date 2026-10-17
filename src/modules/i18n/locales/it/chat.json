@@ -333,5 +333,9 @@
     "thinkingDescription": "Anche i blocchi di ragionamento",
     "verboseDescription": "Ogni chiamata aperta con i parametri grezzi",
     "rawParameters": "Parametri grezzi"
+  },
+  "questions": {
+    "title": "Domande",
+    "skipped": "Saltata"
   }
 }

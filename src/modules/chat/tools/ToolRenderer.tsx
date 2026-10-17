@@ -22,6 +22,8 @@ import { isShellTool } from '@/modules/chat/utils/toolActivity';
 import { isShowWidgetTool, readWidgetInput } from '@/modules/chat/utils/inlineWidget';
 import { InlineWidget } from '@/modules/chat/tools/InlineWidget';
 import { RawParameters } from '@/modules/chat/tools/RawParameters';
+import { QuestionSummary } from '@/modules/chat/tools/QuestionSummary';
+import { hasQuestionAnswers, readQuestions } from '@/modules/chat/utils/questionAnswers';
 import { useIsVerboseTranscript } from '@/modules/chat/context/TranscriptViewModeContext';
 
 type ToolRendererProps = {
@@ -130,6 +132,16 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
         ? toolInput.caption
         : null;
       return <SentFilesCard files={sentFiles} caption={caption} />;
+    }
+  }
+
+  // An answered question reads as a compact summary of the answers; the full
+  // card, with every option, stays one click away. Unanswered (still pending
+  // or skipped entirely) keeps the full card.
+  if (mode === 'input' && toolName === 'AskUserQuestion') {
+    const { questions, answers } = (parsedData && typeof parsedData === 'object' ? parsedData : {}) as { questions?: unknown; answers?: unknown };
+    if (hasQuestionAnswers(questions, answers)) {
+      return <QuestionSummary questions={readQuestions(questions)} answers={answers as Record<string, string>} />;
     }
   }
 
