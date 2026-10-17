@@ -313,5 +313,15 @@
     "title": "Capitoli",
     "close": "Chiudi",
     "loadEarlier": "Carica capitoli precedenti"
+  },
+  "viewMode": {
+    "title": "Vista",
+    "normal": "Normale",
+    "thinking": "Ragionamento",
+    "verbose": "Dettagliata",
+    "normalDescription": "Riepiloghi degli strumenti, senza ragionamento",
+    "thinkingDescription": "Anche i blocchi di ragionamento",
+    "verboseDescription": "Ogni chiamata aperta con i parametri grezzi",
+    "rawParameters": "Parametri grezzi"
   }
 }

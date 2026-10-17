@@ -4,7 +4,12 @@ import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useDeviceSettings } from '@/shared/hooks/useDeviceSettings';
 import { useProjectSlashCommands } from '@/shared/hooks/useProjectSlashCommands';
 import { useSelectedProvider } from '@/shared/hooks/useSelectedProvider';
-import { useUiPreferences, useSetUiPreference } from '@/shared/context/UiPreferencesContext';
+import { useUiPreferences, useSetUiPreference, useSetUiPreferences } from '@/shared/context/UiPreferencesContext';
+import {
+  getTranscriptViewMode,
+  getTranscriptViewModePreferences,
+  type TranscriptViewMode,
+} from '@/shared/uiPreferences';
 import { useTheme } from '@/shared/context/ThemeContext';
 import { useQuickSettingsDrag } from '@/modules/quick-settings-panel/hooks/useQuickSettingsDrag';
 import { useQuickSettingsPanelState } from '@/modules/quick-settings-panel/hooks/useQuickSettingsPanelState';
@@ -44,6 +49,12 @@ function QuickSettingsPanelView({ selectedProject, onInsertCommand }: QuickSetti
   const { isDarkMode } = useTheme();
   const preferences = useUiPreferences();
   const setPreference = useSetUiPreference();
+  const setPreferences = useSetUiPreferences();
+  const transcriptViewMode = getTranscriptViewMode(preferences);
+  const handleTranscriptViewModeChange = useCallback(
+    (mode: TranscriptViewMode) => setPreferences(getTranscriptViewModePreferences(mode)),
+    [setPreferences],
+  );
   const provider = useSelectedProvider();
   const {
     commands,
@@ -150,6 +161,8 @@ function QuickSettingsPanelView({ selectedProject, onInsertCommand }: QuickSetti
             isDarkMode={isDarkMode}
             preferences={quickSettingsPreferences}
             onPreferenceChange={handlePreferenceChange}
+            transcriptViewMode={transcriptViewMode}
+            onTranscriptViewModeChange={handleTranscriptViewModeChange}
           />
         ) : (
           <QuickSettingsCommandsTab

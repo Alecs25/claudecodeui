@@ -47,6 +47,21 @@ type MessageComponentProps = {
 const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'PowerShell', 'Edit', 'Write', 'ApplyPatch']);
 
 /**
+ * The tool input as raw text. Live rows carry it as a JSON string, rows loaded
+ * from history as an object; only serialized when raw parameters are shown, so
+ * the other modes do not pay a stringify per tool row per render.
+ */
+function readRawToolInput(toolInput: unknown, showRawParameters: boolean): string | undefined {
+  if (typeof toolInput === 'string') return toolInput;
+  if (!showRawParameters || toolInput == null) return undefined;
+  try {
+    return JSON.stringify(toolInput, null, 2);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Rendered by chat's ChatMessagesPane and ToolGroupContainer to draw one
  * transcript entry — user turn, assistant turn, or a tool call and its result.
  */
@@ -303,7 +318,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                       createDiff={createDiff}
                       selectedProject={selectedProject}
                       showRawParameters={showRawParameters}
-                      rawToolInput={typeof message.toolInput === 'string' ? message.toolInput : undefined}
+                      rawToolInput={readRawToolInput(message.toolInput, Boolean(showRawParameters))}
                       toolStatus={message.toolStatus}
                     />
                   </div>

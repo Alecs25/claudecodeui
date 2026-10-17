@@ -1,7 +1,8 @@
 import {
+  Braces,
   Brain,
-  Eye,
   Languages,
+  MessageSquareText,
   Mic,
   Moon,
   Sun,
@@ -9,7 +10,8 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { DarkModeToggle } from '@/shared/ui';
+import { DarkModeToggle, Pill, PillBar } from '@/shared/ui';
+import { TRANSCRIPT_VIEW_MODES, type TranscriptViewMode } from '@/shared/uiPreferences';
 import { LanguageSelector } from '@/modules/i18n';
 import { SETTING_ROW_CLASS } from '@/shared/constants';
 import type { PreferenceToggleKey, QuickSettingsPreferences } from '@/shared/types';
@@ -23,18 +25,19 @@ type PreferenceToggleItem = {
   icon: LucideIcon;
 };
 
-const TOOL_DISPLAY_TOGGLES: PreferenceToggleItem[] = [
-  {
-    key: 'showRawParameters',
-    labelKey: 'quickSettings.showRawParameters',
-    icon: Eye,
-  },
-  {
-    key: 'showThinking',
-    labelKey: 'quickSettings.showThinking',
-    icon: Brain,
-  },
-];
+// The two old toggles (show thinking, show raw parameters) are one choice now,
+// the same Normal / Thinking / Verbose the chat header and Ctrl+O cycle.
+const TRANSCRIPT_VIEW_MODE_ICONS: Record<TranscriptViewMode, LucideIcon> = {
+  normal: MessageSquareText,
+  thinking: Brain,
+  verbose: Braces,
+};
+
+const TRANSCRIPT_VIEW_MODE_DEFAULT_LABELS: Record<TranscriptViewMode, string> = {
+  normal: 'Normal',
+  thinking: 'Thinking',
+  verbose: 'Verbose',
+};
 
 const INPUT_SETTING_TOGGLES: PreferenceToggleItem[] = [
   {
@@ -53,6 +56,8 @@ type QuickSettingsContentProps = {
   isDarkMode: boolean;
   preferences: QuickSettingsPreferences;
   onPreferenceChange: (key: PreferenceToggleKey, value: boolean) => void;
+  transcriptViewMode: TranscriptViewMode;
+  onTranscriptViewModeChange: (mode: TranscriptViewMode) => void;
 };
 
 /** Rendered by QuickSettingsPanelView to show the drawer's appearance, tool display and input preference rows. */
@@ -60,6 +65,8 @@ export default function QuickSettingsContent({
   isDarkMode,
   preferences,
   onPreferenceChange,
+  transcriptViewMode,
+  onTranscriptViewModeChange,
 }: QuickSettingsContentProps) {
   const { t } = useTranslation('settings');
   const inputSettingToggles = preferences.voiceEnabled
@@ -96,7 +103,24 @@ export default function QuickSettingsContent({
       </QuickSettingsSection>
 
       <QuickSettingsSection title={t('quickSettings.sections.toolDisplay')}>
-        {renderToggleRows(TOOL_DISPLAY_TOGGLES)}
+        <PillBar role="radiogroup" aria-label={t('quickSettings.transcriptView', { defaultValue: 'Transcript view' })} className="w-full">
+          {TRANSCRIPT_VIEW_MODES.map((mode) => {
+            const Icon = TRANSCRIPT_VIEW_MODE_ICONS[mode];
+            return (
+              <Pill
+                key={mode}
+                role="radio"
+                aria-checked={transcriptViewMode === mode}
+                isActive={transcriptViewMode === mode}
+                onClick={() => onTranscriptViewModeChange(mode)}
+                className="flex-1 justify-center px-2 text-xs"
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {t(`quickSettings.transcriptViewModes.${mode}`, { defaultValue: TRANSCRIPT_VIEW_MODE_DEFAULT_LABELS[mode] })}
+              </Pill>
+            );
+          })}
+        </PillBar>
       </QuickSettingsSection>
 
       <QuickSettingsSection title={t('quickSettings.sections.inputSettings')}>

@@ -105,6 +105,12 @@
         "skills": "Skills"
       },
       "insertTitle": "Insert {{command}} into the chat"
+    },
+    "transcriptView": "Transcript view",
+    "transcriptViewModes": {
+      "normal": "Normal",
+      "thinking": "Thinking",
+      "verbose": "Verbose"
     }
   },
   "terminalShortcuts": {

@@ -20,6 +20,9 @@ import LoadAllMessagesOverlay from '@/modules/chat/transcript/LoadAllMessagesOve
 import ChatExportMenu from '@/modules/chat/transcript/ChatExportMenu';
 import { BackgroundTasksStrip } from '@/modules/chat/transcript/BackgroundTasksStrip';
 import ChaptersMenu from '@/modules/chat/transcript/ChaptersMenu';
+import TranscriptViewModeMenu from '@/modules/chat/transcript/TranscriptViewModeMenu';
+import TranscriptVerboseContext from '@/modules/chat/context/TranscriptViewModeContext';
+import type { TranscriptViewMode } from '@/shared/uiPreferences';
 
 /**
  * How many of the newest rows mount with real content on the first commit,
@@ -75,6 +78,9 @@ type ChatMessagesPaneProps = {
   onGrantToolPermission: (suggestion: { entry: string; toolName: string }) => { success: boolean };
   showRawParameters?: boolean;
   showThinking?: boolean;
+  /** Absent outside the workspace (e.g. tests): the header then offers no view selector. */
+  transcriptViewMode?: TranscriptViewMode;
+  onTranscriptViewModeChange?: (mode: TranscriptViewMode) => void;
   selectedProject: Project;
   /** Loads an already-sent message back into the composer; absent when the provider cannot re-run from a point. */
   onEditMessage?: (message: ChatMessage) => void;
@@ -145,6 +151,8 @@ function ChatMessagesPane({
   onGrantToolPermission,
   showRawParameters,
   showThinking,
+  transcriptViewMode,
+  onTranscriptViewModeChange,
   selectedProject,
 }: ChatMessagesPaneProps) {
   const { t } = useTranslation('chat');
@@ -215,6 +223,9 @@ function ChatMessagesPane({
               hasUnloadedHistory={hasMoreMessages && !allMessagesLoaded}
               onLoadAll={loadAllMessages}
             />
+            {transcriptViewMode && onTranscriptViewModeChange && (
+              <TranscriptViewModeMenu mode={transcriptViewMode} onChange={onTranscriptViewModeChange} />
+            )}
             <ChatExportMenu
               messages={chatMessages}
               sessionTitle={selectedSession?.summary || selectedSession?.title}
@@ -226,6 +237,7 @@ function ChatMessagesPane({
           </div>
         </div>
       )}
+      <TranscriptVerboseContext.Provider value={Boolean(showRawParameters)}>
       <div className="mx-auto w-full max-w-[54.25rem] space-y-3 px-4 sm:space-y-4">
       {(isLoadingSessionMessages || isProcessing) && chatMessages.length === 0 ? (
         <div className="mt-8 text-center text-gray-500 dark:text-gray-400">
@@ -369,6 +381,7 @@ function ChatMessagesPane({
         </>
       )}
       </div>
+      </TranscriptVerboseContext.Provider>
     </div>
   );
 }

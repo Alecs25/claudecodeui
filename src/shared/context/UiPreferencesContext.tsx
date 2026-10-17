@@ -10,6 +10,8 @@ import { subscribeToUserPreferences, writeUserPreference } from '@/shared/userSe
 
 type UiPreferenceActions = {
   setPreference: (key: UiPreferenceKey, value: boolean) => void;
+  /** Several preferences in one state change, e.g. the two a transcript view mode sets. */
+  setPreferences: (values: Partial<UiPreferences>) => void;
 };
 
 const UiPreferencesStateContext = createContext<UiPreferences | null>(null);
@@ -61,6 +63,7 @@ export function UiPreferencesProvider({ children }: { children: ReactNode }) {
 
   const actions = useMemo<UiPreferenceActions>(() => ({
     setPreference: (key, value) => dispatch({ type: 'set', key, value }),
+    setPreferences: (values) => dispatch({ type: 'set_many', value: values }),
   }), []);
 
   return (
@@ -91,4 +94,13 @@ export function useSetUiPreference(): UiPreferenceActions['setPreference'] {
     throw new Error('useSetUiPreference must be used within a UiPreferencesProvider');
   }
   return actions.setPreference;
+}
+
+/** Stable setter for several preferences at once. */
+export function useSetUiPreferences(): UiPreferenceActions['setPreferences'] {
+  const actions = useContext(UiPreferencesActionsContext);
+  if (!actions) {
+    throw new Error('useSetUiPreferences must be used within a UiPreferencesProvider');
+  }
+  return actions.setPreferences;
 }

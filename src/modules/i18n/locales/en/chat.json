@@ -427,5 +427,15 @@
     "title": "Chapters",
     "close": "Close",
     "loadEarlier": "Load earlier chapters"
+  },
+  "viewMode": {
+    "title": "View",
+    "normal": "Normal",
+    "thinking": "Thinking",
+    "verbose": "Verbose",
+    "normalDescription": "Tool summaries, no thinking",
+    "thinkingDescription": "Also thinking blocks",
+    "verboseDescription": "Every tool call expanded with raw input",
+    "rawParameters": "Raw parameters"
   }
 }

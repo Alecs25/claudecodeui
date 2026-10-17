@@ -7,6 +7,7 @@ import { getToolConfig } from '@/modules/chat/tools';
 import { TOOL_ACTIVITY_ORDER } from '@/modules/chat/utils/toolActivity';
 import MessageComponent from '@/modules/chat/transcript/MessageComponent';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
+import { useIsVerboseTranscript } from '@/modules/chat/context/TranscriptViewModeContext';
 import { DiffStatsBadge } from '@/modules/chat/tools/DiffStatsBadge';
 import { parseToolPayload, summarizeDiff } from '@/modules/chat/utils/messageTransforms';
 
@@ -109,7 +110,11 @@ function ToolGroupContainer({
   // Collapsed on screen, always open in an export: the whole point of the
   // group row is to hide detail the reader can ask for, and an exported file
   // has no way to ask.
-  const [isExpanded, setIsExpanded] = useState(false);
+  // Verbose mode opens every group. A manual toggle is remembered with the
+  // mode it was made in, so switching modes resets it to that mode's default.
+  const isVerbose = useIsVerboseTranscript();
+  const [toggled, setToggled] = useState<{ verbose: boolean; expanded: boolean } | null>(null);
+  const isExpanded = toggled && toggled.verbose === isVerbose ? toggled.expanded : isVerbose;
   const showChildren = isExpanded || isExporting;
   const { t } = useTranslation('chat');
   const summary = useActivitySummary(group.activity);
@@ -134,7 +139,7 @@ function ToolGroupContainer({
       <button
         type="button"
         className="group/summary flex max-w-full items-center gap-1.5 rounded-md py-0.5 text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
-        onClick={() => setIsExpanded((current) => !current)}
+        onClick={() => setToggled({ verbose: isVerbose, expanded: !isExpanded })}
         aria-expanded={isExpanded}
       >
         <span className="min-w-0 truncate">{summary}</span>
