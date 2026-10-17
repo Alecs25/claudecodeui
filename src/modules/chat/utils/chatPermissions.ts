@@ -74,3 +74,62 @@ export function grantClaudeToolPermission(entry: string | null): PermissionGrant
   });
   return { success: true, alreadyAllowed, updatedSettings };
 }
+
+/** The field of a tool's input that says what the call would do, by tool. */
+export type PermissionSubjectKind = 'command' | 'file' | 'url' | 'query' | 'pattern' | 'task';
+
+const PERMISSION_SUBJECT_FIELDS: Array<{ tools: string[]; field: string; kind: PermissionSubjectKind }> = [
+  { tools: ['Bash', 'PowerShell'], field: 'command', kind: 'command' },
+  { tools: ['Edit', 'MultiEdit', 'Write', 'Read', 'NotebookEdit'], field: 'file_path', kind: 'file' },
+  { tools: ['NotebookEdit'], field: 'notebook_path', kind: 'file' },
+  { tools: ['WebFetch'], field: 'url', kind: 'url' },
+  { tools: ['WebSearch'], field: 'query', kind: 'query' },
+  { tools: ['Grep', 'Glob'], field: 'pattern', kind: 'pattern' },
+  { tools: ['Task', 'Agent'], field: 'description', kind: 'task' },
+];
+
+/**
+ * What a pending permission request would do, in one line a person can judge
+ * at a glance — the command, the file, the URL — instead of the raw JSON input.
+ * Null for tools whose input has no single field that says it.
+ */
+export function summarizePermissionInput(
+  toolName: string,
+  input: unknown,
+): { kind: PermissionSubjectKind; value: string } | null {
+  let parsed: unknown = input;
+  if (typeof input === 'string') {
+    try {
+      parsed = JSON.parse(input) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    return null;
+  }
+
+  const record = parsed as Record<string, unknown>;
+  for (const { tools, field, kind } of PERMISSION_SUBJECT_FIELDS) {
+    const value = record[field];
+    if (tools.includes(toolName) && typeof value === 'string' && value.trim()) {
+      return { kind, value };
+    }
+  }
+  return null;
+}
+
+/** Pending requests in the order they were asked, oldest first. */
+export function orderPermissionRequests<T extends { receivedAt?: Date | string }>(requests: T[]): T[] {
+  const askedAt = (request: T) => {
+    const time = request.receivedAt ? new Date(request.receivedAt).getTime() : Number.NaN;
+    return Number.isFinite(time) ? time : Number.POSITIVE_INFINITY;
+  };
+  // Stable, so requests without a time keep their arrival order after the timed ones.
+  return [...requests].sort((left, right) => {
+    const leftTime = askedAt(left);
+    const rightTime = askedAt(right);
+    if (leftTime === rightTime) return 0;
+    return leftTime < rightTime ? -1 : 1;
+  });
+}
