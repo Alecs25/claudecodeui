@@ -25,6 +25,7 @@ import {
   PromptInputButton,
   PromptInputSubmit,
 } from '@/modules/chat/composer/PromptInput';
+import { isOnScreenKeyboardDevice } from '@/shared/utils';
 import CommandMenu from '@/modules/chat/composer/CommandMenu';
 import ActivityIndicator from '@/modules/chat/composer/ActivityIndicator';
 import ComposerAttachment from '@/modules/chat/composer/ComposerAttachment';
@@ -436,6 +437,7 @@ export default function ChatComposer({
               onBlur={() => onInputFocusChange?.(false)}
               onInput={onTextareaInput}
               placeholder={placeholder}
+              enterKeyHint={isOnScreenKeyboardDevice() ? 'enter' : 'send'}
             />
         </PromptInputBody>
 

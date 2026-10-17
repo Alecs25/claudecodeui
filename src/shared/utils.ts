@@ -19,6 +19,15 @@ export const IS_PLATFORM = import.meta.env?.VITE_IS_PLATFORM === 'true';
  * Merges conditional class names and resolves conflicting Tailwind utilities so the
  * last-specified utility wins. Use it for every className built from props or state.
  */
+/**
+ * True on phones and tablets used by touch, where text comes from the
+ * on-screen keyboard: there Enter has no modifier to pair with, so the chat
+ * composer keeps it for new lines and sends from the button.
+ */
+export const isOnScreenKeyboardDevice = (): boolean =>
+  typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+  && window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
