@@ -247,6 +247,7 @@ export function useChatRealtimeHandlers({
 
         // Sidebar/global events — owned by useProjectsState.
         case 'session_upserted':
+        case 'session_status':
         case 'loading_progress':
         // Files sent by an agent — owned by the code editor (useSentFilesAutoOpen).
         // It carries no sessionId, so falling through would file it into the
@@ -266,6 +267,13 @@ export function useChatRealtimeHandlers({
       if (msg.kind === 'stream_delta') {
         const text = (msg.content as string) || '';
         if (!text) return;
+        // The buffer below holds one stream: the viewed session's. Another
+        // session streaming at the same time (always the case with two panes
+        // open in split view) would otherwise interleave its text into it.
+        if (sid && sid !== activeViewSessionId) {
+          sessionStore.appendRealtime(sid, msg as unknown as NormalizedMessage);
+          return;
+        }
         accumulatedStreamRef.current += text;
         if (!streamTimerRef.current) {
           streamTimerRef.current = window.setTimeout(() => {
@@ -275,14 +283,14 @@ export function useChatRealtimeHandlers({
             }
           }, 100);
         }
-        // Also route to store for non-active sessions
-        if (sid && sid !== activeViewSessionId) {
-          sessionStore.appendRealtime(sid, msg as unknown as NormalizedMessage);
-        }
         return;
       }
 
       if (msg.kind === 'stream_end') {
+        if (sid && sid !== activeViewSessionId) {
+          sessionStore.finalizeStreaming(sid);
+          return;
+        }
         if (streamTimerRef.current) {
           clearTimeout(streamTimerRef.current);
           streamTimerRef.current = null;
@@ -317,11 +325,13 @@ export function useChatRealtimeHandlers({
             clearTimeout(streamTimerRef.current);
             streamTimerRef.current = null;
           }
-          if (sid && accumulatedStreamRef.current) {
-            sessionStore.updateStreaming(sid, accumulatedStreamRef.current, provider);
-            sessionStore.finalizeStreaming(sid);
+          if (sid === activeViewSessionId) {
+            if (sid && accumulatedStreamRef.current) {
+              sessionStore.updateStreaming(sid, accumulatedStreamRef.current, provider);
+              sessionStore.finalizeStreaming(sid);
+            }
+            accumulatedStreamRef.current = '';
           }
-          accumulatedStreamRef.current = '';
 
           // `complete` is the unified terminal event — every provider run ends
           // with exactly one, regardless of success, failure, or abort. The

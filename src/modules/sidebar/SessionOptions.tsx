@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react';
-import { Check, Edit2, GitBranch, MoreHorizontal, Trash2, X } from 'lucide-react';
+import { Check, Columns2, Edit2, GitBranch, MoreHorizontal, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { ActionMenu } from '@/shared/ui';
 import { cn } from '@/shared/utils';
-import type { LLMProvider } from '@/shared/types';
+import type { LLMProvider, SessionStatusFlags, SessionStatusPatch } from '@/shared/types';
+import { buildSessionStatusItems } from '@/modules/sidebar/utils/sessionStatusMenuItems';
 import { useSessionForkingProviders } from '@/shared/hooks/useProviderCapabilities';
 import { useProviderSessionIdCopy } from '@/modules/sidebar/hooks/useProviderSessionIdCopy';
 import { PROVIDER_LABELS } from '@/modules/sidebar/utils/sidebarProjectFormatting';
@@ -31,6 +32,11 @@ type SessionOptionsProps = {
   onFork?: () => void;
   /** Withheld where the row has nowhere to send a delete. */
   canDelete?: boolean;
+  /** The session's current status flags, which decide whether each toggle reads "pin" or "unpin" and so on. */
+  status?: Partial<SessionStatusFlags>;
+  onSetSessionStatus?: (sessionId: string, patch: SessionStatusPatch) => void;
+  /** Absent where split view is unavailable, which hides the entry. */
+  onOpenInSplitView?: () => void;
   className?: string;
   t: TFunction;
 };
@@ -59,6 +65,9 @@ export default function SessionOptions({
   onDeleteSession,
   onFork,
   canDelete = true,
+  status,
+  onSetSessionStatus,
+  onOpenInSplitView,
   className,
   t,
 }: SessionOptionsProps) {
@@ -160,6 +169,13 @@ export default function SessionOptions({
             </div>
           )}
           items={[
+            ...(onOpenInSplitView ? [{
+              key: 'split',
+              label: t('sessionStatus.openInSplitView', { defaultValue: 'Open in split view' }),
+              icon: Columns2,
+              onSelect: onOpenInSplitView,
+            }] : []),
+            ...buildSessionStatusItems(sessionId, status, onSetSessionStatus, t),
             ...(projectId !== null ? [{
               key: 'rename',
               label: 'Rename session',

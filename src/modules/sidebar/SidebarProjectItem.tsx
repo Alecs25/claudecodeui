@@ -4,7 +4,7 @@ import type { TFunction } from 'i18next';
 
 import { Button } from '@/shared/ui';
 import { cn } from '@/shared/utils';
-import type { LLMProvider, MCPServerStatus, Project, ProjectSession, SessionWithProvider, SidebarSessionSelection } from '@/shared/types';
+import type { LLMProvider, MCPServerStatus, Project, ProjectSession, SessionStatusPatch, SessionWithProvider, SidebarSessionSelection } from '@/shared/types';
 import { getTaskIndicatorStatus } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import TaskIndicator from '@/modules/sidebar/TaskIndicator';
 import SidebarProjectSessions from '@/modules/sidebar/SidebarProjectSessions';
@@ -40,6 +40,8 @@ type SidebarProjectItemProps = {
   onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
   onForkSession?: (session: SessionWithProvider) => void;
+  onSetSessionStatus: (sessionId: string, patch: SessionStatusPatch) => void;
+  onOpenInSplitView?: (session: SessionWithProvider) => void;
   onLoadMoreSessions: (projectId: string) => void;
   activeSessions: ReadonlySet<string>;
   backgroundSessionIds: ReadonlySet<string>;
@@ -91,6 +93,8 @@ function SidebarProjectItem({
   onSessionSelect,
   onDeleteSession,
   onForkSession,
+  onSetSessionStatus,
+  onOpenInSplitView,
   onLoadMoreSessions,
   activeSessions,
   backgroundSessionIds,
@@ -461,6 +465,8 @@ function SidebarProjectItem({
         onSessionSelect={onSessionSelect}
         onDeleteSession={onDeleteSession}
         onForkSession={onForkSession}
+        onSetSessionStatus={onSetSessionStatus}
+        onOpenInSplitView={onOpenInSplitView}
         onLoadMoreSessions={onLoadMoreSessions}
         onNewSession={onNewSession}
         selectedSessionIds={selectedSessionIds}

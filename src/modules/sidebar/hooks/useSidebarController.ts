@@ -4,7 +4,7 @@ import type { TFunction } from 'i18next';
 import { api } from '@/shared/api';
 import { subscribeToUserPreferences } from '@/shared/userSettings';
 import { usePaletteOps } from '@/modules/command-palette';
-import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationProjectResult, ConversationSearchResults, LLMProvider, Project, ProjectSession, ProjectSortOrder, RecentConversationListItem, SearchProgress, ActiveSidebarRename, PendingSidebarDeletion, SessionTitleSearchResult, SessionWithProvider, SidebarSearchMode, SidebarSessionSelection } from '@/shared/types';
+import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationProjectResult, ConversationSearchResults, LLMProvider, Project, ProjectSession, ProjectSortOrder, RecentConversationListItem, SearchProgress, ActiveSidebarRename, PendingSidebarDeletion, SessionStatusFilter, SessionStatusFlags, SessionStatusPatch, SessionTitleSearchResult, SessionWithProvider, ServerEvent, SidebarSearchMode, SidebarSessionSelection } from '@/shared/types';
 import {
   filterProjects,
   getAllSessions,
@@ -60,7 +60,11 @@ type UseSidebarControllerArgs = {
   setCurrentProject: (project: Project) => void;
   setSidebarVisible: (visible: boolean) => void;
   sidebarVisible: boolean;
+  /** The chat websocket's event stream; absent outside the socket provider (tests), where status frames simply never arrive. */
+  subscribe?: (listener: (event: ServerEvent) => void) => () => void;
 };
+
+const subscribeToNothing = () => () => {};
 
 export function useSidebarController({
   projects,
@@ -80,6 +84,7 @@ export function useSidebarController({
   setCurrentProject,
   setSidebarVisible,
   sidebarVisible,
+  subscribe = subscribeToNothing,
 }: UseSidebarControllerArgs) {
   const paletteOps = usePaletteOps();
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
@@ -110,6 +115,8 @@ export function useSidebarController({
   const sessionIdsBeingDeletedRef = useRef<Set<string>>(new Set());
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [searchMode, setSearchMode] = useState<SidebarSearchMode>('projects');
+  const searchModeRef = useRef<SidebarSearchMode>('projects');
+  searchModeRef.current = searchMode;
   const [conversationResults, setConversationResults] = useState<ConversationSearchResults | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [searchProgress, setSearchProgress] = useState<SearchProgress | null>(null);
@@ -122,6 +129,11 @@ export function useSidebarController({
   const [isRecentConversationsLoading, setIsRecentConversationsLoading] = useState(false);
   const [isLoadingMoreRecentConversations, setIsLoadingMoreRecentConversations] = useState(false);
   const [recentConversationsError, setRecentConversationsError] = useState(false);
+  const [recentStatusFilter, setRecentStatusFilter] = useState<SessionStatusFilter>('all');
+  // Read by the page fetcher, which is memoized once and must see the filter
+  // the latest request was made for.
+  const recentStatusFilterRef = useRef<SessionStatusFilter>('all');
+  recentStatusFilterRef.current = recentStatusFilter;
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [optimisticStarByProjectId, setOptimisticStarByProjectId] = useState<Map<string, boolean>>(new Map());
   const [loadingMoreProjects, setLoadingMoreProjects] = useState<Set<string>>(new Set());
@@ -239,7 +251,12 @@ export function useSidebarController({
     setRecentConversationsError(false);
 
     try {
-      const response = await api.recentConversations({ limit: 40, offset });
+      const statusFilter = recentStatusFilterRef.current;
+      const response = await api.recentConversations({
+        limit: 40,
+        offset,
+        status: statusFilter === 'all' ? undefined : statusFilter,
+      });
       if (!response.ok) {
         throw new Error(`Failed to load recent conversations: ${response.status}`);
       }
@@ -332,7 +349,33 @@ export function useSidebarController({
     }
 
     reloadRecentConversations();
-  }, [debouncedSearchQuery, reloadRecentConversations, searchMode]);
+  }, [debouncedSearchQuery, recentStatusFilter, reloadRecentConversations, searchMode]);
+
+  // Status changes reach every tab as `session_status` frames. The loaded rows
+  // are patched in place; under a filter a change can move a row in or out of
+  // the list, which only the server can resolve, so the first page is refetched.
+  useEffect(() => subscribe((event: ServerEvent) => {
+    if (event.kind !== 'session_status' || typeof event.sessionId !== 'string') {
+      return;
+    }
+    const sessionIdToUpdate = event.sessionId;
+    const flags: SessionStatusFlags = {
+      isPinned: Boolean(event.isPinned),
+      isUnread: Boolean(event.isUnread),
+      isCompleted: Boolean(event.isCompleted),
+    };
+    setRecentConversations((previous) => {
+      if (!previous.some((conversation) => conversation.sessionId === sessionIdToUpdate)) {
+        return previous;
+      }
+      return previous.map((conversation) => (
+        conversation.sessionId === sessionIdToUpdate ? { ...conversation, ...flags } : conversation
+      ));
+    });
+    if (recentStatusFilterRef.current !== 'all' && searchModeRef.current === 'conversations') {
+      void fetchRecentConversationsPage(0, false);
+    }
+  }), [fetchRecentConversationsPage, subscribe]);
 
   // The Conversations list is only fetched when its tab opens, while `projects`
   // is patched the moment a session is renamed from the workspace header. Fold
@@ -1228,6 +1271,23 @@ export function useSidebarController({
     [onSessionSelect, t],
   );
 
+  /**
+   * Pins, marks read/unread or completed a session. The sidebar rows update
+   * from the `session_status` frame the server broadcasts, in this tab as in
+   * every other.
+   */
+  const setSessionStatus = useCallback(async (sessionId: string, patch: SessionStatusPatch) => {
+    try {
+      const response = await api.setSessionStatus(sessionId, patch);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+    } catch (error) {
+      console.error('[Sidebar] Error updating session status:', error);
+      alert(t('messages.sessionStatusError', { defaultValue: 'Could not update the session.' }));
+    }
+  }, [t]);
+
   const collapseSidebar = useCallback(() => {
     setSidebarVisible(false);
   }, [setSidebarVisible]);
@@ -1273,6 +1333,9 @@ export function useSidebarController({
     toggleProject,
     handleSessionClick,
     forkSession,
+    setSessionStatus,
+    recentStatusFilter,
+    setRecentStatusFilter,
     toggleStarProject,
     isProjectStarred,
     getProjectSessions,

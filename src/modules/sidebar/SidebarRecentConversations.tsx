@@ -1,10 +1,10 @@
-import { Loader2, MessageSquare } from 'lucide-react';
+import { Loader2, MessageSquare, Pin } from 'lucide-react';
 import type { MouseEvent } from 'react';
 import type { TFunction } from 'i18next';
 
 import { Button, LLMProviderLogo, Tooltip } from '@/shared/ui';
 import { cn } from '@/shared/utils';
-import type { ProjectSession, RecentConversationListItem, SessionRowActions } from '@/shared/types';
+import type { ProjectSession, RecentConversationListItem, SessionRowActions, SessionStatusFilter } from '@/shared/types';
 import { formatCompactAge } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import SessionOptions from '@/modules/sidebar/SessionOptions';
 
@@ -15,6 +15,9 @@ type SidebarRecentConversationsProps = {
   isLoading: boolean;
   isLoadingMore: boolean;
   hasError: boolean;
+  /** The status the list is narrowed to; the server does the narrowing. */
+  statusFilter: SessionStatusFilter;
+  onStatusFilterChange: (filter: SessionStatusFilter) => void;
   selectedSession: ProjectSession | null;
   currentTime: Date;
   /**
@@ -31,6 +34,42 @@ type SidebarRecentConversationsProps = {
   onRetry: () => void;
   t: TFunction;
 };
+
+const STATUS_FILTERS: SessionStatusFilter[] = ['all', 'running', 'unread', 'pinned', 'completed'];
+
+const STATUS_FILTER_DEFAULT_LABELS: Record<SessionStatusFilter, string> = {
+  all: 'All',
+  running: 'Running',
+  unread: 'Unread',
+  pinned: 'Pinned',
+  completed: 'Completed',
+};
+
+function StatusFilterSelect({
+  value,
+  onChange,
+  t,
+}: {
+  value: SessionStatusFilter;
+  onChange: (filter: SessionStatusFilter) => void;
+  t: TFunction;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value as SessionStatusFilter)}
+      aria-label={t('recent.statusFilter', { defaultValue: 'Filter by status' })}
+      data-testid="recent-status-filter"
+      className="h-6 rounded-md border border-border/60 bg-background px-1.5 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+    >
+      {STATUS_FILTERS.map((filter) => (
+        <option key={filter} value={filter}>
+          {t(`recent.status.${filter}`, { defaultValue: STATUS_FILTER_DEFAULT_LABELS[filter] })}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 function RecentConversationSkeleton() {
   return (
@@ -56,6 +95,8 @@ export default function SidebarRecentConversations({
   isLoading,
   isLoadingMore,
   hasError,
+  statusFilter,
+  onStatusFilterChange,
   selectedSession,
   currentTime,
   sessionActions,
@@ -82,6 +123,22 @@ export default function SidebarRecentConversations({
     );
   }
 
+  if (conversations.length === 0 && statusFilter !== 'all') {
+    return (
+      <div className="px-1">
+        <div className="flex items-center justify-between px-2 pb-1.5 pt-0.5">
+          <span className="text-[11px] font-medium text-muted-foreground">
+            {t('recent.title', 'Recent conversations')}
+          </span>
+          <StatusFilterSelect value={statusFilter} onChange={onStatusFilterChange} t={t} />
+        </div>
+        <p className="px-4 py-8 text-center text-xs text-muted-foreground">
+          {t('recent.noMatchingStatus', { defaultValue: 'No conversations' })}
+        </p>
+      </div>
+    );
+  }
+
   if (conversations.length === 0) {
     return (
       <div className="px-4 py-10 text-center">
@@ -102,7 +159,10 @@ export default function SidebarRecentConversations({
         <span className="text-[11px] font-medium text-muted-foreground">
           {t('recent.title', 'Recent conversations')}
         </span>
-        <span className="text-[10px] tabular-nums text-muted-foreground/70">{total}</span>
+        <span className="flex items-center gap-2">
+          <StatusFilterSelect value={statusFilter} onChange={onStatusFilterChange} t={t} />
+          <span className="text-[10px] tabular-nums text-muted-foreground/70">{total}</span>
+        </span>
       </div>
 
       <div className="space-y-0.5">
@@ -113,12 +173,32 @@ export default function SidebarRecentConversations({
           const isProcessing = sessionActions.activeSessions.has(conversation.sessionId) && !hasBackgroundWork;
           const showAttentionIndicator =
             sessionActions.attentionSessionIds.has(conversation.sessionId) && !isSelected;
+          const showUnreadIndicator = !showAttentionIndicator && Boolean(conversation.isUnread) && !isSelected;
+          // The fork, split and status actions read only the id, provider and
+          // owning project, which is all a recents row knows about the session.
+          const rowSession = {
+            id: conversation.sessionId,
+            summary: conversation.sessionTitle,
+            __provider: conversation.provider,
+            __projectId: conversation.projectId ?? undefined,
+          };
           // Resolved per row so a keystroke in one rename does not redraw the rest.
           const rename = sessionActions.activeRename;
           const sessionRename =
             rename?.target === 'session' && rename.id === conversation.sessionId ? rename : null;
 
           const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
+            if (
+              event.button === 0
+              && (event.metaKey || event.ctrlKey)
+              && !event.shiftKey
+              && !event.altKey
+              && sessionActions.onOpenInSplitView
+            ) {
+              event.preventDefault();
+              sessionActions.onOpenInSplitView(rowSession);
+              return;
+            }
             if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
               return;
             }
@@ -137,6 +217,17 @@ export default function SidebarRecentConversations({
                 * Projects row also has a green dot for a session touched recently,
                 * which carries no information in a list ordered by recency.
                 */}
+              {showUnreadIndicator && (
+                <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 transform">
+                  <Tooltip content={t('tooltips.unreadSessionIndicator', { defaultValue: 'Unread' })} position="right">
+                    <div
+                      role="status"
+                      aria-label={t('tooltips.unreadSessionIndicator', { defaultValue: 'Unread' })}
+                      className="h-2 w-2 rounded-full bg-blue-500"
+                    />
+                  </Tooltip>
+                </div>
+              )}
               {showAttentionIndicator && (
                 <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 transform">
                   <Tooltip
@@ -161,6 +252,7 @@ export default function SidebarRecentConversations({
                   isSelected
                     ? 'bg-primary/10 text-foreground'
                     : 'text-foreground hover:bg-accent/60',
+                  conversation.isCompleted && !isSelected && 'opacity-60',
                 )}
               >
                 <span className={cn(
@@ -171,8 +263,17 @@ export default function SidebarRecentConversations({
                 </span>
 
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-normal leading-4">
-                    {conversation.sessionTitle}
+                  <span className={cn(
+                    'flex min-w-0 items-center gap-1 text-[13px] leading-4',
+                    showUnreadIndicator ? 'font-medium' : 'font-normal',
+                  )}>
+                    {conversation.isPinned && (
+                      <Pin
+                        className="h-3 w-3 flex-shrink-0 text-muted-foreground"
+                        aria-label={t('sessionStatus.pinned', { defaultValue: 'Pinned' })}
+                      />
+                    )}
+                    <span className="truncate">{conversation.sessionTitle}</span>
                   </span>
                   <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] leading-3 text-muted-foreground">
                     <span className="truncate">{conversation.projectDisplayName}</span>
@@ -225,12 +326,12 @@ export default function SidebarRecentConversations({
                 // The fork path reads only the id, provider and owning project,
                 // which is all a recents row knows about the session.
                 onFork={sessionActions.onForkSession
-                  ? () => sessionActions.onForkSession?.({
-                    id: conversation.sessionId,
-                    summary: conversation.sessionTitle,
-                    __provider: conversation.provider,
-                    __projectId: conversation.projectId ?? undefined,
-                  })
+                  ? () => sessionActions.onForkSession?.(rowSession)
+                  : undefined}
+                status={conversation}
+                onSetSessionStatus={sessionActions.onSetSessionStatus}
+                onOpenInSplitView={sessionActions.onOpenInSplitView
+                  ? () => sessionActions.onOpenInSplitView?.(rowSession)
                   : undefined}
                 t={t}
               />

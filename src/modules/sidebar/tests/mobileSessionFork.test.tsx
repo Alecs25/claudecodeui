@@ -70,6 +70,7 @@ const rowProps = (
   onProjectSelect: noop,
   onSessionSelect: noop,
   onDeleteSession: noop,
+  onSetSessionStatus: noop,
   onForkSession: noop,
   isSelecting: false,
   isChecked: false,

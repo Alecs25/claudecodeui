@@ -38,7 +38,8 @@
     "selectAllLoaded": "Select all loaded",
     "clearSelection": "Clear",
     "deleteSelected_one": "Delete {{count}} session",
-    "deleteSelected_other": "Delete {{count}} sessions"
+    "deleteSelected_other": "Delete {{count}} sessions",
+    "completedSection": "Completed"
   },
   "tooltips": {
     "viewEnvironments": "View Environments",
@@ -57,7 +58,8 @@
     "clearSearch": "Clear search",
     "openCommandPalette": "Open command palette",
     "attentionRequiredIndicator": "Session needs attention",
-    "backgroundWorkIndicator": "Background work running"
+    "backgroundWorkIndicator": "Background work running",
+    "unreadSessionIndicator": "Unread"
   },
   "navigation": {
     "chat": "Chat",
@@ -123,7 +125,8 @@
     "restoreSessionError": "Error restoring session. Please try again.",
     "forkSessionError": "Could not fork this session. Please try again.",
     "deleteSessionsPartialFailure_one": "{{count}} session out of {{total}} could not be deleted. Please try again.",
-    "deleteSessionsPartialFailure_other": "{{count}} of {{total}} sessions could not be deleted. Please try again."
+    "deleteSessionsPartialFailure_other": "{{count}} of {{total}} sessions could not be deleted. Please try again.",
+    "sessionStatusError": "Could not update the session."
   },
   "version": {
     "updateAvailable": "Update available",
@@ -150,7 +153,16 @@
     "emptyDescription": "Your most recently updated conversations will appear here.",
     "loadFailed": "Could not load recent conversations",
     "loadMore": "Load older conversations",
-    "loadingMore": "Loading more..."
+    "loadingMore": "Loading more...",
+    "statusFilter": "Filter by status",
+    "noMatchingStatus": "No conversations",
+    "status": {
+      "all": "All",
+      "running": "Running",
+      "unread": "Unread",
+      "pinned": "Pinned",
+      "completed": "Completed"
+    }
   },
   "deleteConfirmation": {
     "deleteProject": "Remove Project",
@@ -176,5 +188,22 @@
     "archiveSessions_other": "Archive {{count}} sessions",
     "archiveSessionsNotice_one": "Archive keeps the session out of the active list while preserving its history.",
     "archiveSessionsNotice_other": "Archive keeps the sessions out of the active list while preserving their history."
+  },
+  "sessionStatus": {
+    "openInSplitView": "Open in split view",
+    "closeSplitView": "Close split view",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "pinned": "Pinned",
+    "markRead": "Mark as read",
+    "markUnread": "Mark as unread",
+    "markCompleted": "Mark completed",
+    "reopen": "Reopen"
+  },
+  "sessionFinished": {
+    "untitled": "Session",
+    "message": "Finished",
+    "open": "Open",
+    "dismiss": "Dismiss"
   }
 }

@@ -276,8 +276,15 @@ export const api = {
   sessionDetails: (sessionId: string) =>
     get(`/api/providers/sessions/${encodeURIComponent(sessionId)}`),
   runningSessions: () => get('/api/providers/sessions/running'),
-  recentConversations: ({ limit = 40, offset = 0 }: { limit?: number; offset?: number } = {}) =>
-    get(`/api/providers/sessions/recent${query({ limit, offset })}`),
+  // `status` narrows the feed: running, unread, pinned or completed.
+  recentConversations: (
+    { limit = 40, offset = 0, status }: { limit?: number; offset?: number; status?: string } = {},
+  ) =>
+    get(`/api/providers/sessions/recent${query({ limit, offset, status })}`),
+  // Pins, marks read/unread or completed one session; every tab hears about it
+  // through a `session_status` frame.
+  setSessionStatus: (sessionId: string, flags: { isPinned?: boolean; isUnread?: boolean; isCompleted?: boolean }) =>
+    patch(`/api/providers/sessions/${encodeURIComponent(sessionId)}/status`, flags),
   providerSessionId: (sessionId: string) =>
     get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/provider-id`),
   restoreSession: (sessionId: string) => post(`/api/providers/sessions/${sessionId}/restore`),

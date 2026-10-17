@@ -55,6 +55,12 @@ type ChatInterfaceProps = {
   newSessionTrigger?: number;
   onTaskClick?: (...args: unknown[]) => void;
   onShowAllTasks?: (() => void) | null;
+  /**
+   * The second pane of split view. It leaves the app-wide hooks (the command
+   * palette's "insert into composer", Escape with nothing focused) to the main
+   * pane, so one keystroke never acts on both sessions.
+   */
+  isSecondaryPane?: boolean;
 };
 
 /**
@@ -80,7 +86,9 @@ function ChatInterface({
   externalMessageUpdate,
   newSessionTrigger,
   onShowAllTasks,
+  isSecondaryPane = false,
 }: ChatInterfaceProps) {
+  const paneRef = useRef<HTMLDivElement>(null);
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const { subscribe } = useWebSocket();
   const { t } = useTranslation('chat');
@@ -343,7 +351,7 @@ function ChatInterface({
     });
   }, [setInput, textareaRef]);
 
-  usePaletteOpsRegister({ insertComposerText });
+  usePaletteOpsRegister(isSecondaryPane ? {} : { insertComposerText });
 
   useEffect(() => {
     if (!canAbortSession) {
@@ -352,6 +360,13 @@ function ChatInterface({
 
     const handleGlobalEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.repeat || event.defaultPrevented) {
+        return;
+      }
+      // With two panes open, Escape stops the run of the pane holding focus;
+      // with focus in neither, it stays with the main pane.
+      const focused = document.activeElement;
+      const focusedPane = focused instanceof Element ? focused.closest('[data-chat-pane]') : null;
+      if (focusedPane ? focusedPane !== paneRef.current : isSecondaryPane) {
         return;
       }
 
@@ -369,7 +384,7 @@ function ChatInterface({
     return () => {
       document.removeEventListener('keydown', handleGlobalEscape, { capture: true });
     };
-  }, [canAbortSession, editQueuedDraft, handleAbortSession, input, isSteeringQueuedDraft, queuedDraft]);
+  }, [canAbortSession, editQueuedDraft, handleAbortSession, input, isSteeringQueuedDraft, queuedDraft, isSecondaryPane]);
 
   // Claude can move a blocking command or subagent to the background mid-turn
   // (Ctrl+B in the terminal); offered only while the turn is waiting on one.
@@ -543,7 +558,7 @@ function ChatInterface({
 
   return (
     <PermissionContext.Provider value={permissionContextValue}>
-      <div className="flex h-full min-h-0 flex-col">
+      <div ref={paneRef} data-chat-pane="" className="flex h-full min-h-0 flex-col">
         <MarkdownWorkspaceContext.Provider value={markdownWorkspaceValue}>
           <TranscriptSessionContext.Provider value={transcriptSessionValue}>
             <ChatMessagesPane

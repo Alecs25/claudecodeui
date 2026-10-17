@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 
 import { useProjectsState } from '@/modules/project-workspace/hooks/useProjectsState';
+import { useViewerPresence } from '@/modules/project-workspace/hooks/useViewerPresence';
 import type { IsSessionProcessing,ServerEvent } from '@/shared/types';
 
 type ProjectsState = ReturnType<typeof useProjectsState>;
@@ -27,6 +28,8 @@ type ProjectMainState = Pick<
   | 'handleProjectSelect'
   | 'refreshProjectsSilently'
   | 'renameSession'
+  | 'splitSession'
+  | 'closeSplitSession'
 >;
 
 type ProjectCommandState = Pick<
@@ -75,6 +78,14 @@ export function ProjectsStateProvider({
     isSessionProcessing,
   });
 
+  const viewedSessionId = state.selectedSession?.id ?? sessionId ?? null;
+  const splitSessionId = state.splitSession?.session.id ?? null;
+  const viewedSessionIds = useMemo(
+    () => [viewedSessionId, splitSessionId].filter((id): id is string => Boolean(id)),
+    [splitSessionId, viewedSessionId],
+  );
+  useViewerPresence(viewedSessionIds);
+
   const sidebarState = useMemo<ProjectSidebarState>(
     () => ({
       sidebarOpen: state.sidebarOpen,
@@ -99,8 +110,12 @@ export function ProjectsStateProvider({
       handleProjectSelect: state.handleProjectSelect,
       refreshProjectsSilently: state.refreshProjectsSilently,
       renameSession: state.renameSession,
+      splitSession: state.splitSession,
+      closeSplitSession: state.closeSplitSession,
     }),
     [
+      state.splitSession,
+      state.closeSplitSession,
       state.activeTab,
       state.externalMessageUpdate,
       state.handleProjectSelect,

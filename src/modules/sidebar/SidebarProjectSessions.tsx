@@ -1,9 +1,10 @@
-import { CheckSquare, Plus, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { CheckCircle2, CheckSquare, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { Button } from '@/shared/ui';
 import { cn } from '@/shared/utils';
-import type { LLMProvider, Project, ProjectSession, SessionWithProvider, SidebarSessionSelection } from '@/shared/types';
+import type { LLMProvider, Project, ProjectSession, SessionStatusPatch, SessionWithProvider, SidebarSessionSelection } from '@/shared/types';
 import SidebarSessionItem from '@/modules/sidebar/SidebarSessionItem';
 import { useCompactSidebar } from '@/modules/sidebar/hooks/useCompactSidebar';
 
@@ -30,6 +31,8 @@ type SidebarProjectSessionsProps = {
   onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
   onForkSession?: (session: SessionWithProvider) => void;
+  onSetSessionStatus: (sessionId: string, patch: SessionStatusPatch) => void;
+  onOpenInSplitView?: (session: SessionWithProvider) => void;
   onLoadMoreSessions: (projectId: string) => void;
   onNewSession: (project: Project) => void;
   /** The sessions ticked here, or null when this project's list is not in selection mode. */
@@ -40,6 +43,25 @@ type SidebarProjectSessionsProps = {
   onDeleteSelectedSessions: (sessionIds: string[]) => void;
   t: TFunction;
 };
+
+/**
+ * Orders a project's loaded rows for display: open sessions with the pinned
+ * ones first, then the completed ones, which the list folds away. The sort is
+ * stable, so within each group the server's recency order is kept.
+ */
+export function partitionSessionsByStatus(sessions: SessionWithProvider[]): {
+  openSessions: SessionWithProvider[];
+  completedSessions: SessionWithProvider[];
+} {
+  const openSessions = sessions.filter((session) => !session.isCompleted);
+  return {
+    openSessions: [
+      ...openSessions.filter((session) => session.isPinned),
+      ...openSessions.filter((session) => !session.isPinned),
+    ],
+    completedSessions: sessions.filter((session) => session.isCompleted),
+  };
+}
 
 function SessionListSkeleton() {
   return (
@@ -82,6 +104,8 @@ export default function SidebarProjectSessions({
   onSessionSelect,
   onDeleteSession,
   onForkSession,
+  onSetSessionStatus,
+  onOpenInSplitView,
   onLoadMoreSessions,
   onNewSession,
   selectedSessionIds,
@@ -92,6 +116,7 @@ export default function SidebarProjectSessions({
   t,
 }: SidebarProjectSessionsProps) {
   const isCompact = useCompactSidebar();
+  const [showCompleted, setShowCompleted] = useState(false);
 
   if (!isExpanded) {
     return null;
@@ -218,7 +243,9 @@ export default function SidebarProjectSessions({
         </div>
       ) : (
         <>
-          {sessions.map((session) => (
+          {(() => {
+            const { openSessions, completedSessions } = partitionSessionsByStatus(sessions);
+            const renderRow = (session: SessionWithProvider) => (
             <SidebarSessionItem
               key={session.id}
               project={project}
@@ -238,12 +265,43 @@ export default function SidebarProjectSessions({
               onSessionSelect={onSessionSelect}
               onDeleteSession={onDeleteSession}
               onForkSession={onForkSession}
+              onSetSessionStatus={onSetSessionStatus}
+              onOpenInSplitView={onOpenInSplitView}
               isSelecting={isSelecting}
               isChecked={checkedSessionIds.has(session.id)}
               onToggleSessionSelected={onToggleSessionSelected}
               t={t}
             />
-          ))}
+            );
+            // The selected session stays visible even when completed, or the
+            // highlighted row would vanish into a folded section.
+            const completedExpanded = showCompleted
+              || completedSessions.some((session) => session.id === selectedSession?.id);
+            return (
+              <>
+                {openSessions.map(renderRow)}
+                {completedSessions.length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      className={cn(
+                        'flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-[11px] text-muted-foreground hover:text-foreground',
+                        isCompact && 'mx-3 w-auto',
+                      )}
+                      aria-expanded={completedExpanded}
+                      onClick={() => setShowCompleted((previous) => !previous)}
+                    >
+                      <ChevronRight className={cn('h-3 w-3 transition-transform', completedExpanded && 'rotate-90')} />
+                      <CheckCircle2 className="h-3 w-3" />
+                      <span className="flex-1">{t('sessions.completedSection', { defaultValue: 'Completed' })}</span>
+                      <span className="tabular-nums">{completedSessions.length}</span>
+                    </button>
+                    {completedExpanded && completedSessions.map(renderRow)}
+                  </>
+                )}
+              </>
+            );
+          })()}
 
           {hasMoreSessions && (
             <Button

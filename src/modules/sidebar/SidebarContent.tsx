@@ -3,7 +3,7 @@ import { Activity, Archive, Folder, MessageSquare, RotateCcw, Search, Trash2 } f
 import type { TFunction } from 'i18next';
 
 import { LLMProviderLogo, ScrollArea } from '@/shared/ui';
-import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationSearchResults, Project, RecentConversationListItem, ReleaseInfo, SearchProgress, SidebarProjectListProps, SidebarSearchMode } from '@/shared/types';
+import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationSearchResults, Project, RecentConversationListItem, ReleaseInfo, SearchProgress, SessionStatusFilter, SidebarProjectListProps, SidebarSearchMode } from '@/shared/types';
 import { formatCompactAge, getAllSessions } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import SidebarFooter from '@/modules/sidebar/SidebarFooter';
 import SidebarHeader from '@/modules/sidebar/SidebarHeader';
@@ -97,6 +97,8 @@ type SidebarContentProps = {
   isRecentConversationsLoading: boolean;
   isLoadingMoreRecentConversations: boolean;
   recentConversationsError: boolean;
+  recentStatusFilter: SessionStatusFilter;
+  onRecentStatusFilterChange: (filter: SessionStatusFilter) => void;
   searchFilter: string;
   onSearchFilterChange: (value: string) => void;
   onClearSearchFilter: () => void;
@@ -146,6 +148,8 @@ export default function SidebarContent({
   isRecentConversationsLoading,
   isLoadingMoreRecentConversations,
   recentConversationsError,
+  recentStatusFilter,
+  onRecentStatusFilterChange,
   searchFilter,
   onSearchFilterChange,
   onClearSearchFilter,
@@ -383,6 +387,8 @@ export default function SidebarContent({
             isLoading={isRecentConversationsLoading}
             isLoadingMore={isLoadingMoreRecentConversations}
             hasError={recentConversationsError}
+            statusFilter={recentStatusFilter}
+            onStatusFilterChange={onRecentStatusFilterChange}
             selectedSession={projectListProps.selectedSession}
             currentTime={projectListProps.currentTime}
             sessionActions={projectListProps}
