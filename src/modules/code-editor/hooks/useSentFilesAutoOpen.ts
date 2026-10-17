@@ -9,9 +9,9 @@ import { requestSentFileOpen } from '@/modules/code-editor/utils/sentFiles';
  * app does, on screens wide enough to keep the chat usable beside it. Files in older transcripts open from their chat card instead.
  * Kept apart from useEditorSidebar so the sidebar works without a websocket.
  */
-// Below this width the side panel would squeeze the chat (and on phones it
-// covers it): the chat card's "open" button is enough there.
-const AUTO_OPEN_MIN_VIEWPORT_WIDTH = 1280;
+// The app's mobile breakpoint: tablets get the desktop behaviour, while on
+// phones the panel would cover the chat and the card's "open" button is enough.
+const AUTO_OPEN_MIN_VIEWPORT_WIDTH = 768;
 
 export const useSentFilesAutoOpen = () => {
   const { subscribe } = useWebSocket();
