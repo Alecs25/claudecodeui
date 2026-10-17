@@ -10,6 +10,8 @@ import type {
   ProviderSkillListOptions,
   ProviderAuthStatus,
   ProviderCurrentActiveModel,
+  ProviderFileRewindResult,
+  ProviderLiveSessionSettings,
   ProviderModelsDefinition,
   ProviderMcpServer,
   ProviderSkillCreateInput,
@@ -64,6 +66,25 @@ export interface IProviderRuntime {
    * Resolves false when the session has no live process or nothing matched.
    */
   backgroundTasks?(sessionId: string, toolUseId?: string): Promise<boolean>;
+  /**
+   * Restores the files a session edited to their state at one of its user
+   * messages (`userMessageId` is that row's provider-native id). Only a
+   * runtime that checkpoints files implements it; the caller makes sure no
+   * run is in flight for the session.
+   */
+  rewindFiles?(input: {
+    sessionId: string;
+    providerSessionId: string;
+    cwd: string;
+    userMessageId: string;
+    dryRun: boolean;
+  }): Promise<ProviderFileRewindResult>;
+  /**
+   * Hands a new model or effort to the session's live process so its next
+   * request already uses them. Resolves false when the session has no live
+   * process — the next run starts with the stored choice anyway.
+   */
+  applySessionSettings?(sessionId: string, settings: ProviderLiveSessionSettings): Promise<boolean>;
 }
 
 /**

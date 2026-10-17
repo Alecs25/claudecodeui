@@ -304,7 +304,8 @@
   "message": {
     "editAndResend": "Edit and resend",
     "forkFromHere": "Fork from here",
-    "answeredBy": "Answered by {{model}}"
+    "answeredBy": "Answered by {{model}}",
+    "rewindToHere": "Rewind to here"
   },
   "export": {
     "trigger": "Export conversation",
@@ -424,5 +425,35 @@
     "failed_one": "{{count}} failed",
     "failed_other": "{{count}} failed",
     "running": "Running"
+  },
+  "rewind": {
+    "title": "Rewind to here",
+    "conversationOnly": "Conversation only",
+    "filesOnly": "Files only",
+    "conversationAndFiles": "Conversation and files",
+    "confirmFiles_one": "Restore {{count}} file (+{{insertions}} −{{deletions}})?",
+    "confirmFiles_other": "Restore {{count}} files (+{{insertions}} −{{deletions}})?",
+    "noFileChanges": "No files to restore.",
+    "unavailable": "No file checkpoint for this message.",
+    "restoreFiles": "Restore files",
+    "restoreBoth": "Restore files and conversation",
+    "cancel": "Cancel"
+  },
+  "turnChanges": {
+    "button_one": "Changes ({{count}} file)",
+    "button_other": "Changes ({{count}} files)",
+    "title_one": "Changes ({{count}} file)",
+    "title_other": "Changes ({{count}} files)",
+    "edit": "Edit",
+    "written": "Written",
+    "close": "Close"
+  },
+  "contextUsage": {
+    "label": "Context usage",
+    "summary": "{{used}} / {{total}} ({{percent}}%)",
+    "details": "Token details",
+    "instructions": "Instructions (optional)",
+    "compact": "Compact",
+    "compacting": "Compacting…"
   }
 }

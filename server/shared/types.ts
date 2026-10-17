@@ -663,6 +663,32 @@ export type ProviderRunFunction = (
 ) => Promise<unknown>;
 
 /**
+ * What restoring a session's files to an earlier user message changed, or
+ * would change on a dry run. Mirrors the Claude Agent SDK's `rewindFiles`
+ * result: `canRewind` is false (with `error`) when the session kept no
+ * checkpoints for that message, e.g. it ran before checkpointing was enabled.
+ * Used by the sessions service, its route and the Claude runtime.
+ */
+export type ProviderFileRewindResult = {
+  canRewind: boolean;
+  error?: string;
+  filesChanged?: string[];
+  insertions?: number;
+  deletions?: number;
+};
+
+/**
+ * Model and effort picked for a session while its process may still be up.
+ * Either field may be absent; `effort: 'default'` clears an explicit level.
+ * Used by the provider runtime service and the runtimes that can apply it to
+ * a live process.
+ */
+export type ProviderLiveSessionSettings = {
+  model?: string;
+  effort?: string;
+};
+
+/**
  * Shared options used to fetch historical provider messages.
  *
  * Consumers should pass provider-specific lookup hints (`projectPath`) only

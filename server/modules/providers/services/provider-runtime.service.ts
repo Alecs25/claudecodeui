@@ -5,6 +5,7 @@ import type { IProvider } from '@/shared/interfaces.js';
 import type {
   AnyRecord,
   LLMProvider,
+  ProviderLiveSessionSettings,
   ProviderPermissionDecision,
   ProviderRunFunction,
   ProviderRuntimeContext,
@@ -101,6 +102,19 @@ export function createProviderRuntimeService(
       // A runtime without foreground tasks to move has nothing to background.
       const { runtime } = dependencies.resolveProvider(providerName);
       return Boolean(await runtime.backgroundTasks?.(sessionId, toolUseId));
+    },
+
+    /**
+     * Passes a mid-session model or effort pick to the session's live process,
+     * if its runtime can take one. False means the next run applies it.
+     */
+    async applySessionSettings(
+      providerName: LLMProvider,
+      sessionId: string,
+      settings: ProviderLiveSessionSettings,
+    ): Promise<boolean> {
+      const { runtime } = dependencies.resolveProvider(providerName);
+      return Boolean(await runtime.applySessionSettings?.(sessionId, settings));
     },
 
     hasBackgroundWork(sessionId: string): boolean {

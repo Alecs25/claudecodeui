@@ -5,6 +5,7 @@ import { claudeSettingsPermissionsService } from '@/modules/providers/services/c
 import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
 import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
+import { providerRuntimeService } from '@/modules/providers/services/provider-runtime.service.js';
 import { providerTokenUsageService } from '@/modules/providers/services/provider-token-usage.service.js';
 import { providerSkillsService } from '@/modules/providers/services/skills.service.js';
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
@@ -348,6 +349,20 @@ const parseSessionForkPayload = (payload: unknown): { upToAnchorId?: string; tit
     ...(upToAnchorId ? { upToAnchorId } : {}),
     ...(title ? { title } : {}),
   };
+};
+
+/** `anchorId` names the user message to restore files to (its transcript uuid). */
+const parseFileRewindPayload = (payload: unknown): { anchorId: string; dryRun: boolean } => {
+  const body = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
+  const anchorId = typeof body.anchorId === 'string' ? body.anchorId.trim() : '';
+  if (!anchorId) {
+    throw new AppError('anchorId is required.', {
+      code: 'ANCHOR_REQUIRED',
+      statusCode: 400,
+    });
+  }
+
+  return { anchorId, dryRun: body.dryRun === true };
 };
 
 const parseSessionRenameSummary = (payload: unknown): string => {
@@ -709,10 +724,13 @@ router.post(
     const sessionId = parseSessionId(req.params.sessionId);
     const model = parseSessionModelPayload(req.body);
     const stored = providerModelsService.setSessionModel(provider, sessionId, model);
+    // A run already in flight (or a process held for background work) takes
+    // the pick from its next request instead of only from the next turn.
+    const appliedLive = await providerRuntimeService.applySessionSettings(provider, sessionId, { model });
     // A session row only exists once the gateway has allocated one. Report the
     // selection back either way so the client can hold it until the first send.
     res.json(createApiSuccessResponse(
-      stored ?? { provider, sessionId, model, effort: null, source: 'session' as const },
+      { ...(stored ?? { provider, sessionId, model, effort: null, source: 'session' as const }), appliedLive },
     ));
   }),
 );
@@ -725,10 +743,11 @@ router.post(
     const sessionId = parseSessionId(req.params.sessionId);
     const effort = parseSessionEffortPayload(req.body);
     const stored = providerModelsService.setSessionEffort(provider, sessionId, effort);
+    const appliedLive = await providerRuntimeService.applySessionSettings(provider, sessionId, { effort });
     // Mirror active-model behavior for a composer that picked an effort just
     // before the session gateway created its row.
     res.json(createApiSuccessResponse(
-      stored ?? { provider, sessionId, effort, source: 'session' as const },
+      { ...(stored ?? { provider, sessionId, effort, source: 'session' as const }), appliedLive },
     ));
   }),
 );
@@ -959,6 +978,15 @@ router.post(
     const sessionId = parseSessionId(req.params.sessionId);
     const result = await sessionsService.forkSessionById(sessionId, parseSessionForkPayload(req.body));
     res.status(201).json(createApiSuccessResponse(result));
+  }),
+);
+
+router.post(
+  '/sessions/:sessionId/rewind-files',
+  asyncHandler(async (req: Request, res: Response) => {
+    const sessionId = parseSessionId(req.params.sessionId);
+    const result = await sessionsService.rewindSessionFiles(sessionId, parseFileRewindPayload(req.body));
+    res.json(createApiSuccessResponse(result));
   }),
 );
 
