@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronsUpDown, FileText } from 'lucide-react';
+import { Check, ChevronsUpDown, FileText, X } from 'lucide-react';
 
 import {
   Card,
@@ -14,8 +14,11 @@ import {
   CollapsibleContent,
   Shimmer,
 } from '@/shared/ui';
+import type { PendingPermissionRequest } from '@/shared/types';
 import { usePermission } from '@/modules/chat/context/PermissionContext';
 import { MarkdownContent } from '@/modules/chat/tools/ContentRenderers/MarkdownContent';
+import { RawParameters } from '@/modules/chat/tools/RawParameters';
+import { readPlanDecision, type PlanToolResult } from '@/modules/chat/utils/planDecision';
 
 type PlanDisplayProps = {
   title: string;
@@ -26,11 +29,29 @@ type PlanDisplayProps = {
   rawContent?: string;
   toolName: string;
   toolId?: string;
+  /** The plan tool's result: absent while the plan waits for an answer. */
+  toolResult?: PlanToolResult;
 };
 
+const PLAN_TOOL_NAMES = new Set(['ExitPlanMode', 'exit_plan_mode']);
+
 /**
- * Rendered by chat's ToolRenderer for plan tools (ExitPlanMode), showing the
- * proposed plan inline together with its build/revise permission decision.
+ * The pending request for this plan. Requests carry no tool-use id, so with
+ * two plans waiting (rare: a resumed tab) the one whose plan text matches wins.
+ */
+function findPlanRequest(requests: PendingPermissionRequest[], content: string): PendingPermissionRequest | undefined {
+  const planRequests = requests.filter((request) => PLAN_TOOL_NAMES.has(request.toolName));
+  const matching = planRequests.find((request) => {
+    const input = request.input as { plan?: unknown } | undefined;
+    return typeof input?.plan === 'string' && input.plan.trim() === content.trim();
+  });
+  return matching ?? planRequests[0];
+}
+
+/**
+ * Rendered by chat's ToolRenderer for plan tools (ExitPlanMode): the proposed
+ * plan as Markdown (tables included) with Approve, or Reject with optional
+ * feedback for the agent to revise against. Once answered, the footer says how.
  */
 export const PlanDisplay: React.FC<PlanDisplayProps> = ({
   title,
@@ -40,33 +61,40 @@ export const PlanDisplay: React.FC<PlanDisplayProps> = ({
   showRawParameters = false,
   rawContent,
   toolName: _toolName,
+  toolResult,
 }) => {
-  const { t } = useTranslation();
+  const { t } = useTranslation('chat');
+  const decision = readPlanDecision(toolResult, t('misc.userAskedRevise'));
   const permissionCtx = usePermission();
+  const [isRejecting, setIsRejecting] = useState(false);
+  const [feedback, setFeedback] = useState('');
 
-  const pendingRequest = permissionCtx?.pendingPermissionRequests.find(
-    (r) => r.toolName === 'ExitPlanMode' || r.toolName === 'exit_plan_mode'
-  );
+  const pendingRequest = decision ? undefined : findPlanRequest(permissionCtx?.pendingPermissionRequests ?? [], content);
 
-  const handleBuild = () => {
+  const handleApprove = () => {
     if (pendingRequest && permissionCtx) {
       permissionCtx.handlePermissionDecision(pendingRequest.requestId, { allow: true });
     }
   };
 
-  const handleRevise = () => {
-    if (pendingRequest && permissionCtx) {
-      permissionCtx.handlePermissionDecision(pendingRequest.requestId, {
-        allow: false,
-        message: t('chat:misc.userAskedRevise'),
-      });
+  const handleReject = () => {
+    if (!pendingRequest || !permissionCtx) {
+      return;
     }
+    const revise = t('misc.userAskedRevise');
+    const trimmed = feedback.trim();
+    // The deny message is what the agent reads back as the tool result.
+    permissionCtx.handlePermissionDecision(pendingRequest.requestId, {
+      allow: false,
+      message: trimmed ? `${revise}: ${trimmed}` : revise,
+    });
+    setIsRejecting(false);
+    setFeedback('');
   };
 
   return (
     <Collapsible defaultOpen={defaultOpen}>
       <Card className="my-1 flex flex-col shadow-none">
-        {/* Header — always visible */}
         <CardHeader className="flex flex-row items-start justify-between space-y-0 px-4 pb-0 pt-4">
           <div className="flex items-center gap-2">
             <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -76,11 +104,10 @@ export const PlanDisplay: React.FC<PlanDisplayProps> = ({
           </div>
           <CollapsibleTrigger className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground">
             <ChevronsUpDown className="h-4 w-4" />
-            <span className="sr-only">Toggle plan</span>
+            <span className="sr-only">{t('plan.toggle', { defaultValue: 'Toggle plan' })}</span>
           </CollapsibleTrigger>
         </CardHeader>
 
-        {/* Collapsible content */}
         <CollapsibleContent>
           <CardContent className="px-4 pb-4 pt-3">
             {content ? (
@@ -90,50 +117,82 @@ export const PlanDisplay: React.FC<PlanDisplayProps> = ({
               />
             ) : isStreaming ? (
               <div className="py-2">
-                <Shimmer>Generating plan...</Shimmer>
+                <Shimmer>{t('plan.generating', { defaultValue: 'Generating plan...' })}</Shimmer>
               </div>
             ) : null}
 
             {showRawParameters && rawContent && (
-              <Collapsible className="mt-3">
-                <CollapsibleTrigger className="flex items-center gap-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground">
-                  <svg
-                    className="h-2.5 w-2.5 flex-shrink-0 transition-transform duration-150 data-[state=open]:rotate-90"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                  raw params
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <pre className="mt-1 overflow-hidden whitespace-pre-wrap break-words rounded border border-border/40 bg-muted p-2 font-mono text-[11px] text-muted-foreground">
-                    {rawContent}
-                  </pre>
-                </CollapsibleContent>
-              </Collapsible>
+              <RawParameters content={rawContent} className="mt-3" />
             )}
           </CardContent>
         </CollapsibleContent>
 
-        {/* Footer — always visible when permission is pending */}
         {pendingRequest && (
-          <CardFooter className="justify-end gap-2 border-t border-border/40 px-4 pb-3 pt-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleRevise}
-              className="text-muted-foreground"
-            >
-              Revise
-            </Button>
-            <Button size="sm" onClick={handleBuild}>
-              Build{' '}
-              <kbd className="ml-1 rounded bg-primary-foreground/20 px-1 py-0.5 font-mono text-[10px]">
-                ⌘↩
-              </kbd>
-            </Button>
+          <CardFooter className="flex-col items-stretch gap-2 border-t border-border/40 px-4 pb-3 pt-3">
+            {isRejecting && (
+              <textarea
+                autoFocus
+                value={feedback}
+                onChange={(event) => setFeedback(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                    event.preventDefault();
+                    handleReject();
+                  } else if (event.key === 'Escape') {
+                    setIsRejecting(false);
+                  }
+                }}
+                rows={3}
+                placeholder={t('plan.feedbackPlaceholder', { defaultValue: 'What should change? (optional)' })}
+                aria-label={t('plan.feedback', { defaultValue: 'Feedback' })}
+                className="w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+            )}
+            <div className="flex flex-wrap justify-end gap-2">
+              {isRejecting ? (
+                <>
+                  <Button variant="ghost" size="sm" onClick={() => setIsRejecting(false)} className="text-muted-foreground">
+                    {t('plan.cancel', { defaultValue: 'Cancel' })}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleReject}>
+                    <X className="mr-1 h-3.5 w-3.5" />
+                    {t('plan.sendRejection', { defaultValue: 'Reject and send' })}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button variant="outline" size="sm" onClick={() => setIsRejecting(true)}>
+                    <X className="mr-1 h-3.5 w-3.5" />
+                    {t('plan.reject', { defaultValue: 'Reject' })}
+                  </Button>
+                  <Button size="sm" onClick={handleApprove}>
+                    <Check className="mr-1 h-3.5 w-3.5" />
+                    {t('plan.approve', { defaultValue: 'Approve' })}
+                  </Button>
+                </>
+              )}
+            </div>
+          </CardFooter>
+        )}
+
+        {decision && (
+          <CardFooter className="flex-col items-start gap-1 border-t border-border/40 px-4 pb-3 pt-2 text-xs">
+            {decision.state === 'approved' ? (
+              <span className="inline-flex items-center gap-1 font-medium text-green-700 dark:text-green-400">
+                <Check className="h-3.5 w-3.5" />
+                {t('plan.approved', { defaultValue: 'Approved' })}
+              </span>
+            ) : (
+              <>
+                <span className="inline-flex items-center gap-1 font-medium text-amber-700 dark:text-amber-400">
+                  <X className="h-3.5 w-3.5" />
+                  {t('plan.rejected', { defaultValue: 'Rejected' })}
+                </span>
+                {decision.feedback && (
+                  <span className="whitespace-pre-wrap text-muted-foreground">{decision.feedback}</span>
+                )}
+              </>
+            )}
           </CardFooter>
         )}
       </Card>

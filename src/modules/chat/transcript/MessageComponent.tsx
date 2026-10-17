@@ -17,6 +17,8 @@ import MessageSpeakControl from '@/modules/chat/transcript/MessageSpeakControl';
 import { useIsExportingTranscript } from '@/modules/chat/context/TranscriptRenderContext';
 import { MemoryCitations } from '@/modules/chat/transcript/MemoryCitations';
 import { isShellTool } from '@/modules/chat/utils/toolActivity';
+import { getChapterAnchorId, isMarkChapterTool, readChapter } from '@/modules/chat/utils/chapters';
+import ChapterDivider from '@/modules/chat/transcript/ChapterDivider';
 
 type MessageComponentProps = {
   message: ChatMessage;
@@ -48,6 +50,21 @@ type MessageComponentProps = {
 };
 
 const COPY_HIDDEN_TOOL_NAMES = new Set(['Bash', 'PowerShell', 'Edit', 'Write', 'ApplyPatch']);
+
+/**
+ * The tool input as raw text. Live rows carry it as a JSON string, rows loaded
+ * from history as an object; only serialized when raw parameters are shown, so
+ * the other modes do not pay a stringify per tool row per render.
+ */
+function readRawToolInput(toolInput: unknown, showRawParameters: boolean): string | undefined {
+  if (typeof toolInput === 'string') return toolInput;
+  if (!showRawParameters || toolInput == null) return undefined;
+  try {
+    return JSON.stringify(toolInput, null, 2);
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Rendered by chat's ChatMessagesPane and ToolGroupContainer to draw one
@@ -98,6 +115,17 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
 
   if (shouldHideThinkingMessage) {
     return null;
+  }
+
+  // A chapter is a divider, not a tool row: its title is the whole point and
+  // its result only acknowledges the call to the model.
+  if (message.isToolUse && isMarkChapterTool(message.toolName)) {
+    const chapter = readChapter(message);
+    return chapter ? (
+      <div data-message-timestamp={message.timestamp || undefined} className="chat-message px-3 sm:px-0">
+        <ChapterDivider anchorId={getChapterAnchorId(message)} title={chapter.title} summary={chapter.summary} />
+      </div>
+    ) : null;
   }
 
   return (
@@ -306,7 +334,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                       createDiff={createDiff}
                       selectedProject={selectedProject}
                       showRawParameters={showRawParameters}
-                      rawToolInput={typeof message.toolInput === 'string' ? message.toolInput : undefined}
+                      rawToolInput={readRawToolInput(message.toolInput, Boolean(showRawParameters))}
                       toolStatus={message.toolStatus}
                     />
                   </div>

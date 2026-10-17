@@ -9,7 +9,12 @@ import { BrowserUsePanel, useBrowserUseEnabled } from '@/modules/browser-use';
 import { usePaletteOpsRegister } from '@/modules/command-palette';
 import { TaskMasterPanel, useTaskMasterProjectSync, useTasksSettings } from '@/modules/task-master';
 import type { AppTab, DirectoryRevealRequest, Project, ProjectSession, SessionEstablishedContext, SessionNavigationOptions, SettingsMainTab } from '@/shared/types';
-import { useUiPreferences } from '@/shared/context/UiPreferencesContext';
+import { useSetUiPreferences, useUiPreferences } from '@/shared/context/UiPreferencesContext';
+import {
+  getTranscriptViewMode,
+  getTranscriptViewModePreferences,
+  type TranscriptViewMode,
+} from '@/shared/uiPreferences';
 import { useFileOpenResolver } from '@/modules/project-workspace/hooks/useFileOpenResolver';
 import { EditorSidebar, useEditorSidebar, useSentFilesAutoOpen } from '@/modules/code-editor';
 import WorkspaceHeader from '@/modules/project-workspace/WorkspaceHeader';
@@ -60,7 +65,15 @@ function WorkspaceMain({
   onRenameSession,
 }: WorkspaceMainProps) {
   const preferences = useUiPreferences();
-  const { showRawParameters, showThinking, sendByCtrlEnter } = preferences;
+  const setPreferences = useSetUiPreferences();
+  const { sendByCtrlEnter } = preferences;
+  // The mode is the source of truth; the two booleans the transcript reads are
+  // derived from it so a legacy "raw on, thinking off" pair cannot hide thinking in verbose.
+  const transcriptViewMode = getTranscriptViewMode(preferences);
+  const { showRawParameters, showThinking } = getTranscriptViewModePreferences(transcriptViewMode);
+  const setTranscriptViewMode = useCallback((mode: TranscriptViewMode) => {
+    setPreferences(getTranscriptViewModePreferences(mode));
+  }, [setPreferences]);
 
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const browserUseEnabled = useBrowserUseEnabled();
@@ -172,6 +185,8 @@ function WorkspaceMain({
                 onShowSettings={onShowSettings}
                 showRawParameters={showRawParameters}
                 showThinking={showThinking}
+                transcriptViewMode={transcriptViewMode}
+                onTranscriptViewModeChange={setTranscriptViewMode}
                 sendByCtrlEnter={sendByCtrlEnter}
                 externalMessageUpdate={externalMessageUpdate}
                 newSessionTrigger={newSessionTrigger}

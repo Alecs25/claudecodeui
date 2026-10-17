@@ -88,6 +88,12 @@
         "skills": "Skill"
       },
       "insertTitle": "Inserisci {{command}} nella chat"
+    },
+    "transcriptView": "Vista della conversazione",
+    "transcriptViewModes": {
+      "normal": "Normale",
+      "thinking": "Ragionamento",
+      "verbose": "Dettagliata"
     }
   },
   "terminalShortcuts": {

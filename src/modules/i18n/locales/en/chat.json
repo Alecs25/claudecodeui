@@ -102,7 +102,17 @@
   },
   "plan": {
     "viewPlan": "📋 View implementation plan",
-    "title": "Implementation Plan"
+    "title": "Implementation Plan",
+    "toggle": "Toggle plan",
+    "generating": "Generating plan...",
+    "approve": "Approve",
+    "reject": "Reject",
+    "sendRejection": "Reject and send",
+    "cancel": "Cancel",
+    "feedback": "Feedback",
+    "feedbackPlaceholder": "What should change? (optional)",
+    "approved": "Approved",
+    "rejected": "Rejected"
   },
   "usageLimit": {
     "resetAt": "Claude usage limit reached. Your limit will reset at **{{time}} {{timezone}}** - {{date}}"
@@ -455,5 +465,24 @@
     "instructions": "Instructions (optional)",
     "compact": "Compact",
     "compacting": "Compacting…"
+  },
+  "chapters": {
+    "title": "Chapters",
+    "close": "Close",
+    "loadEarlier": "Load earlier chapters"
+  },
+  "viewMode": {
+    "title": "View",
+    "normal": "Normal",
+    "thinking": "Thinking",
+    "verbose": "Verbose",
+    "normalDescription": "Tool summaries, no thinking",
+    "thinkingDescription": "Also thinking blocks",
+    "verboseDescription": "Every tool call expanded with raw input",
+    "rawParameters": "Raw parameters"
+  },
+  "questions": {
+    "title": "Questions",
+    "skipped": "Skipped"
   }
 }

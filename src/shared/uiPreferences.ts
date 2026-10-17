@@ -99,3 +99,37 @@ export function uiPreferencesReducer(
       return state;
   }
 }
+
+/**
+ * How much of the agent's work the transcript shows, cycled like Claude Code's
+ * Ctrl+O: `normal` = prose and collapsed tool summaries, `thinking` = also the
+ * reasoning blocks, `verbose` = every tool call expanded with its raw input.
+ *
+ * Stored as the two booleans it replaced (showThinking, showRawParameters) so
+ * preferences saved by older builds keep their meaning and sync unchanged.
+ */
+export type TranscriptViewMode = 'normal' | 'thinking' | 'verbose';
+
+export const TRANSCRIPT_VIEW_MODES: TranscriptViewMode[] = ['normal', 'thinking', 'verbose'];
+
+/** Raw parameters on wins: an old "raw on, thinking off" combination reads as verbose. */
+export function getTranscriptViewMode(
+  preferences: Pick<UiPreferences, 'showThinking' | 'showRawParameters'>,
+): TranscriptViewMode {
+  if (preferences.showRawParameters) return 'verbose';
+  return preferences.showThinking ? 'thinking' : 'normal';
+}
+
+export function getTranscriptViewModePreferences(
+  mode: TranscriptViewMode,
+): Pick<UiPreferences, 'showThinking' | 'showRawParameters'> {
+  return {
+    showThinking: mode !== 'normal',
+    showRawParameters: mode === 'verbose',
+  };
+}
+
+export function getNextTranscriptViewMode(mode: TranscriptViewMode): TranscriptViewMode {
+  const index = TRANSCRIPT_VIEW_MODES.indexOf(mode);
+  return TRANSCRIPT_VIEW_MODES[(index + 1) % TRANSCRIPT_VIEW_MODES.length];
+}

@@ -17,6 +17,7 @@ import type {
   SessionEstablishedContext,
   SessionNavigationOptions,
 } from '@/shared/types';
+import type { TranscriptViewMode } from '@/shared/uiPreferences';
 import { useChatProviderState } from '@/modules/chat/hooks/useChatProviderState';
 import { useScheduledMessages } from '@/modules/chat/composer/useScheduledMessages';
 import { useChatSessionState } from '@/modules/chat/hooks/useChatSessionState';
@@ -28,6 +29,7 @@ import {
   useSessionProtectionActions,
 } from '@/shared/context/SessionProtectionContext';
 import ChatMessagesPane from '@/modules/chat/transcript/ChatMessagesPane';
+import { useTranscriptViewModeShortcut } from '@/modules/chat/hooks/useTranscriptViewModeShortcut';
 import ChatComposer from '@/modules/chat/composer/ChatComposer';
 import { hasForegroundBackgroundableCall } from '@/modules/chat/utils/backgroundTasks';
 import CommandResultModal from '@/modules/chat/modals/CommandResultModal';
@@ -45,6 +47,9 @@ type ChatInterfaceProps = {
   onShowSettings?: () => void;
   showRawParameters?: boolean;
   showThinking?: boolean;
+  /** Normal / Thinking / Verbose; cycled with Ctrl+O while the chat tab is active. */
+  transcriptViewMode?: TranscriptViewMode;
+  onTranscriptViewModeChange?: (mode: TranscriptViewMode) => void;
   sendByCtrlEnter?: boolean;
   externalMessageUpdate?: number;
   newSessionTrigger?: number;
@@ -69,6 +74,8 @@ function ChatInterface({
   onShowSettings,
   showRawParameters,
   showThinking,
+  transcriptViewMode,
+  onTranscriptViewModeChange,
   sendByCtrlEnter,
   externalMessageUpdate,
   newSessionTrigger,
@@ -77,6 +84,7 @@ function ChatInterface({
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const { subscribe } = useWebSocket();
   const { t } = useTranslation('chat');
+  useTranscriptViewModeShortcut(isActive, transcriptViewMode, onTranscriptViewModeChange);
   const processingSessions = useProcessingSessions();
   const {
     markSessionProcessing: onSessionProcessing,
@@ -574,6 +582,8 @@ function ChatInterface({
               onGrantToolPermission={handleGrantToolPermission}
               showRawParameters={showRawParameters}
               showThinking={showThinking}
+              transcriptViewMode={transcriptViewMode}
+              onTranscriptViewModeChange={onTranscriptViewModeChange}
               selectedProject={selectedProject}
               // Editing replaces the turn and everything after it, so it is only
               // offered when the session is idle — a half-truncated transcript with

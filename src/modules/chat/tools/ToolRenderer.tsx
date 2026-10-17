@@ -21,6 +21,10 @@ import { parseToolPayload, summarizeDiff } from '@/modules/chat/utils/messageTra
 import { isShellTool } from '@/modules/chat/utils/toolActivity';
 import { isShowWidgetTool, readWidgetInput } from '@/modules/chat/utils/inlineWidget';
 import { InlineWidget } from '@/modules/chat/tools/InlineWidget';
+import { RawParameters } from '@/modules/chat/tools/RawParameters';
+import { QuestionSummary } from '@/modules/chat/tools/QuestionSummary';
+import { hasQuestionAnswers, readQuestions } from '@/modules/chat/utils/questionAnswers';
+import { useIsVerboseTranscript } from '@/modules/chat/context/TranscriptViewModeContext';
 
 type ToolRendererProps = {
   toolName: string;
@@ -98,6 +102,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
   // Namespaced MCP ids are unreadable as-is; every renderer gets the friendly
   // form while lookups keep using the provider's real tool name.
   const displayName = formatToolDisplayName(toolName);
+  const isVerbose = useIsVerboseTranscript();
 
   const parsedData = useMemo(
     () => parseToolPayload(mode === 'input' ? toolInput : toolResult),
@@ -127,6 +132,16 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
         ? toolInput.caption
         : null;
       return <SentFilesCard files={sentFiles} caption={caption} />;
+    }
+  }
+
+  // An answered question reads as a compact summary of the answers; the full
+  // card, with every option, stays one click away. Unanswered (still pending
+  // or skipped entirely) keeps the full card.
+  if (mode === 'input' && toolName === 'AskUserQuestion') {
+    const { questions, answers } = (parsedData && typeof parsedData === 'object' ? parsedData : {}) as { questions?: unknown; answers?: unknown };
+    if (hasQuestionAnswers(questions, answers)) {
+      return <QuestionSummary questions={readQuestions(questions)} answers={answers as Record<string, string>} />;
     }
   }
 
@@ -164,14 +179,16 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
     return (
       <>
         <BashCommandDisplay
+          key={isVerbose ? 'verbose' : 'compact'}
           command={command}
           description={description}
           output={output}
           isError={Boolean(toolResult?.isError)}
           status={toolStatus !== 'completed' ? toolStatus : undefined}
           // Commands stay collapsed by default — including failures; the status
-          // badge marks errors and the output expands via the chevron.
-          defaultOpen={false}
+          // badge marks errors and the output expands via the chevron. Verbose
+          // mode is the exception: there every call shows what it did.
+          defaultOpen={isVerbose}
         />
         <BashEditDiff
           toolUseResult={toolResult?.toolUseResult}
@@ -186,7 +203,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
     const value = displayConfig.getValue?.(parsedData) || '';
     const secondary = displayConfig.getSecondary?.(parsedData);
 
-    return (
+    const oneLine = (
       <OneLineDisplay
         toolName={displayName}
         toolResult={toolResult}
@@ -204,6 +221,17 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
         status={toolStatus !== 'completed' ? toolStatus : undefined}
       />
     );
+
+    // A one-line row has no body to hold the raw input, so it goes underneath.
+    if (mode === 'input' && showRawParameters && rawToolInput) {
+      return (
+        <div>
+          {oneLine}
+          <RawParameters content={rawToolInput} className="ml-5 mt-0.5" />
+        </div>
+      );
+    }
+    return oneLine;
   }
 
   if (displayConfig.type === 'plan') {
@@ -229,6 +257,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
         rawContent={rawToolInput}
         toolName={toolName}
         toolId={toolId}
+        toolResult={mode === 'input' ? toolResult : undefined}
       />
     );
   }

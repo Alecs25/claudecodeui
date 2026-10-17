@@ -94,7 +94,17 @@
   },
   "plan": {
     "viewPlan": "📋 Vedi piano di implementazione",
-    "title": "Piano di implementazione"
+    "title": "Piano di implementazione",
+    "toggle": "Mostra o nascondi piano",
+    "generating": "Generazione del piano...",
+    "approve": "Approva",
+    "reject": "Rifiuta",
+    "sendRejection": "Rifiuta e invia",
+    "cancel": "Annulla",
+    "feedback": "Commento",
+    "feedbackPlaceholder": "Cosa va cambiato? (facoltativo)",
+    "approved": "Approvato",
+    "rejected": "Rifiutato"
   },
   "usageLimit": {
     "resetAt": "Limite di utilizzo Claude raggiunto. Il tuo limite verrà ripristinato alle **{{time}} {{timezone}}** - {{date}}"
@@ -341,5 +351,24 @@
     "instructions": "Istruzioni (facoltative)",
     "compact": "Compatta",
     "compacting": "Compattazione…"
+  },
+  "chapters": {
+    "title": "Capitoli",
+    "close": "Chiudi",
+    "loadEarlier": "Carica capitoli precedenti"
+  },
+  "viewMode": {
+    "title": "Vista",
+    "normal": "Normale",
+    "thinking": "Ragionamento",
+    "verbose": "Dettagliata",
+    "normalDescription": "Riepiloghi degli strumenti, senza ragionamento",
+    "thinkingDescription": "Anche i blocchi di ragionamento",
+    "verboseDescription": "Ogni chiamata aperta con i parametri grezzi",
+    "rawParameters": "Parametri grezzi"
+  },
+  "questions": {
+    "title": "Domande",
+    "skipped": "Saltata"
   }
 }
