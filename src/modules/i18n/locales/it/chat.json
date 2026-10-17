@@ -97,6 +97,9 @@
       "task": "Attività"
     }
   },
+  "toolStatus": {
+    "denied": "Negato"
+  },
   "todo": {
     "updated": "Lista attività aggiornata con successo",
     "current": "Lista attività corrente"

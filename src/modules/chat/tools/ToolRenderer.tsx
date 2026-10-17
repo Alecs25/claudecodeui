@@ -21,6 +21,8 @@ import { parseToolPayload, summarizeDiff } from '@/modules/chat/utils/messageTra
 import { isShellTool } from '@/modules/chat/utils/toolActivity';
 import { isShowWidgetTool, readWidgetInput } from '@/modules/chat/utils/inlineWidget';
 import { InlineWidget } from '@/modules/chat/tools/InlineWidget';
+import { readToolDenial } from '@/modules/chat/utils/toolDenial';
+import { i18n } from '@/modules/i18n';
 
 type ToolRendererProps = {
   toolName: string;
@@ -49,13 +51,10 @@ function getToolCategory(toolName: string): string {
   return 'default';
 }
 
-// Exact denial messages from the Claude runtime adapter — other providers can't reliably signal denial
-const CLAUDE_DENIAL_MESSAGES = [
-  'user denied tool use',
-  'tool disallowed by settings',
-  'permission request timed out',
-  'permission request cancelled',
-];
+/** The composer's Deny message in the language it was sent in, which the fixed refusal texts cannot list. */
+export function localizedDenyMarkers(): string[] {
+  return [i18n.t('chat:misc.userDeniedTool')];
+}
 
 function deriveToolStatus(toolResult: any, reportedStatus?: string): ToolStatus {
   // Codex reports a command's lifecycle directly, so a row can show as running
@@ -64,11 +63,7 @@ function deriveToolStatus(toolResult: any, reportedStatus?: string): ToolStatus 
   if (reportedStatus === 'failed') return 'error';
   if (!toolResult) return 'running';
   if (toolResult.isError) {
-    const content = String(toolResult.content || '').toLowerCase().trim();
-    if (CLAUDE_DENIAL_MESSAGES.some((msg) => content.includes(msg))) {
-      return 'denied';
-    }
-    return 'error';
+    return readToolDenial(toolResult, localizedDenyMarkers()) ? 'denied' : 'error';
   }
   return 'completed';
 }
@@ -156,11 +151,16 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
     const description = typeof parsedData === 'object' && parsedData !== null && 'description' in parsedData
       ? String(parsedData.description || '')
       : undefined;
-    const output = typeof toolResult?.content === 'string'
-      ? toolResult.content
-      : toolResult?.content != null
-        ? String(toolResult.content)
-        : '';
+    // A refused command never ran: its "output" is the refusal, shown as the
+    // reason it gave rather than the instructions the CLI wrote for the model.
+    const denial = toolStatus === 'denied' ? readToolDenial(toolResult, localizedDenyMarkers()) : null;
+    const output = denial
+      ? denial.reason ?? i18n.t('chat:misc.userDeniedTool')
+      : typeof toolResult?.content === 'string'
+        ? toolResult.content
+        : toolResult?.content != null
+          ? String(toolResult.content)
+          : '';
     return (
       <>
         <BashCommandDisplay

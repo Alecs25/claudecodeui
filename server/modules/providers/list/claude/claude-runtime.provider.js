@@ -1425,11 +1425,12 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
           return { behavior: 'allow', updatedInput: input };
         }
 
-        const isDisallowed = (sdkOptions.disallowedTools || []).some(entry =>
+        const disallowedBy = (sdkOptions.disallowedTools || []).find(entry =>
           matchesToolPermission(entry, toolName, input)
         );
-        if (isDisallowed) {
-          return { behavior: 'deny', message: 'Tool disallowed by settings' };
+        if (disallowedBy) {
+          // The rule is the reason the transcript shows on the refused call.
+          return { behavior: 'deny', message: `Tool disallowed by settings (${disallowedBy})` };
         }
 
         const isAllowed = (sdkOptions.allowedTools || []).some(entry =>

@@ -105,6 +105,9 @@
       "task": "Task"
     }
   },
+  "toolStatus": {
+    "denied": "Denied"
+  },
   "todo": {
     "updated": "Todo list has been updated successfully",
     "current": "Current Todo List"
