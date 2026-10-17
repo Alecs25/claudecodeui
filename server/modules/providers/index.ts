@@ -10,5 +10,9 @@ export { providerModelsService } from './services/provider-models.service.js';
 // edited message's resume point, which only the providers module can read.
 export { sessionsService } from './services/sessions.service.js';
 
+// Session status request parsing: shared with the websocket module's tests,
+// which check the status flow end to end.
+export { parseRecentSessionsStatus, parseSessionStatusPatch } from './provider.routes.js';
+
 export { initializeSessionsWatcher } from './services/sessions-watcher.service.js';
 export { closeSessionsWatcher } from './services/sessions-watcher.service.js';

@@ -5,8 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
-import { parseRecentSessionsStatus, parseSessionStatusPatch } from '@/modules/providers/provider.routes.js';
-import { sessionsService } from '@/modules/providers/services/sessions.service.js';
+import { parseRecentSessionsStatus, parseSessionStatusPatch, sessionsService } from '@/modules/providers/index.js';
 import { sessionRunStatus } from '@/modules/websocket/services/session-run-status.service.js';
 import { viewerPresence } from '@/modules/websocket/services/viewer-presence.service.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
