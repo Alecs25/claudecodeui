@@ -286,9 +286,9 @@ describe('the background tasks strip', () => {
     stops.forEach((stop) => fireEvent.click(stop));
 
     expect(sendMessage.mock.calls.map(([frame]) => frame)).toEqual([
-      { type: 'chat.stop-task', sessionId: 'session-1', taskId: 'wxkj4kcvd' },
-      { type: 'chat.stop-task', sessionId: 'session-1', taskId: 'a1' },
-      { type: 'chat.stop-task', sessionId: 'session-1', taskId: 'b5xsbzu5k' },
+      { type: 'chat.stop-task', sessionId: 'session-1', taskId: 'wxkj4kcvd', toolUseId: 'toolu_workflow_1' },
+      { type: 'chat.stop-task', sessionId: 'session-1', taskId: 'a1', toolUseId: 'toolu_agent_1' },
+      { type: 'chat.stop-task', sessionId: 'session-1', taskId: 'b5xsbzu5k', toolUseId: 'toolu_bash_1' },
     ]);
   });
 });
@@ -322,7 +322,7 @@ describe('the background tasks strip, for a task whose launch row is not loaded'
     fireEvent.click(chips[0]!);
     expect(onLoadAll).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
-    expect(sendMessage).toHaveBeenCalledWith({ type: 'chat.stop-task', sessionId: 'session-1', taskId: 'wxkj4kcvd' });
+    expect(sendMessage).toHaveBeenCalledWith({ type: 'chat.stop-task', sessionId: 'session-1', taskId: 'wxkj4kcvd', toolUseId: 'toolu_workflow_1' });
   });
 
   it('defers to the loaded row once the transcript has it, settled or not', () => {
@@ -371,7 +371,7 @@ describe('the background tasks strip, for tasks only the activity map has a word
 
     expect(screen.getAllByRole('button').map((chip) => chip.textContent)).toEqual(['Commandnpm test', '']);
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
-    expect(sendMessage).toHaveBeenCalledWith({ type: 'chat.stop-task', sessionId: 'session-1', taskId: 'b5xsbzu5k' });
+    expect(sendMessage).toHaveBeenCalledWith({ type: 'chat.stop-task', sessionId: 'session-1', taskId: 'b5xsbzu5k', toolUseId: 'toolu_bash_1' });
   });
 
   it('draws a task one of the session\'s agents launched without offering to load a row it has none of', () => {

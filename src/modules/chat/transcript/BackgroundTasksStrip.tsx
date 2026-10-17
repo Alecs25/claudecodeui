@@ -143,7 +143,7 @@ export const BackgroundTasksStrip = memo(({ messages, tasks, sessionId, sendMess
             {sessionId && taskId && (
               <button
                 type="button"
-                onClick={() => sendMessage({ type: 'chat.stop-task', sessionId, taskId })}
+                onClick={() => sendMessage({ type: 'chat.stop-task', sessionId, taskId, toolUseId: message.toolId })}
                 aria-label={t('workflow.stopTask', 'Stop')}
                 title={t('workflow.stopTask', 'Stop')}
                 className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-muted-foreground/60 hover:bg-muted hover:text-destructive"
@@ -192,7 +192,7 @@ export const BackgroundTasksStrip = memo(({ messages, tasks, sessionId, sendMess
             {sessionId && (
               <button
                 type="button"
-                onClick={() => sendMessage({ type: 'chat.stop-task', sessionId, taskId: task.taskId })}
+                onClick={() => sendMessage({ type: 'chat.stop-task', sessionId, taskId: task.taskId, toolUseId: task.toolUseId })}
                 aria-label={t('workflow.stopTask', 'Stop')}
                 title={t('workflow.stopTask', 'Stop')}
                 className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded text-muted-foreground/60 hover:bg-muted hover:text-destructive"

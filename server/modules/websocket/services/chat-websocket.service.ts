@@ -129,13 +129,15 @@ function sendProtocolError(
   ws: WebSocket,
   code: string,
   error: string,
-  sessionId?: string
+  sessionId?: string,
+  details: AnyRecord = {}
 ): void {
   sendJson(ws, {
     kind: 'protocol_error',
     code,
     error,
     sessionId: sessionId ?? null,
+    ...details,
     timestamp: new Date().toISOString(),
   });
 }
@@ -481,11 +483,16 @@ async function handleChatStopTask(
     taskId,
   );
   if (!stopped) {
+    // Echo the task back: a launch row from history whose process is gone
+    // (a server restart, a desktop-app session) never gets its settle event,
+    // so the client marks it settled itself instead of listing it forever.
+    const toolUseId = typeof data.toolUseId === 'string' ? data.toolUseId : undefined;
     sendProtocolError(
       ws,
       'NO_SUCH_TASK',
       `Session "${sessionId}" has no running background task "${taskId}".`,
       sessionId,
+      { taskId, ...(toolUseId ? { toolUseId } : {}) },
     );
   }
 }
@@ -584,7 +591,7 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
  * Inbound protocol (client to server):
  * - `chat.send`                { sessionId, content, options? }
  * - `chat.abort`               { sessionId }
- * - `chat.stop-task`           { sessionId, taskId }
+ * - `chat.stop-task`           { sessionId, taskId, toolUseId? }
  * - `chat.subscribe`           { sessions: [{ sessionId, lastSeq? }] }
  * - `chat.permission-response` { requestId, allow, updatedInput?, message?, rememberEntry? }
  *

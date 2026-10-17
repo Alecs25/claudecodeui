@@ -68,7 +68,7 @@ const renderHandlers = () => {
   }));
 
   const dispatch = (event: ServerEvent) => listener?.(event);
-  return { dispatch, log, syncs };
+  return { dispatch, log, syncs, stored };
 };
 
 const event = (fields: Record<string, unknown>): ServerEvent => ({
@@ -194,4 +194,18 @@ test('a refused stop request does not idle the session it was sent on', () => {
   // Any other rejection still means the send never became a run.
   dispatch(event({ kind: 'protocol_error', code: 'SESSION_NOT_FOUND', error: 'gone' }));
   assert.deepEqual(log, [{ sessionId: 'viewed-session', idle: true }]);
+});
+
+test('a stop refused because nothing runs under that task settles its chip instead of reporting an error', () => {
+  // A launch row from history whose process is gone (a server restart, a
+  // session run in the desktop app) never got its settle event.
+  const { dispatch, stored } = renderHandlers();
+
+  dispatch(event({ kind: 'protocol_error', code: 'NO_SUCH_TASK', error: 'no such task', taskId: 'b5xsbzu5k', toolUseId: 'toolu_bash_1' }));
+
+  assert.equal(stored.some((message) => message.kind === 'error'), false);
+  const settle = stored.find((message) => message.kind === 'task_status');
+  assert.equal(settle?.status, 'stopped');
+  assert.equal(settle?.toolUseId, 'toolu_bash_1');
+  assert.equal(settle?.taskId, 'b5xsbzu5k');
 });

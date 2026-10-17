@@ -95,7 +95,7 @@ test('chat.stop-task stops the task through the session\'s provider runtime', as
 
 test('a task the runtime is not tracking is refused with NO_SUCH_TASK', async () => {
   await withGateway('task-1', async ({ socket, stops }) => {
-    socket.emit('message', JSON.stringify({ type: 'chat.stop-task', sessionId: SESSION_ID, taskId: 'already-settled' }));
+    socket.emit('message', JSON.stringify({ type: 'chat.stop-task', sessionId: SESSION_ID, taskId: 'already-settled', toolUseId: 'toolu_1' }));
     await settle();
 
     assert.equal(stops.length, 1);
@@ -103,6 +103,9 @@ test('a task the runtime is not tracking is refused with NO_SUCH_TASK', async ()
     assert.equal(socket.frames[0].kind, 'protocol_error');
     assert.equal(socket.frames[0].code, 'NO_SUCH_TASK');
     assert.equal(socket.frames[0].sessionId, SESSION_ID);
+    // Echoed so the client can settle a chip whose process is gone.
+    assert.equal(socket.frames[0].taskId, 'already-settled');
+    assert.equal(socket.frames[0].toolUseId, 'toolu_1');
   });
 });
 

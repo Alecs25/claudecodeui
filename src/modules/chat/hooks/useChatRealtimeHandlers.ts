@@ -185,6 +185,28 @@ export function useChatRealtimeHandlers({
         }
 
         case 'protocol_error': {
+          if (sid && msg.code === 'NO_SUCH_TASK') {
+            // Nothing runs under that id any more: its process ended without
+            // reporting (a restart, a session from the desktop app), so its
+            // chip would stay forever. Settle it instead of reporting an error.
+            if (msg.toolUseId || msg.taskId) {
+              sessionStore.appendRealtime(sid, {
+                id: `task_gone_${msg.taskId ?? msg.toolUseId}_${Date.now()}`,
+                sessionId: sid,
+                timestamp: new Date().toISOString(),
+                provider,
+                kind: 'task_status',
+                event: 'updated',
+                status: 'stopped',
+                ...(msg.taskId ? { taskId: msg.taskId } : {}),
+                ...(msg.toolUseId ? { toolUseId: msg.toolUseId } : {}),
+              } as NormalizedMessage);
+              if (getSessionActivity?.(sid)?.background) {
+                reportRemainingBackgroundWork(sid);
+              }
+            }
+            return;
+          }
           console.error('[Chat] Protocol error:', msg.code, msg.error);
           if (sid) {
             // Surface the failure in the conversation and stop the spinner —
