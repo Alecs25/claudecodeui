@@ -16,8 +16,43 @@ type SessionRow = {
   /** The app session this one was branched from; NULL unless it is a fork. */
   forked_from_session_id: string | null;
   isArchived: number;
+  /** Kept at the top of its project and of the recent list. */
+  isPinned: number;
+  /** A run finished while nobody was viewing the session; cleared when it is opened. */
+  isUnread: number;
+  /** Marked done by the user; cleared by the next run. */
+  isCompleted: number;
   created_at: string;
   updated_at: string;
+};
+
+/**
+ * Narrows the recent feed to one sidebar status. `running` carries the ids of
+ * the sessions with a live run, which only the run registry knows.
+ */
+type RecentSessionsFilter =
+  | { status: 'pinned' | 'unread' | 'completed' }
+  | { status: 'running'; sessionIds: string[] };
+
+/** The sidebar status flags a caller may change; omitted keys stay as they are. */
+type SessionStatusPatch = {
+  isPinned?: boolean;
+  isUnread?: boolean;
+  isCompleted?: boolean;
+};
+
+// Column names are interpolated into SQL, so they come from this fixed map and
+// never from caller input.
+const SESSION_STATUS_COLUMNS: Record<keyof SessionStatusPatch, string> = {
+  isPinned: 'isPinned',
+  isUnread: 'isUnread',
+  isCompleted: 'isCompleted',
+};
+
+const RECENT_FILTER_COLUMNS: Record<'pinned' | 'unread' | 'completed', keyof SessionStatusPatch> = {
+  pinned: 'isPinned',
+  unread: 'isUnread',
+  completed: 'isCompleted',
 };
 
 type RecentSessionsPage = {
@@ -26,7 +61,7 @@ type RecentSessionsPage = {
 };
 
 const SESSION_ROW_COLUMNS =
-  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, model, effort, forked_from_session_id, isArchived, created_at, updated_at';
+  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, model, effort, forked_from_session_id, isArchived, isPinned, isUnread, isCompleted, created_at, updated_at';
 
 const SQLITE_UTC_TIMESTAMP_REGEX = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 
@@ -439,6 +474,26 @@ export const sessionsDb = {
     ).run(effort, sessionId);
   },
 
+  /**
+   * Writes the sidebar status flags given in `patch` and returns the row as it
+   * stands afterwards, or null when the session does not exist. `updated_at`
+   * is left alone: pinning or reading a session is not activity, and bumping it
+   * would reorder the recent list.
+   */
+  updateSessionStatus(sessionId: string, patch: SessionStatusPatch): SessionRow | null {
+    const keys = (Object.keys(SESSION_STATUS_COLUMNS) as Array<keyof SessionStatusPatch>)
+      .filter((key) => typeof patch[key] === 'boolean');
+    if (keys.length > 0) {
+      const db = getConnection();
+      db.prepare(
+        `UPDATE sessions
+         SET ${keys.map((key) => `${SESSION_STATUS_COLUMNS[key]} = ?`).join(', ')}
+         WHERE session_id = ?`
+      ).run(...keys.map((key) => (patch[key] ? 1 : 0)), sessionId);
+    }
+    return sessionsDb.getSessionById(sessionId);
+  },
+
   updateSessionCustomName(sessionId: string, customName: string): void {
     const db = getConnection();
     db.prepare(
@@ -543,11 +598,27 @@ export const sessionsDb = {
    * and correctly ordered across projects instead of flattening only the
    * per-project slices already loaded by the client.
    */
-  getRecentSessionsPage(limit: number, offset: number): RecentSessionsPage {
+  getRecentSessionsPage(
+    limit: number,
+    offset: number,
+    filter: RecentSessionsFilter | null = null,
+  ): RecentSessionsPage {
     const db = getConnection();
+    const filterParams: string[] = [];
+    let filterClause = '';
+    if (filter?.status === 'running') {
+      // No live run means an empty page, not an unfiltered one.
+      filterClause = filter.sessionIds.length > 0
+        ? `AND sessions.session_id IN (${filter.sessionIds.map(() => '?').join(', ')})`
+        : 'AND 0';
+      filterParams.push(...filter.sessionIds);
+    } else if (filter) {
+      filterClause = `AND sessions.${SESSION_STATUS_COLUMNS[RECENT_FILTER_COLUMNS[filter.status]]} = 1`;
+    }
     const visibilityClause = `
       sessions.isArchived = 0
       AND (projects.isArchived IS NULL OR projects.isArchived = 0)
+      ${filterClause}
     `;
     const rows = db
       .prepare(
@@ -555,11 +626,12 @@ export const sessionsDb = {
          FROM sessions
          LEFT JOIN projects ON projects.project_path = sessions.project_path
          WHERE ${visibilityClause}
-         ORDER BY julianday(COALESCE(sessions.updated_at, sessions.created_at)) DESC,
+         ORDER BY COALESCE(sessions.isPinned, 0) DESC,
+                  julianday(COALESCE(sessions.updated_at, sessions.created_at)) DESC,
                   sessions.session_id DESC
          LIMIT ? OFFSET ?`
       )
-      .all(limit, offset) as SessionRow[];
+      .all(...filterParams, limit, offset) as SessionRow[];
     const countRow = db
       .prepare(
         `SELECT COUNT(*) AS count
@@ -567,7 +639,7 @@ export const sessionsDb = {
          LEFT JOIN projects ON projects.project_path = sessions.project_path
          WHERE ${visibilityClause}`
       )
-      .get() as { count: number } | undefined;
+      .get(...filterParams) as { count: number } | undefined;
 
     return {
       sessions: normalizeSessionRows(rows),
@@ -635,7 +707,10 @@ export const sessionsDb = {
          FROM sessions
          WHERE project_path = ?
            AND isArchived = 0
-         ORDER BY datetime(COALESCE(updated_at, created_at)) DESC, session_id DESC
+         ORDER BY COALESCE(isPinned, 0) DESC,
+                  COALESCE(isCompleted, 0) ASC,
+                  datetime(COALESCE(updated_at, created_at)) DESC,
+                  session_id DESC
          LIMIT ? OFFSET ?`
       )
       .all(normalizedProjectPath, limit, offset) as SessionRow[];

@@ -7,7 +7,8 @@ import type { ServerEvent,
   LLMProvider,
   LoadingProgress,
   Project,
-  ProjectSession,IsSessionProcessing } from '@/shared/types';
+  ProjectSession,IsSessionProcessing,
+  SessionStatusFlags } from '@/shared/types';
 import { mergeProjectSelectionMetadata } from '@/modules/project-workspace/utils/projectSelectionMetadata';
 import { readSelectedProvider } from '@/shared/selectedProvider';
 
@@ -361,6 +362,49 @@ const renameSessionInProject = (project: Project, sessionIdToRename: string, sum
   return { ...project, sessions: nextSessions };
 };
 
+/** The `session_status` frame: one session's full flag set after a change. */
+type SessionStatusEvent = ServerEvent & SessionStatusFlags & { sessionId: string };
+
+/**
+ * Writes a session's status flags onto its sidebar row. Returns the same
+ * project when it holds no such row or the row already carries those flags, so
+ * a status change does not re-render untouched projects.
+ */
+export const applySessionStatusToProject = (
+  project: Project,
+  sessionIdToUpdate: string,
+  flags: SessionStatusFlags,
+): Project => {
+  const sessions = project.sessions ?? [];
+  const existingIndex = sessions.findIndex((session) => session.id === sessionIdToUpdate);
+  if (existingIndex < 0) {
+    return project;
+  }
+  const current = sessions[existingIndex];
+  if (
+    Boolean(current.isPinned) === flags.isPinned
+    && Boolean(current.isUnread) === flags.isUnread
+    && Boolean(current.isCompleted) === flags.isCompleted
+  ) {
+    return project;
+  }
+
+  const nextSessions = [...sessions];
+  nextSessions[existingIndex] = {
+    ...current,
+    isPinned: flags.isPinned,
+    isUnread: flags.isUnread,
+    isCompleted: flags.isCompleted,
+  };
+  return { ...project, sessions: nextSessions };
+};
+
+/** The session shown in the second pane of split view, with the project it belongs to. */
+type SplitSessionState = {
+  session: ProjectSession;
+  project: Project;
+};
+
 const VALID_TABS: Set<string> = new Set(['chat', 'files', 'shell', 'git', 'tasks', 'browser']);
 
 const isValidTab = (tab: string): tab is AppTab => {
@@ -390,6 +434,7 @@ export function useProjectsState({
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [selectedSession, setSelectedSession] = useState<ProjectSession | null>(null);
   const [attentionSessionIds, setAttentionSessionIds] = useState<Set<string>>(new Set());
+  const [splitSession, setSplitSession] = useState<SplitSessionState | null>(null);
   const [activeTab, setActiveTab] = useState<AppTab>(readPersistedTab);
 
   useEffect(() => {
@@ -453,6 +498,8 @@ export function useProjectsState({
   selectedProjectRef.current = selectedProject;
   const projectsRef = useRef(projects);
   projectsRef.current = projects;
+  const splitSessionIdRef = useRef<string | null>(null);
+  splitSessionIdRef.current = splitSession?.session.id ?? null;
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
   /** URL session id whose backend lookup already ran (or is in flight) — one attempt per id. */
@@ -477,7 +524,7 @@ export function useProjectsState({
     }
 
     const viewedSessionId = selectedSessionRef.current?.id ?? sessionId ?? null;
-    if (targetSessionId === viewedSessionId) {
+    if (targetSessionId === viewedSessionId || targetSessionId === splitSessionIdRef.current) {
       return;
     }
 
@@ -761,6 +808,7 @@ export function useProjectsState({
         && event.kind !== 'chat_subscribed'
         && event.kind !== 'loading_progress'
         && event.kind !== 'session_upserted'
+        && event.kind !== 'session_status'
         && event.kind !== 'status'
         && event.kind !== 'stream_end'
         && event.kind !== 'permission_resolved'
@@ -768,6 +816,25 @@ export function useProjectsState({
         && event.kind !== 'websocket_reconnected'
       ) {
         markSessionAttention(eventSessionId);
+      }
+
+      if (event.kind === 'session_status') {
+        const statusEvent = event as SessionStatusEvent;
+        const flags: SessionStatusFlags = {
+          isPinned: Boolean(statusEvent.isPinned),
+          isUnread: Boolean(statusEvent.isUnread),
+          isCompleted: Boolean(statusEvent.isCompleted),
+        };
+        setProjects((previousProjects) => {
+          let changed = false;
+          const nextProjects = previousProjects.map((project) => {
+            const updated = applySessionStatusToProject(project, statusEvent.sessionId, flags);
+            changed = changed || updated !== project;
+            return updated;
+          });
+          return changed ? nextProjects : previousProjects;
+        });
+        return;
       }
 
       if (event.kind !== 'session_upserted') {
@@ -1059,6 +1126,64 @@ export function useProjectsState({
     [activeTab, clearSessionAttention, isMobile, navigate, selectedProject?.projectId],
   );
 
+  /**
+   * Opens a session in the second pane of split view. The session already in
+   * the main pane is not duplicated there: opening it is a no-op.
+   */
+  const openSplitSession = useCallback((session: ProjectSession) => {
+    if (session.id === selectedSessionRef.current?.id) {
+      return;
+    }
+    const owningProject = projectsRef.current.find((candidate) => candidate.projectId === session.__projectId)
+      ?? projectsRef.current.find((candidate) => (candidate.sessions ?? []).some((row) => row.id === session.id));
+    if (!owningProject) {
+      return;
+    }
+    clearSessionAttention(session.id);
+    setSplitSession({ session: normalizeSessionProvider(session), project: owningProject });
+    setActiveTab('chat');
+  }, [clearSessionAttention]);
+
+  const closeSplitSession = useCallback(() => {
+    setSplitSession(null);
+  }, []);
+
+  // The pane follows the sidebar row, so a rename or a status change shows in
+  // its header too. Same row object, same value: the chat pane is memoized.
+  const splitSessionRow = useMemo(() => {
+    if (!splitSession) {
+      return null;
+    }
+    for (const project of projects) {
+      const row = project.sessions?.find((session) => session.id === splitSession.session.id);
+      if (row) {
+        return { row, project };
+      }
+    }
+    return null;
+  }, [projects, splitSession]);
+
+  const resolvedSplitSession = useMemo<SplitSessionState | null>(() => {
+    if (!splitSession) {
+      return null;
+    }
+    if (!splitSessionRow) {
+      return splitSession;
+    }
+    return {
+      session: splitSessionRow.row.__provider ? splitSessionRow.row : normalizeSessionProvider(splitSessionRow.row),
+      project: splitSessionRow.project,
+    };
+  }, [splitSession, splitSessionRow]);
+
+  // Selecting the split pane's session in the main pane would show it twice.
+  useEffect(() => {
+    const viewedSessionId = selectedSession?.id ?? sessionId ?? null;
+    if (viewedSessionId && splitSession?.session.id === viewedSessionId) {
+      setSplitSession(null);
+    }
+  }, [selectedSession?.id, sessionId, splitSession?.session.id]);
+
   const handleNewSession = useCallback(
     (project: Project) => {
       setSelectedProject(project);
@@ -1260,6 +1385,7 @@ export function useProjectsState({
       onSessionDelete: handleSessionDelete,
       onLoadMoreSessions: loadMoreProjectSessions,
       onProjectDelete: handleProjectDelete,
+      onOpenInSplitView: isMobile ? undefined : openSplitSession,
       isLoading: isLoadingProjects,
       loadingProgress,
       onRefresh: handleSidebarRefresh,
@@ -1281,6 +1407,7 @@ export function useProjectsState({
       isLoadingProjects,
       isMobile,
       loadingProgress,
+      openSplitSession,
       projects,
       settingsInitialTab,
       selectedProject,
@@ -1309,6 +1436,11 @@ export function useProjectsState({
     refreshProjectsSilently,
     registerOptimisticSession,
     sidebarSharedProps,
+    // Dropped below the split breakpoint, so a narrow window never keeps a
+    // second pane it has no room to show.
+    splitSession: isMobile ? null : resolvedSplitSession,
+    openSplitSession,
+    closeSplitSession,
     handleProjectSelect,
     handleSessionSelect,
     handleNewSession,

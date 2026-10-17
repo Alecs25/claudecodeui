@@ -98,6 +98,10 @@ export type ProjectSession = {
   messageCount?: number;
   provider?: LLMProvider;
   __provider?: LLMProvider;
+  /** Sidebar status flags kept by the server; see SessionStatusFlags. */
+  isPinned?: boolean;
+  isUnread?: boolean;
+  isCompleted?: boolean;
   // Tags the session with the owning project's DB `projectId` so UI handlers
   // (session switching, sidebar focus, etc.) can match against selectedProject.
   __projectId?: string;
@@ -1548,6 +1552,10 @@ export type SessionRowActions = {
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
   /** Branches a session into an independent one. Rows hide it for providers that cannot. */
   onForkSession?: (session: SessionWithProvider) => void;
+  /** Pins, marks read/unread or completed one session. */
+  onSetSessionStatus: (sessionId: string, patch: SessionStatusPatch) => void;
+  /** Opens a session in the second pane; absent where split view is unavailable (narrow screens). */
+  onOpenInSplitView?: (session: SessionWithProvider) => void;
 };
 
 export type SidebarProjectListProps = SessionRowActions & {
@@ -1627,11 +1635,29 @@ export type ArchivedSessionListItem = {
   isProjectArchived: boolean;
 };
 
-/** The subset of archived-session fields needed to render a recent-conversations row and reopen the session it points at. */
+/**
+ * A session's sidebar status as the server keeps it: pinned to the top, a run
+ * finished while nobody was looking (cleared when it is opened), or marked done
+ * by the user (cleared by the next run). Carried by session payloads and by the
+ * `session_status` realtime frame.
+ */
+export type SessionStatusFlags = {
+  isPinned: boolean;
+  isUnread: boolean;
+  isCompleted: boolean;
+};
+
+/** A change to some of a session's status flags; omitted flags stay as they are. */
+export type SessionStatusPatch = Partial<SessionStatusFlags>;
+
+/** The status the Conversations list is narrowed to; `all` shows every conversation. */
+export type SessionStatusFilter = 'all' | 'running' | 'unread' | 'pinned' | 'completed';
+
+/** The subset of archived-session fields needed to render a recent-conversations row and reopen the session it points at, plus its status flags. */
 export type RecentConversationListItem = Pick<
   ArchivedSessionListItem,
   'sessionId' | 'provider' | 'projectId' | 'projectDisplayName' | 'sessionTitle' | 'lastActivity'
->;
+> & Partial<SessionStatusFlags>;
 
 /**
  * The rename the sidebar currently has open, if any.

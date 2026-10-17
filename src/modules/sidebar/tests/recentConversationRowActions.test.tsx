@@ -52,6 +52,7 @@ const makeActions = (overrides: Partial<SessionRowActions> = {}): SessionRowActi
   onCancelEditingSession: noop,
   onSaveEditingSession: noop,
   onDeleteSession: noop,
+  onSetSessionStatus: noop,
   ...overrides,
 });
 
@@ -66,6 +67,8 @@ const renderList = (
     isLoading={false}
     isLoadingMore={false}
     hasError={false}
+    statusFilter="all"
+    onStatusFilterChange={noop}
     selectedSession={null}
     currentTime={NOW}
     sessionActions={sessionActions}

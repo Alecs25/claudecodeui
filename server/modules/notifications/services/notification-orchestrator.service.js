@@ -17,6 +17,23 @@ const PROVIDER_LABELS = {
 };
 
 const recentEventKeys = new Map();
+
+/**
+ * Answers whether a visible tab is showing a session right now. Installed by
+ * the server entrypoint from the websocket module's viewer presence; until
+ * then nothing counts as viewed, so notifications behave as they always did.
+ */
+let isSessionViewed = () => false;
+
+function setSessionViewedCheck(check) {
+  isSessionViewed = typeof check === 'function' ? check : () => false;
+}
+
+// A finished run the user just watched needs no notification. Only completion
+// kinds are suppressed: an approval request or an error still notifies.
+function isWatchedCompletion(event, userId) {
+  return event.kind === 'stop' && Boolean(event.sessionId) && isSessionViewed(event.sessionId, userId);
+}
 const DEDUPE_WINDOW_MS = 20000;
 
 const cleanupOldEventKeys = () => {
@@ -232,6 +249,9 @@ function notifyUserIfEnabled({ userId, event }) {
   if (!isNotificationEventEnabled(preferences, normalizedEvent)) {
     return;
   }
+  if (isWatchedCompletion(normalizedEvent, userId)) {
+    return;
+  }
   if (isDuplicate(normalizedEvent)) {
     return;
   }
@@ -301,6 +321,7 @@ function notifyRunFailed({ userId, provider, sessionId = null, error, sessionNam
 }
 
 export {
+  setSessionViewedCheck,
   buildNotificationPayload,
   createNotificationEvent,
   notifyUserIfEnabled,

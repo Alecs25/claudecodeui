@@ -49,6 +49,9 @@ async function buildSessionUpsertedEvent(
       summary: row.custom_name || '',
       messageCount: 0,
       lastActivity: row.updated_at ?? row.created_at ?? new Date().toISOString(),
+      isPinned: Boolean(row.isPinned),
+      isUnread: Boolean(row.isUnread),
+      isCompleted: Boolean(row.isCompleted),
     },
     project: project
       ? {

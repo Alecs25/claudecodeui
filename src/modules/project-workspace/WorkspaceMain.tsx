@@ -20,6 +20,7 @@ import { EditorSidebar, useEditorSidebar, useSentFilesAutoOpen } from '@/modules
 import WorkspaceHeader from '@/modules/project-workspace/WorkspaceHeader';
 import WorkspaceStateView from '@/modules/project-workspace/WorkspaceStateView';
 import WorkspaceErrorBoundary from '@/modules/project-workspace/WorkspaceErrorBoundary';
+import SplitSessionPane from '@/modules/project-workspace/SplitSessionPane';
 
 type WorkspaceMainProps = {
   selectedProject: Project | null;
@@ -42,6 +43,9 @@ type WorkspaceMainProps = {
   onProjectsRefresh: () => void;
   /** Persists a new title for a session; resolves false when the backend refuses it. Used by the header's inline rename. */
   onRenameSession: (sessionId: string, summary: string) => Promise<boolean>;
+  /** The session shown beside the main chat in split view, or null for a single pane. */
+  splitSession: { session: ProjectSession; project: Project } | null;
+  onCloseSplitSession: () => void;
 };
 
 /** Rendered by ProjectMainRegion to show the selected project's active tab: chat, files, shell, git, tasks, browser or a plugin. */
@@ -63,6 +67,8 @@ function WorkspaceMain({
   onProjectSelect,
   onProjectsRefresh,
   onRenameSession,
+  splitSession,
+  onCloseSplitSession,
 }: WorkspaceMainProps) {
   const preferences = useUiPreferences();
   const setPreferences = useSetUiPreferences();
@@ -171,7 +177,8 @@ function WorkspaceMain({
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div className={`flex min-h-0 min-w-[200px] flex-col overflow-hidden ${editorExpanded ? 'hidden' : ''} flex-1`}>
-          <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
+          <div className={`h-full ${activeTab === 'chat' ? 'flex' : 'hidden'}`}>
+            <div className="h-full min-w-0 flex-1">
             <WorkspaceErrorBoundary showDetails>
               <ChatInterface
                 isActive={activeTab === 'chat'}
@@ -193,6 +200,27 @@ function WorkspaceMain({
                 onShowAllTasks={tasksEnabled ? showAllTasks : null}
               />
             </WorkspaceErrorBoundary>
+            </div>
+            {splitSession && (
+              <SplitSessionPane
+                project={splitSession.project}
+                session={splitSession.session}
+                isActive={activeTab === 'chat'}
+                ws={ws}
+                sendMessage={sendMessage}
+                // The editor resolves paths against the main project, so links
+                // from a session of another project are not opened there.
+                onFileOpen={splitSession.project.projectId === selectedProject.projectId ? handleFileOpen : undefined}
+                onNavigateToSession={onNavigateToSession}
+                onSessionEstablished={onSessionEstablished}
+                onShowSettings={onShowSettings}
+                showRawParameters={showRawParameters}
+                showThinking={showThinking}
+                transcriptViewMode={transcriptViewMode}
+                sendByCtrlEnter={sendByCtrlEnter}
+                onClose={onCloseSplitSession}
+              />
+            )}
           </div>
 
           {activeTab === 'files' && (

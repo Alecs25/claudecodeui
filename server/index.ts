@@ -15,7 +15,7 @@ import {
     initializeSessionsWatcher,
     providerRuntimeService,
 } from '@/modules/providers/index.js';
-import { chatRunRegistry, createWebSocketServer } from '@/modules/websocket/index.js';
+import { chatRunRegistry, createWebSocketServer, sessionRunStatus, viewerPresence } from '@/modules/websocket/index.js';
 
 import { getConnectableHost, isLoopbackHost, isWildcardHost, normalizeLoopbackHost } from '../shared/networkHosts.js';
 
@@ -59,7 +59,7 @@ import { sentFilesService } from './modules/sent-files/index.js';
 import { visualizeService } from './modules/visualize/index.js';
 import { chaptersService } from './modules/chapters/index.js';
 import { initializeDatabase, sessionsDb } from './modules/database/index.js';
-import { configureWebPush } from './modules/notifications/index.js';
+import { configureWebPush, setSessionViewedCheck } from './modules/notifications/index.js';
 
 const __dirname = getModuleDirectory(import.meta.url);
 // The server source runs from /server, while the compiled output runs from /dist-server/server.
@@ -111,6 +111,14 @@ const agentRoutes = createAgentModule({
 // A completed run stays subscribable while its session's background work
 // (agents, workflows, backgrounded commands) is still reporting through it.
 chatRunRegistry.setRetentionGuard((sessionId) => providerRuntimeService.hasBackgroundWork(sessionId));
+// Sidebar status follows runs: a new run reopens a completed session, and one
+// that ends while nobody is looking leaves the session unread.
+chatRunRegistry.setLifecycleListeners({
+    onRunStarted: (sessionId) => sessionRunStatus.handleRunStarted(sessionId),
+    onRunCompleted: (sessionId, userId) => sessionRunStatus.handleRunCompleted(sessionId, userId),
+});
+// Completion notifications are skipped for a session on screen in a visible tab.
+setSessionViewedCheck((sessionId: string, userId: string | number | null) => viewerPresence.isSessionViewed(sessionId, userId));
 
 createWebSocketServer(server, {
     verifyClient: {

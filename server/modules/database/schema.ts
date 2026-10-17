@@ -143,6 +143,11 @@ CREATE TABLE IF NOT EXISTS sessions (
     -- session, and deleting the source does not affect it.
     forked_from_session_id TEXT,
     isArchived BOOLEAN DEFAULT 0,
+    -- Sidebar status: pinned to the top, finished a run while unseen, marked
+    -- done by the user.
+    isPinned BOOLEAN DEFAULT 0,
+    isUnread BOOLEAN DEFAULT 0,
+    isCompleted BOOLEAN DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (session_id),

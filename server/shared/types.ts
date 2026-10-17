@@ -285,6 +285,10 @@ export type SessionUpsertedEvent = {
     summary: string;
     messageCount: number;
     lastActivity: string;
+    /** Sidebar status flags, so an upsert never resets a pinned or unread row. */
+    isPinned: boolean;
+    isUnread: boolean;
+    isCompleted: boolean;
   };
   project: SessionUpsertedProject | null;
   timestamp: string;

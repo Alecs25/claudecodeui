@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect } from 'react';
+import { memo, useCallback, useContext, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useDeviceSettings } from '@/shared/hooks/useDeviceSettings';
@@ -8,7 +8,8 @@ import { useSidebarController } from '@/modules/sidebar/hooks/useSidebarControll
 import { useTaskMaster, useTasksSettings } from '@/modules/task-master';
 import { usePaletteOps } from '@/modules/command-palette';
 import { useBackgroundSessionIdSet, useBusySessionIdSet } from '@/shared/context/SessionProtectionContext';
-import type { LLMProvider, LoadingProgress, MCPServerStatus, Project, ProjectSession, SidebarProjectListProps } from '@/shared/types';
+import WebSocketContext from '@/shared/context/WebSocketContext';
+import type { LLMProvider, LoadingProgress, MCPServerStatus, Project, ProjectSession, SessionStatusPatch, SessionWithProvider, SidebarProjectListProps } from '@/shared/types';
 import SidebarCollapsed from '@/modules/sidebar/SidebarCollapsed';
 import SidebarContent from '@/modules/sidebar/SidebarContent';
 import SidebarModals from '@/modules/sidebar/SidebarModals';
@@ -26,6 +27,8 @@ type SidebarProps = {
   // `projectId` is the DB identifier; the sidebar hands it back to the parent
   // when the delete flow completes.
   onProjectDelete?: (projectId: string) => void;
+  /** Opens a session in the second pane; absent below the split-view breakpoint. */
+  onOpenInSplitView?: (session: ProjectSession) => void;
   isLoading: boolean;
   loadingProgress: LoadingProgress | null;
   onRefresh: () => Promise<void> | void;
@@ -53,6 +56,7 @@ function Sidebar({
   onSessionDelete,
   onLoadMoreSessions,
   onProjectDelete,
+  onOpenInSplitView,
   isLoading,
   loadingProgress,
   onRefresh,
@@ -78,6 +82,7 @@ function Sidebar({
   // would re-render the whole tree on every provider status frame.
   const activeSessions = useBusySessionIdSet();
   const backgroundSessionIds = useBackgroundSessionIdSet();
+  const subscribe = useContext(WebSocketContext)?.subscribe;
 
   const {
     isSidebarCollapsed,
@@ -140,6 +145,9 @@ function Sidebar({
     refreshProjects,
     updateSessionSummary,
     forkSession,
+    setSessionStatus,
+    recentStatusFilter,
+    setRecentStatusFilter,
     collapseSidebar: handleCollapseSidebar,
     expandSidebar: handleExpandSidebar,
     setShowNewProject,
@@ -164,6 +172,7 @@ function Sidebar({
     setCurrentProject,
     setSidebarVisible: (visible) => setPreference('sidebarVisible', visible),
     sidebarVisible,
+    subscribe,
   });
 
   useEffect(() => {
@@ -191,6 +200,15 @@ function Sidebar({
     },
     [updateSessionSummary],
   );
+
+  const handleSetSessionStatus = useCallback((sessionId: string, patch: SessionStatusPatch) => {
+    void setSessionStatus(sessionId, patch);
+  }, [setSessionStatus]);
+
+  // Stable for the memoized rows; undefined hides the menu entry entirely.
+  const handleOpenInSplitView = useCallback((session: SessionWithProvider) => {
+    onOpenInSplitView?.(session);
+  }, [onOpenInSplitView]);
 
   const projectListProps: SidebarProjectListProps = {
     projects,
@@ -223,6 +241,8 @@ function Sidebar({
     onSessionSelect: handleSessionClick,
     onDeleteSession: showDeleteSessionConfirmation,
     onForkSession: forkSession,
+    onSetSessionStatus: handleSetSessionStatus,
+    onOpenInSplitView: onOpenInSplitView ? handleOpenInSplitView : undefined,
     onLoadMoreSessions: loadMoreSessionsForProject,
     onNewSession,
     onStartEditingSession: startEditingSession,
@@ -287,6 +307,8 @@ function Sidebar({
             isRecentConversationsLoading={isRecentConversationsLoading}
             isLoadingMoreRecentConversations={isLoadingMoreRecentConversations}
             recentConversationsError={recentConversationsError}
+            recentStatusFilter={recentStatusFilter}
+            onRecentStatusFilterChange={setRecentStatusFilter}
             searchFilter={searchFilter}
             onSearchFilterChange={setSearchFilter}
             onClearSearchFilter={() => setSearchFilter('')}

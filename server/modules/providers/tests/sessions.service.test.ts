@@ -93,7 +93,7 @@ test('provider session id reports a missing app session', { concurrency: false }
 });
 
 test('recent sessions map project metadata and preserve database pagination', { concurrency: false }, async () => {
-  await withIsolatedDatabase(() => {
+  await withIsolatedDatabase(async () => {
     sessionsDb.createSession(
       'older-session',
       'claude',
@@ -113,7 +113,7 @@ test('recent sessions map project metadata and preserve database pagination', { 
     projectsDb.updateCustomProjectName('/tmp/recent-project', 'Recent Project');
 
     const project = projectsDb.getProjectPath('/tmp/recent-project');
-    const page = sessionsService.listRecentSessions(1, 0);
+    const page = await sessionsService.listRecentSessions(1, 0);
 
     assert.deepEqual(page, {
       conversations: [{
@@ -123,6 +123,9 @@ test('recent sessions map project metadata and preserve database pagination', { 
         projectDisplayName: 'Recent Project',
         sessionTitle: 'Newer conversation',
         lastActivity: '2026-08-01T11:00:00.000Z',
+        isPinned: false,
+        isUnread: false,
+        isCompleted: false,
       }],
       total: 2,
       hasMore: true,

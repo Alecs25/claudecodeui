@@ -38,7 +38,8 @@
     "selectAllLoaded": "Seleziona le caricate",
     "clearSelection": "Deseleziona tutto",
     "deleteSelected_one": "Elimina {{count}} sessione",
-    "deleteSelected_other": "Elimina {{count}} sessioni"
+    "deleteSelected_other": "Elimina {{count}} sessioni",
+    "completedSection": "Completate"
   },
   "tooltips": {
     "viewEnvironments": "Visualizza ambienti",
@@ -56,7 +57,8 @@
     "cancel": "Annulla",
     "clearSearch": "Cancella ricerca",
     "openCommandPalette": "Apri tavolozza comandi",
-    "attentionRequiredIndicator": "La sessione richiede attenzione"
+    "attentionRequiredIndicator": "La sessione richiede attenzione",
+    "unreadSessionIndicator": "Non letta"
   },
   "navigation": {
     "chat": "Chat",
@@ -122,7 +124,8 @@
     "restoreSessionError": "Errore durante il ripristino della sessione. Riprova.",
     "forkSessionError": "Impossibile creare un ramo da questa sessione. Riprova.",
     "deleteSessionsPartialFailure_one": "Impossibile eliminare {{count}} sessione su {{total}}. Riprova.",
-    "deleteSessionsPartialFailure_other": "Impossibile eliminare {{count}} sessioni su {{total}}. Riprova."
+    "deleteSessionsPartialFailure_other": "Impossibile eliminare {{count}} sessioni su {{total}}. Riprova.",
+    "sessionStatusError": "Impossibile aggiornare la sessione."
   },
   "version": {
     "updateAvailable": "Aggiornamento disponibile",
@@ -167,5 +170,33 @@
     "archiveSessions_other": "Archivia {{count}} sessioni",
     "archiveSessionsNotice_one": "L'archiviazione rimuove la sessione dall'elenco attivo mantenendone la cronologia.",
     "archiveSessionsNotice_other": "L'archiviazione rimuove le sessioni dall'elenco attivo mantenendone la cronologia."
+  },
+  "sessionStatus": {
+    "openInSplitView": "Apri in vista divisa",
+    "closeSplitView": "Chiudi vista divisa",
+    "pin": "Fissa",
+    "unpin": "Sblocca",
+    "pinned": "Fissata",
+    "markRead": "Segna come letta",
+    "markUnread": "Segna come non letta",
+    "markCompleted": "Segna completata",
+    "reopen": "Riapri"
+  },
+  "sessionFinished": {
+    "untitled": "Sessione",
+    "message": "Completata",
+    "open": "Apri",
+    "dismiss": "Chiudi"
+  },
+  "recent": {
+    "statusFilter": "Filtra per stato",
+    "noMatchingStatus": "Nessuna conversazione",
+    "status": {
+      "all": "Tutte",
+      "running": "In esecuzione",
+      "unread": "Non lette",
+      "pinned": "Fissate",
+      "completed": "Completate"
+    }
   }
 }

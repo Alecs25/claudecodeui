@@ -1,16 +1,17 @@
 import { memo, useState } from 'react';
 import type { KeyboardEvent } from 'react';
-import { Check, CheckSquare, Edit2, GitBranch, Loader2, MoreHorizontal, Square, Trash2, X } from 'lucide-react';
+import { Check, CheckSquare, Edit2, GitBranch, Loader2, MoreHorizontal, Pin, Square, Trash2, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { Badge, Dialog, DialogContent, DialogTitle, LLMProviderLogo, Tooltip, buttonVariants } from '@/shared/ui';
 import { cn } from '@/shared/utils';
-import type { LLMProvider, Project, ProjectSession, SessionWithProvider } from '@/shared/types';
+import type { LLMProvider, Project, ProjectSession, SessionStatusPatch, SessionWithProvider } from '@/shared/types';
 import { useSessionForkingProviders } from '@/shared/hooks/useProviderCapabilities';
 import { PROVIDER_LABELS, createSessionViewModel, formatCompactAge } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import { useCompactSidebar } from '@/modules/sidebar/hooks/useCompactSidebar';
 import { useProviderSessionIdCopy } from '@/modules/sidebar/hooks/useProviderSessionIdCopy';
 import SessionOptions from '@/modules/sidebar/SessionOptions';
+import { buildSessionStatusItems } from '@/modules/sidebar/utils/sessionStatusMenuItems';
 
 type SidebarSessionItemProps = {
   project: Project;
@@ -33,6 +34,9 @@ type SidebarSessionItemProps = {
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
   /** Branches this session into an independent one; absent when its provider cannot. */
   onForkSession?: (session: SessionWithProvider) => void;
+  onSetSessionStatus: (sessionId: string, patch: SessionStatusPatch) => void;
+  /** Opens this session in the second pane; absent where split view is unavailable. */
+  onOpenInSplitView?: (session: SessionWithProvider) => void;
   /** This project's list is in bulk-selection mode: the row acts as a checkbox and hides its options. */
   isSelecting: boolean;
   /** Ticked for the pending bulk delete. Resolved by the list, which never ticks a running row. */
@@ -61,6 +65,8 @@ function SidebarSessionItem({
   onSessionSelect,
   onDeleteSession,
   onForkSession,
+  onSetSessionStatus,
+  onOpenInSplitView,
   isSelecting,
   isChecked,
   onToggleSessionSelected,
@@ -75,12 +81,26 @@ function SidebarSessionItem({
   // Background work takes the recent-activity dot's place: the session is
   // still doing something, which says more than that it was touched lately.
   const showBackgroundIndicator = !showAttentionIndicator && hasBackgroundWork;
-  const showRecentIndicator = !showAttentionIndicator && !showBackgroundIndicator && !isProcessing && sessionView.isActive;
+  // A finished run nobody has looked at yet. Steady, not pulsing: nothing is
+  // happening any more, the session is just waiting to be read.
+  const showUnreadIndicator = !showAttentionIndicator && !showBackgroundIndicator && Boolean(session.isUnread) && !isSelected;
+  const showRecentIndicator = !showAttentionIndicator && !showBackgroundIndicator && !showUnreadIndicator && !isProcessing && sessionView.isActive;
   const indicatorLabel = showAttentionIndicator
     ? t('tooltips.attentionRequiredIndicator', { defaultValue: 'Session needs attention' })
     : showBackgroundIndicator
       ? t('tooltips.backgroundWorkIndicator', { defaultValue: 'Background work running' })
-      : t('tooltips.activeSessionIndicator');
+      : showUnreadIndicator
+        ? t('tooltips.unreadSessionIndicator', { defaultValue: 'Unread' })
+        : t('tooltips.activeSessionIndicator');
+  const isPinned = Boolean(session.isPinned);
+  const isCompleted = Boolean(session.isCompleted);
+  const statusItems = buildSessionStatusItems(session.id, session, onSetSessionStatus, t);
+  const pinIcon = isPinned ? (
+    <Pin
+      className="h-3 w-3 flex-shrink-0 text-muted-foreground"
+      aria-label={t('sessionStatus.pinned', { defaultValue: 'Pinned' })}
+    />
+  ) : null;
   const providerLabel = PROVIDER_LABELS[session.__provider];
 
   // The desktop controls live in SessionOptions, which owns the rename panel and
@@ -155,19 +175,22 @@ function SidebarSessionItem({
 
   return (
     <div className="group relative">
-      {(showAttentionIndicator || showBackgroundIndicator || showRecentIndicator) && (
+      {(showAttentionIndicator || showBackgroundIndicator || showUnreadIndicator || showRecentIndicator) && (
         <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 transform">
           <Tooltip content={indicatorLabel} position="right">
             <div
               role="status"
               aria-label={indicatorLabel}
               className={cn(
-                'h-2 w-2 animate-pulse rounded-full',
+                'h-2 w-2 rounded-full',
+                !showUnreadIndicator && 'animate-pulse',
                 showAttentionIndicator
                   ? 'bg-amber-500'
                   : showBackgroundIndicator
                     ? 'bg-purple-500 dark:bg-purple-400'
-                    : 'bg-green-500',
+                    : showUnreadIndicator
+                      ? 'bg-blue-500'
+                      : 'bg-green-500',
               )}
             />
           </Tooltip>
@@ -190,6 +213,7 @@ function SidebarSessionItem({
               ? 'border-green-500/30 bg-green-50/5 dark:bg-green-900/5'
               : 'border-border/30',
             isChecked && 'border-primary/40 bg-primary/10',
+            isCompleted && !isSelected && 'opacity-60',
           )}
           onClick={isSelecting ? (isSelectable ? toggleSelected : undefined) : selectMobileSession}
           onKeyDown={isSelecting ? handleSelectionKeyDown : undefined}
@@ -207,8 +231,9 @@ function SidebarSessionItem({
 
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
+                {pinIcon}
                 <div
-                  className="min-w-0 flex-1 truncate text-sm font-normal text-foreground"
+                  className={cn('min-w-0 flex-1 truncate text-sm text-foreground', showUnreadIndicator ? 'font-medium' : 'font-normal')}
                   title={sessionView.sessionName}
                 >
                   {sessionView.sessionName}
@@ -372,6 +397,24 @@ function SidebarSessionItem({
                   </button>
                 )}
 
+                {statusItems.map((item) => {
+                  const ItemIcon = item.icon;
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => {
+                        setMobileOptionsOpen(false);
+                        item.onSelect();
+                      }}
+                      className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-border bg-muted/35 px-4 py-3 text-left text-foreground transition-colors active:bg-muted"
+                    >
+                      {ItemIcon && <ItemIcon className="h-5 w-5 flex-shrink-0" />}
+                      <span className="text-sm font-medium">{item.label}</span>
+                    </button>
+                  );
+                })}
+
                 {!isProcessing && (
                   <button
                     type="button"
@@ -420,16 +463,23 @@ function SidebarSessionItem({
                 ? 'border-green-500/30 bg-green-50/5 hover:bg-green-50/10 dark:bg-green-900/5 dark:hover:bg-green-900/10'
                 : 'hover:bg-accent/50',
             isChecked && 'border-primary/40 bg-primary/10',
+            isCompleted && !isSelected && 'opacity-60',
           )}
-          // Left-click keeps in-app navigation; Ctrl/Cmd/middle-click and the
-          // native right-click menu use the href to open a new tab/window.
-          // While selecting, every click ticks the row instead.
+          // Left-click keeps in-app navigation. Ctrl/Cmd-click opens the session
+          // in split view where that is available; otherwise, like Shift and
+          // middle-click and the native right-click menu, it uses the href to
+          // open a new tab/window. While selecting, every click ticks the row.
           onClick={(event) => {
             if (isSelecting) {
               event.preventDefault();
               if (isSelectable) {
                 toggleSelected();
               }
+              return;
+            }
+            if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && onOpenInSplitView) {
+              event.preventDefault();
+              onOpenInSplitView(session);
               return;
             }
             if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -450,8 +500,9 @@ function SidebarSessionItem({
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
+                {pinIcon}
                 <div
-                  className="min-w-0 flex-1 truncate text-sm font-normal text-foreground"
+                  className={cn('min-w-0 flex-1 truncate text-sm text-foreground', showUnreadIndicator ? 'font-medium' : 'font-normal')}
                   title={sessionView.sessionName}
                 >
                   {sessionView.sessionName}
@@ -503,6 +554,9 @@ function SidebarSessionItem({
             onSaveEditingSession={onSaveEditingSession}
             onDeleteSession={onDeleteSession}
             onFork={onForkSession ? () => onForkSession(session) : undefined}
+            status={session}
+            onSetSessionStatus={onSetSessionStatus}
+            onOpenInSplitView={onOpenInSplitView ? () => onOpenInSplitView(session) : undefined}
             t={t}
           />
         )}
