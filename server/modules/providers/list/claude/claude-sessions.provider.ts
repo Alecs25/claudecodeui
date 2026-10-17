@@ -31,7 +31,10 @@ import {
   truncateSubagentActivity,
 } from '@/shared/utils.js';
 import { sessionsDb } from '@/modules/database/index.js';
-import { getClaudeSDKSessionStartTime } from '@/modules/providers/list/claude/claude-runtime.provider.js';
+import {
+  getClaudeSDKLiveTaskToolUseIds,
+  getClaudeSDKSessionStartTime,
+} from '@/modules/providers/list/claude/claude-runtime.provider.js';
 import {
   getReportedClaudeContextWindow,
   summarizeClaudeTokenUsage,
@@ -695,12 +698,25 @@ function dropSupersededPromptBranches(rows: AnyRecord[]): AnyRecord[] {
 /** When the CLI run behind a session started (epoch ms), or null when none is up. */
 type LiveRunStartTimeProbe = (sessionId: string) => number | null;
 
+/**
+ * The tool-use ids of the background tasks the live run behind a session
+ * still tracks as outstanding, or null when no run is up (or nothing tracks
+ * them, in which case the start time alone decides).
+ */
+type LiveTaskToolUseIdsProbe = (sessionId: string) => ReadonlySet<string> | null;
+
+/** What the history reader asks the runtime about the live run, if any. */
+type LiveRunProbes = {
+  getLiveRunStartTime: LiveRunStartTimeProbe;
+  getLiveTaskToolUseIds: LiveTaskToolUseIdsProbe;
+};
+
 async function getSessionMessages(
   sessionId: string,
   providerSessionId: string,
   limit: number | null,
   offset: number,
-  getLiveRunStartTime: LiveRunStartTimeProbe,
+  { getLiveRunStartTime, getLiveTaskToolUseIds }: LiveRunProbes,
 ): Promise<ClaudeHistoryMessagesResult> {
   try {
     // The DB row is keyed by the app-facing session id, while the JSONL rows
@@ -794,8 +810,19 @@ async function getSessionMessages(
     // starts a run and by the provider-native id when the agent API does, so
     // both are asked.
     const liveRunStartedAt = getLiveRunStartTime(sessionId) ?? getLiveRunStartTime(providerSessionId);
-    const launchedByLiveRun = (message: AnyRecord): boolean =>
-      liveRunStartedAt !== null && Date.parse(String(message.timestamp ?? '')) >= liveRunStartedAt;
+    // Even within the live run, a held process outlives tasks that ended
+    // without a notification reaching the transcript (one the CLI killed on
+    // its own, say). The runtime's tracker is what knows which tasks are still
+    // out, so a launch it no longer holds is not running either. It learns of
+    // a task from `task_started`, which precedes the launch row, so a task
+    // just launched is never missed.
+    const liveTaskToolUseIds = liveRunStartedAt === null
+      ? null
+      : getLiveTaskToolUseIds(sessionId) ?? getLiveTaskToolUseIds(providerSessionId);
+    const launchedByLiveRun = (message: AnyRecord, toolUseId: string | null): boolean =>
+      liveRunStartedAt !== null
+      && Date.parse(String(message.timestamp ?? '')) >= liveRunStartedAt
+      && (!liveTaskToolUseIds || !toolUseId || liveTaskToolUseIds.has(toolUseId));
 
     for (const message of messages) {
       const launch = readBackgroundLaunch(message.toolUseResult);
@@ -832,7 +859,7 @@ async function getSessionMessages(
       // A synchronous agent hands its answer back inline on its own tool
       // result, so its status never depends on a notification or the process.
       const unreportedStatus = isAsyncLaunch
-        ? launchedByLiveRun(message) ? 'running' : 'stopped'
+        ? launchedByLiveRun(message, toolUseId) ? 'running' : 'stopped'
         : 'completed';
 
       if (launch === 'agent') {
@@ -1218,13 +1245,25 @@ type ClaudeSessionsProviderOptions = {
    * driving a real SDK run.
    */
   getLiveRunStartTime?: LiveRunStartTimeProbe;
+  /**
+   * Which background tasks the live run still tracks. Injected for the same
+   * reason; tests that pin only a start time get the runtime's, which knows
+   * no run and so leaves the start time to decide.
+   */
+  getLiveTaskToolUseIds?: LiveTaskToolUseIdsProbe;
 };
 
 export class ClaudeSessionsProvider implements IProviderSessions {
   private readonly getLiveRunStartTime: LiveRunStartTimeProbe;
 
-  constructor({ getLiveRunStartTime = getClaudeSDKSessionStartTime }: ClaudeSessionsProviderOptions = {}) {
+  private readonly getLiveTaskToolUseIds: LiveTaskToolUseIdsProbe;
+
+  constructor({
+    getLiveRunStartTime = getClaudeSDKSessionStartTime,
+    getLiveTaskToolUseIds = getClaudeSDKLiveTaskToolUseIds,
+  }: ClaudeSessionsProviderOptions = {}) {
     this.getLiveRunStartTime = getLiveRunStartTime;
+    this.getLiveTaskToolUseIds = getLiveTaskToolUseIds;
   }
 
   /**
@@ -1811,7 +1850,10 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     try {
       // Load full history first so `total` reflects frontend-normalized messages,
       // not raw JSONL records.
-      result = await getSessionMessages(sessionId, providerSessionId, null, 0, this.getLiveRunStartTime);
+      result = await getSessionMessages(sessionId, providerSessionId, null, 0, {
+        getLiveRunStartTime: this.getLiveRunStartTime,
+        getLiveTaskToolUseIds: this.getLiveTaskToolUseIds,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`[ClaudeProvider] Failed to load session ${sessionId}:`, message);

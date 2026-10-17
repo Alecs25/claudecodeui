@@ -97,6 +97,12 @@ export function createProviderRuntimeService(
       return Boolean(await runtime.stopBackgroundTask?.(sessionId, taskId));
     },
 
+    async backgroundTasks(providerName: LLMProvider, sessionId: string, toolUseId?: string): Promise<boolean> {
+      // A runtime without foreground tasks to move has nothing to background.
+      const { runtime } = dependencies.resolveProvider(providerName);
+      return Boolean(await runtime.backgroundTasks?.(sessionId, toolUseId));
+    },
+
     hasBackgroundWork(sessionId: string): boolean {
       // The turn in which a held process relays its last task counts: the task
       // has settled, but the process is still working the session.

@@ -563,6 +563,40 @@ test('Claude history reports a background agent stopped when a later run of the 
   }
 });
 
+test('Claude history reports a live run background agent stopped once the runtime no longer tracks its task', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-untracked-agent-'));
+
+  try {
+    const parentPath = await writeClaudeSubagentSession(tempRoot);
+    await dropTaskNotification(parentPath);
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(SESSION_ID, 'claude', tempRoot, 'Subagent session', now, now, parentPath);
+
+      const liveRunStartedAt = Date.parse('2026-08-21T09:59:00.000Z');
+      const readAgentStatus = async (outstanding: string[]) => {
+        const history = await new ClaudeSessionsProvider({
+          getLiveRunStartTime: () => liveRunStartedAt,
+          getLiveTaskToolUseIds: () => new Set(outstanding),
+        }).fetchHistory(SESSION_ID, { providerSessionId: SESSION_ID });
+        return history.messages.find(
+          (message) => message.kind === 'tool_use' && message.toolId === AGENT_TOOL_USE_ID,
+        )?.subagent?.status;
+      };
+
+      // The process that launched the agent is still held, but its task ended
+      // without a notification reaching the transcript: reading the row as
+      // running listed it after every reload with nothing left to stop.
+      assert.equal(await readAgentStatus([]), 'stopped');
+      // While the tracker holds it, it is genuinely running, reload or not.
+      assert.equal(await readAgentStatus([AGENT_TOOL_USE_ID]), 'running');
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('Claude history asks after the session process by both the app and the provider session id', { concurrency: false }, async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-liveness-keys-'));
   const appSessionId = 'app-session-1';

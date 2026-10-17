@@ -269,5 +269,11 @@
       "closeSidebar": "Chiudi barra laterale",
       "resizeSidebar": "Ridimensiona barra laterale"
     }
+  },
+  "workflow": {
+    "backgroundTasks": "Attività in background",
+    "backgroundSummary_one": "{{count}} in background",
+    "backgroundSummary_other": "{{count}} in background",
+    "stopTask": "Ferma"
   }
 }

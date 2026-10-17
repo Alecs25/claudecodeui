@@ -28,6 +28,7 @@ import {
 } from '@/shared/context/SessionProtectionContext';
 import ChatMessagesPane from '@/modules/chat/transcript/ChatMessagesPane';
 import ChatComposer from '@/modules/chat/composer/ChatComposer';
+import { hasForegroundBackgroundableCall } from '@/modules/chat/utils/backgroundTasks';
 import CommandResultModal from '@/modules/chat/modals/CommandResultModal';
 
 type ChatInterfaceProps = {
@@ -346,6 +347,20 @@ function ChatInterface({
     };
   }, [canAbortSession, handleAbortSession]);
 
+  // Claude can move a blocking command or subagent to the background mid-turn
+  // (Ctrl+B in the terminal); offered only while the turn is waiting on one.
+  const canRunInBackground = provider === 'claude'
+    && canAbortSession
+    && !sessionActivity?.background
+    && hasForegroundBackgroundableCall(chatMessages);
+  const handleRunInBackground = useCallback(() => {
+    const targetSessionId = selectedSession?.id || currentSessionId || null;
+    if (!targetSessionId) {
+      return;
+    }
+    sendMessage({ type: 'chat.background-tasks', sessionId: targetSessionId });
+  }, [currentSessionId, selectedSession?.id, sendMessage]);
+
   useEffect(() => {
     return () => {
       resetStreamingState();
@@ -542,6 +557,7 @@ function ChatInterface({
           activity={sessionActivity}
           isLoading={isProcessing}
           onAbortSession={handleAbortSession}
+          onRunInBackground={canRunInBackground ? handleRunInBackground : undefined}
           permissionMode={permissionMode}
           availablePermissionModes={availablePermissionModes}
           onSelectPermissionMode={selectPermissionMode}

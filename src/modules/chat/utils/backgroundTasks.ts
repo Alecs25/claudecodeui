@@ -1,6 +1,7 @@
 import type { TFunction } from 'i18next';
 
 import type { BackgroundTaskStatus, BackgroundTaskSummary, ChatMessage, WorkflowAgentProgress } from '@/shared/types';
+import { parseToolPayload } from '@/modules/chat/utils/messageTransforms';
 
 /**
  * Settles one background task's status from its two sources.
@@ -93,6 +94,32 @@ export function collectRunningBackgroundTasks(messages: ChatMessage[]): Backgrou
     });
   }
   return tasks;
+}
+
+/** Tools whose blocking call the SDK can move to the background mid-flight. */
+const BACKGROUNDABLE_TOOLS = new Set(['Bash', 'Agent', 'Task']);
+
+/**
+ * Whether the turn is blocked on a command or subagent that could be moved to
+ * the background: a call to one of those tools with no result yet that was
+ * not launched in the background to begin with. Only the current turn — the
+ * rows after the last user prompt — is looked at.
+ */
+export function hasForegroundBackgroundableCall(messages: ChatMessage[]): boolean {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.type === 'user') {
+      return false;
+    }
+    if (!message.isToolUse || message.toolResult || !BACKGROUNDABLE_TOOLS.has(message.toolName ?? '')) {
+      continue;
+    }
+    const input = parseToolPayload(message.toolInput) as { run_in_background?: unknown } | null;
+    if (input?.run_in_background !== true) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** `1m 5s`, the way the CLI prints a task's elapsed time. */

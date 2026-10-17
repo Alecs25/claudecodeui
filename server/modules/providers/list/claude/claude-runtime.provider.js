@@ -1830,6 +1830,23 @@ async function stopClaudeSDKTask(sessionId, taskId) {
 }
 
 /**
+ * Moves the session's in-flight foreground tasks — a blocking Bash command or
+ * subagent — to the background, as Ctrl+B does in the terminal: each blocking
+ * call returns at once and the turn goes on while the task keeps running and
+ * later reports through `task_notification`, like any background task.
+ * @param {string} sessionId - Session identifier
+ * @param {string} [toolUseId] - The one call to move; every foreground task when omitted
+ * @returns {Promise<boolean>} False when no live process has a matching foreground task
+ */
+async function backgroundClaudeSDKTasks(sessionId, toolUseId) {
+  const session = getSession(sessionId);
+  if (!session || typeof session.instance?.backgroundTasks !== 'function') {
+    return false;
+  }
+  return Boolean(await session.instance.backgroundTasks(toolUseId));
+}
+
+/**
  * Checks if an SDK session is currently active
  * @param {string} sessionId - Session identifier
  * @returns {boolean} True if session is active
@@ -1852,6 +1869,25 @@ function isClaudeSDKSessionActive(sessionId) {
 function getClaudeSDKSessionStartTime(sessionId) {
   const session = getSession(sessionId);
   return session && session.status === 'active' ? session.startTime : null;
+}
+
+/**
+ * The tool-use ids of the background tasks the live run behind a session
+ * still has outstanding, or null when no run is up.
+ *
+ * The history reader pairs this with `getClaudeSDKSessionStartTime`: a launch
+ * row the live run made is still running only while the tracker holds its
+ * task. A task the CLI killed on its own, or one whose notification never
+ * reached the transcript, is otherwise read as running for as long as the
+ * process stays held.
+ * @param {string} sessionId - Session identifier
+ * @returns {Set<string>|null} Tool-use ids of the outstanding tasks, or null
+ */
+function getClaudeSDKLiveTaskToolUseIds(sessionId) {
+  if (getClaudeSDKSessionStartTime(sessionId) === null) {
+    return null;
+  }
+  return new Set(backgroundWork.outstanding(sessionId).map((task) => task.toolUseId));
 }
 
 /**
@@ -1909,6 +1945,7 @@ export const claudeRuntime = {
   listBackgroundWork: listClaudeSDKBackgroundWork,
   hasActiveHeldTurn,
   stopBackgroundTask: stopClaudeSDKTask,
+  backgroundTasks: backgroundClaudeSDKTasks,
 };
 
 // Export public API
@@ -1919,8 +1956,10 @@ export {
   hasActiveHeldTurn,
   readHeldTurnWaitMs,
   stopClaudeSDKTask,
+  backgroundClaudeSDKTasks,
   isClaudeSDKSessionActive,
   getClaudeSDKSessionStartTime,
+  getClaudeSDKLiveTaskToolUseIds,
   getActiveClaudeSDKSessions,
   resolveToolApproval,
   getPendingApprovalsForSession,

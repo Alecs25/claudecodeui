@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 
 import '@/modules/i18n';
 import { BackgroundTasksStrip } from '@/modules/chat/transcript/BackgroundTasksStrip';
@@ -281,6 +281,8 @@ describe('the background tasks strip', () => {
       />,
     );
 
+    // Four tasks are more than fit as chips: the summary opens the list.
+    fireEvent.click(screen.getByRole('button', { name: /4 in background/ }));
     const stops = screen.getAllByRole('button', { name: 'Stop' });
     expect(stops).toHaveLength(3);
     stops.forEach((stop) => fireEvent.click(stop));
@@ -415,6 +417,85 @@ describe('the background tasks strip, for tasks only the activity map has a word
     );
 
     expect(screen.getByRole('button').textContent).toBe('Workflowaudit· 0/1 agent · only');
+  });
+});
+
+describe('the background tasks summary and panel', () => {
+  const runningRows = () => [
+    toolRow({
+      toolName: 'Workflow',
+      toolId: 'toolu_workflow_1',
+      timestamp: '2026-08-21T10:30:00.000Z',
+      taskStatus: { status: 'running', taskId: 'wxkj4kcvd', workflowName: 'audit', summary: 'Verify 3/6' },
+    }),
+    toolRow({
+      toolName: 'Agent',
+      toolId: 'toolu_agent_1',
+      timestamp: '2026-08-21T10:31:55.000Z',
+      taskStatus: { status: 'running', taskId: 'a1', description: 'Survey the repo' },
+    }),
+    toolRow({
+      toolName: 'Bash',
+      toolId: 'toolu_bash_1',
+      timestamp: '2026-08-21T10:32:00.000Z',
+      taskStatus: { status: 'running', taskId: 'b5xsbzu5k', description: 'npm test' },
+    }),
+  ];
+
+  afterEach(() => {
+    vi.useRealTimers();
+    window.innerWidth = 1024;
+  });
+
+  it('collapses more than two tasks into one line that opens a list with kind, name, elapsed time and Stop', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-08-21T10:32:05.000Z'));
+    const sendMessage = vi.fn();
+    render(
+      <BackgroundTasksStrip sessionId="session-1" sendMessage={sendMessage} onReveal={() => {}} onLoadAll={() => {}} messages={runningRows()} />,
+    );
+
+    const summary = screen.getByRole('button', { name: /3 in background/ });
+    expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
+    fireEvent.click(summary);
+
+    const items = screen.getAllByRole('listitem');
+    expect(items.map((item) => item.textContent)).toEqual([
+      'Workflowaudit2m 5sVerify 3/6',
+      'AgentSurvey the repo10s',
+      'Commandnpm test5s',
+    ]);
+    fireEvent.click(within(items[2]!).getByRole('button', { name: 'Stop' }));
+    expect(sendMessage).toHaveBeenCalledWith({ type: 'chat.stop-task', sessionId: 'session-1', taskId: 'b5xsbzu5k', toolUseId: 'toolu_bash_1' });
+  });
+
+  it('reveals the row of a task from the list and closes it', () => {
+    const onReveal = vi.fn();
+    const rows = runningRows();
+    render(<BackgroundTasksStrip sessionId="session-1" sendMessage={() => {}} onReveal={onReveal} onLoadAll={() => {}} messages={rows} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /3 in background/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Survey the repo/ }));
+    expect(onReveal).toHaveBeenCalledWith(rows[1]);
+    expect(screen.queryByRole('listitem')).toBeNull();
+  });
+
+  it('closes the list on Escape', () => {
+    render(<BackgroundTasksStrip sessionId="session-1" sendMessage={() => {}} onReveal={() => {}} onLoadAll={() => {}} messages={runningRows()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /3 in background/ }));
+    expect(screen.getAllByRole('listitem')).toHaveLength(3);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('listitem')).toBeNull();
+  });
+
+  it('shows even a single task as the one-line summary on a phone, instead of chips stacked over the transcript', () => {
+    window.innerWidth = 375;
+    render(
+      <BackgroundTasksStrip sessionId="session-1" sendMessage={() => {}} onReveal={() => {}} onLoadAll={() => {}} messages={runningRows().slice(0, 1)} />,
+    );
+
+    expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual(['1 in background']);
   });
 });
 

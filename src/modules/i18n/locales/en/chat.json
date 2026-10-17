@@ -252,6 +252,8 @@
     "defaultCommand": "command"
   },
   "claudeStatus": {
+    "background": "Background",
+    "runInBackground": "Run in background",
     "actions": {
       "thinking": "Thinking",
       "processing": "Processing",
