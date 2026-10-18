@@ -1,3 +1,4 @@
+import type { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -66,7 +67,7 @@ test('installPluginFromGit passes --include=dev to npm install', async () => {
 
     await installPluginFromGit(
       `https://example.test/${pluginName}.git`,
-      spawnProcess,
+      spawnProcess as unknown as typeof spawn,
     );
 
     assert.deepEqual(npmInstallArgs, [
@@ -111,7 +112,7 @@ test('updatePluginFromGit passes --include=dev to npm install', async () => {
       return child;
     };
 
-    await updatePluginFromGit(pluginName, spawnProcess);
+    await updatePluginFromGit(pluginName, spawnProcess as unknown as typeof spawn);
 
     assert.deepEqual(npmInstallArgs, [
       ['install', '--ignore-scripts', '--include=dev'],
