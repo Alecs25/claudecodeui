@@ -49,7 +49,7 @@ export default function WorkspaceHeader({
   onSessionArchived,
 }: WorkspaceHeaderProps) {
   return (
-    <header className="pwa-header-safe flex-shrink-0 border-b border-border/60 bg-background/95 px-3 py-1.5 backdrop-blur-sm sm:px-4">
+    <header className="pwa-header-safe relative z-30 flex-shrink-0 border-b border-border/60 bg-background/95 px-3 py-1.5 backdrop-blur-sm sm:px-4">
       <div className="flex min-h-10 min-w-0 items-center gap-2">
         {isMobile && <MobileMenuButton onMenuClick={onMenuClick} />}
         <WorkspaceTitle
