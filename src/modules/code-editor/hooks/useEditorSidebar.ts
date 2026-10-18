@@ -11,14 +11,28 @@ type UseEditorSidebarOptions = {
   initialWidth?: number;
 };
 
+const MAX_DEFAULT_PANE_WIDTH = 600;
+const MIN_DEFAULT_PANE_WIDTH = 320;
+// Share of the window a right pane opens with: on a tablet (a Fold opened is
+// about 900px) a fixed 600px left the chat about 250px wide.
+const DEFAULT_PANE_WIDTH_RATIO = 0.45;
+
+const defaultPaneWidth = (): number => {
+  if (typeof window === 'undefined') {
+    return MAX_DEFAULT_PANE_WIDTH;
+  }
+  const proportional = Math.round(window.innerWidth * DEFAULT_PANE_WIDTH_RATIO);
+  return Math.min(MAX_DEFAULT_PANE_WIDTH, Math.max(MIN_DEFAULT_PANE_WIDTH, proportional));
+};
+
 export const useEditorSidebar = ({
   selectedProject,
   isMobile,
-  initialWidth = 600,
+  initialWidth,
 }: UseEditorSidebarOptions) => {
   const { t } = useTranslation('codeEditor');
   const [editingFile, setEditingFile] = useState<CodeEditorFile | null>(null);
-  const [editorWidth, setEditorWidth] = useState(initialWidth);
+  const [editorWidth, setEditorWidth] = useState(() => initialWidth ?? defaultPaneWidth());
   const [editorExpanded, setEditorExpanded] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [hasManualWidth, setHasManualWidth] = useState(false);
