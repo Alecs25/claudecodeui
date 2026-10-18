@@ -13,7 +13,7 @@ import { useDropzone } from 'react-dropzone';
 import { useTranslation } from 'react-i18next';
 
 import { api } from '@/shared/api';
-import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
+import { PROVIDER_PERMISSION_PREFERENCE_KEYS, START_SUGGESTED_SESSION_EVENT } from '@/shared/constants';
 import { readUserPreference } from '@/shared/userSettings';
 import { isOnScreenKeyboardDevice } from '@/shared/utils';
 import type { BackgroundSendChoice, BackgroundSendPrompt, CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
@@ -29,6 +29,8 @@ import {
 } from '@/shared/chatDrafts';
 import { escapeRegExp } from '@/modules/chat/utils/chatFormatting';
 import { WIDGET_SEND_PROMPT_EVENT } from '@/modules/chat/utils/inlineWidget';
+import { readBtwQuestion, requestSideChat } from '@/modules/chat/utils/sideChat';
+import { takePendingSuggestedPrompt } from '@/modules/chat/utils/sessionSuggestions';
 import { describeBackgroundTask, ownBackgroundTasks } from '@/modules/chat/utils/backgroundTasks';
 import { useFileMentions } from '@/modules/chat/hooks/useFileMentions';
 import { useInputHistory } from '@/modules/chat/hooks/useInputHistory';
@@ -433,6 +435,20 @@ export function useChatComposerState({
         return;
       }
 
+      // Picked from the slash menu: /btw is answered by the side chat, not
+      // by the server's command endpoint.
+      if (command.name === '/btw') {
+        requestSideChat({
+          sessionId: currentSessionId || selectedSession?.id || null,
+          question: readBtwQuestion(rawInput ?? input) ?? '',
+        });
+        if (!options?.preserveInput) {
+          setInput('');
+          inputValueRef.current = '';
+        }
+        return;
+      }
+
       try {
         const effectiveInput = rawInput ?? input;
         // Everything typed after the command name is its argument text, line
@@ -507,6 +523,7 @@ export function useChatComposerState({
       selectedProject,
       selectedSession?.id,
       addMessage,
+      setInput,
       tokenBudget,
     ],
   );
@@ -779,6 +796,24 @@ export function useChatComposerState({
         )
         || !selectedProject
       ) {
+        return;
+      }
+
+      // /btw goes to the side chat, which answers from a fork of the session:
+      // it works mid-turn, so it must be caught before the queueing below.
+      const btwQuestion = submitOptions?.skipCommandInterception || queuedSubmission
+        ? null
+        : readBtwQuestion(currentInput);
+      if (btwQuestion !== null) {
+        requestSideChat({ sessionId: sessionKey, question: btwQuestion });
+        recordSentMessage(currentInput);
+        setInput('');
+        inputValueRef.current = '';
+        resetCommandMenuState();
+        setIsTextareaExpanded(false);
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+        }
         return;
       }
 
@@ -1203,6 +1238,36 @@ export function useChatComposerState({
     window.addEventListener(WIDGET_SEND_PROMPT_EVENT, handleWidgetPrompt);
     return () => window.removeEventListener(WIDGET_SEND_PROMPT_EVENT, handleWidgetPrompt);
   }, [setInput]);
+
+  // A suggestion card's "Start session" queues its prompt and opens a new
+  // session in the project; the composer of that empty chat sends it as the
+  // first message, through the normal submit so a session gets allocated.
+  useEffect(() => {
+    if (sessionKey || !selectedProjectId) {
+      return undefined;
+    }
+    let submitTimer: ReturnType<typeof setTimeout> | null = null;
+    const sendPendingPrompt = () => {
+      const prompt = takePendingSuggestedPrompt(selectedProjectId);
+      if (!prompt) {
+        return;
+      }
+      // Deferred past the new-session reset that the same click triggers.
+      submitTimer = setTimeout(() => {
+        setInput(prompt);
+        inputValueRef.current = prompt;
+        handleSubmitRef.current?.(createFakeSubmitEvent(), undefined, { skipCommandInterception: true });
+      }, 0);
+    };
+    sendPendingPrompt();
+    window.addEventListener(START_SUGGESTED_SESSION_EVENT, sendPendingPrompt);
+    return () => {
+      window.removeEventListener(START_SUGGESTED_SESSION_EVENT, sendPendingPrompt);
+      if (submitTimer) {
+        clearTimeout(submitTimer);
+      }
+    };
+  }, [sessionKey, selectedProjectId, setInput]);
 
   useEffect(() => {
     inputValueRef.current = input;

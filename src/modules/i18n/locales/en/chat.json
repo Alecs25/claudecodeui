@@ -497,5 +497,20 @@
   "questions": {
     "title": "Questions",
     "skipped": "Skipped"
+  },
+  "sideChat": {
+    "title": "Side chat",
+    "notSaved": "Not added to the session",
+    "close": "Close",
+    "empty": "Ask about this session",
+    "answering": "Answering…",
+    "placeholder": "Ask a side question",
+    "send": "Send"
+  },
+  "sessionSuggestion": {
+    "start": "Start session",
+    "dismiss": "Dismiss",
+    "started": "Session started",
+    "dismissed": "Dismissed"
   }
 }

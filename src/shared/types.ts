@@ -1915,3 +1915,44 @@ type TaskStatus =
 
 /** A TaskMaster task's priority; high, medium and low are the known values and the string fallback tolerates anything else TaskMaster emits. */
 type TaskPriority = 'high' | 'medium' | 'low' | string;
+
+// ---------------------------
+
+//----------------- SIDE CHAT ------------
+
+/**
+ * Detail of the `cloudcli:open-side-chat` window event (OPEN_SIDE_CHAT_EVENT).
+ * `sessionId` is the session whose context the side chat reads (the one on
+ * screen when omitted); `question` is sent straight away when present, as
+ * `/btw <question>` does.
+ */
+export type OpenSideChatDetail = {
+  sessionId?: string | null;
+  question?: string;
+};
+
+/**
+ * One message of the side chat transcript: a question the user asked, or the
+ * answer to it with the read-only tools it used and, if it failed, why.
+ * Lives only in the side chat panel and is discarded when it closes.
+ */
+export type SideChatEntry = {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  tools: string[];
+  error?: string;
+};
+
+// ---------------------------
+
+//----------------- SESSION SUGGESTIONS ------------
+
+/**
+ * Detail of START_SUGGESTED_SESSION_EVENT: the project the suggestion came from,
+ * where the new session opens, and the prompt it starts with.
+ */
+export type StartSuggestedSessionDetail = {
+  project: Project;
+  prompt: string;
+};

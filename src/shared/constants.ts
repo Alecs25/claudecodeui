@@ -218,3 +218,26 @@ export const PROVIDER_PERMISSION_PREFERENCE_KEYS: Record<LLMProvider, UserPrefer
   codex: 'codexPermissions',
   opencode: 'opencodePermissions',
 };
+
+// ---------------------------
+
+//----------------- SIDE CHAT ------------
+
+/**
+ * Window event that opens the side chat (/btw, Ctrl+;). Detail: OpenSideChatDetail.
+ * Dispatched by the composer and the session menu; handled by the chat
+ * module's SideChatHost, mounted once by the project workspace.
+ */
+export const OPEN_SIDE_CHAT_EVENT = 'cloudcli:open-side-chat';
+
+// ---------------------------
+
+//----------------- SESSION SUGGESTIONS ------------
+
+/**
+ * Window event that starts a new session from a suggestion card ("Avvia sessione").
+ * Detail: StartSuggestedSessionDetail. The chat module dispatches it after
+ * queueing the prompt; the project workspace opens a new session in the
+ * project and the composer of that new session sends the queued prompt.
+ */
+export const START_SUGGESTED_SESSION_EVENT = 'cloudcli:start-suggested-session';

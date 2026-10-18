@@ -19,6 +19,8 @@ import { MemoryCitations } from '@/modules/chat/transcript/MemoryCitations';
 import { isShellTool } from '@/modules/chat/utils/toolActivity';
 import { getChapterAnchorId, isMarkChapterTool, readChapter } from '@/modules/chat/utils/chapters';
 import ChapterDivider from '@/modules/chat/transcript/ChapterDivider';
+import SessionSuggestionCard from '@/modules/chat/tools/SessionSuggestionCard';
+import { isSuggestSessionTool, readSessionSuggestion } from '@/modules/chat/utils/sessionSuggestions';
 import { readToolDenial } from '@/modules/chat/utils/toolDenial';
 
 type MessageComponentProps = {
@@ -131,6 +133,19 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
         <ChapterDivider anchorId={getChapterAnchorId(message)} title={chapter.title} summary={chapter.summary} />
       </div>
     ) : null;
+  }
+
+  // A session suggestion is a card the user acts on; its result only tells the
+  // model the card was shown. A refused call (bad input) keeps the plain row.
+  const sessionSuggestion = message.isToolUse && isSuggestSessionTool(message.toolName) && !message.toolResult?.isError
+    ? readSessionSuggestion(message.toolInput)
+    : null;
+  if (sessionSuggestion) {
+    return (
+      <div data-message-timestamp={message.timestamp || undefined} className="chat-message px-3 sm:px-0">
+        <SessionSuggestionCard suggestion={sessionSuggestion} toolId={message.toolId} project={selectedProject} />
+      </div>
+    );
   }
 
   return (
