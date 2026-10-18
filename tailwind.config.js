@@ -88,5 +88,16 @@ export default {
       },
     },
   },
-  plugins: [require('@tailwindcss/typography')],
+  plugins: [
+    require('@tailwindcss/typography'),
+    // Column-width variants: a chat column can be narrow on a wide screen (sidebar and a pane
+    // open on a Fold), so the composer, the transcript and the header size themselves to their
+    // own column (`cq-column`) instead of the viewport that sm/md/lg read.
+    require('tailwindcss/plugin')(({ addUtilities, addVariant }) => {
+      addUtilities({ '.cq-column': { 'container-type': 'inline-size' } });
+      addVariant('cq-compact', '@container (max-width: 419.98px)');
+      addVariant('cq-full', '@container (min-width: 560px)');
+      addVariant('cq-wide', '@container (min-width: 720px)');
+    }),
+  ],
 }

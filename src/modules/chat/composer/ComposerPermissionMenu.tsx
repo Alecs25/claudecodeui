@@ -70,8 +70,9 @@ const getAppearance = (mode: PermissionMode | string): ModeAppearance =>
   MODE_APPEARANCE[mode as PermissionMode] ?? UNKNOWN_MODE;
 
 /**
- * The pill's own words, shorter than the menu's: the full one on wider
- * screens, the short one on a phone, where the whole bar has to fit 360px.
+ * The pill's own words, shorter than the menu's: the full one in a wide
+ * column, the short one in a medium one, none (icon and colour only) in a
+ * narrow one, where the whole bar has to fit about 240px.
  */
 const PILL_LABELS: Record<PermissionMode, { short: string; full: string }> = {
   default: { short: 'Ask', full: 'Ask permissions' },
@@ -128,15 +129,15 @@ function ComposerPermissionMenu({
           updateAnchor();
           setIsOpen((current) => !current);
         }}
-        className={`flex h-8 min-w-0 max-w-[7.5rem] shrink items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors sm:max-w-52 ${activeAppearance.trigger}`}
+        className={`flex h-8 min-w-8 max-w-[7.5rem] shrink items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors cq-compact:w-8 cq-compact:shrink-0 cq-compact:justify-center cq-compact:px-0 cq-full:max-w-52 ${activeAppearance.trigger}`}
         aria-haspopup="menu"
         aria-expanded={isOpen}
         aria-label={heading}
-        title={t('input.clickToChangeMode')}
+        title={`${fullLabel} · ${t('input.clickToChangeMode')}`}
       >
         <ActiveIcon className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate sm:hidden">{shortLabel}</span>
-        <span className="hidden truncate sm:inline">{fullLabel}</span>
+        <span className="truncate cq-compact:hidden cq-full:hidden">{shortLabel}</span>
+        <span className="hidden truncate cq-full:inline">{fullLabel}</span>
       </button>
 
       {isOpen && anchor && createPortal(

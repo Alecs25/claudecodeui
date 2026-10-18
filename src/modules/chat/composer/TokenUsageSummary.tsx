@@ -156,10 +156,10 @@ function TokenUsageSummary({ usage, onClick, onCompact, canCompact = false, isCo
         ) : (
           <ContextRing ratio={ratio} />
         )}
-        <span className="hidden font-medium tabular-nums sm:inline">
+        <span className="font-medium tabular-nums cq-compact:hidden">
           {percent === null ? formatTokenCount(usedTokens) : `${percent}%`}
         </span>
-        <PlanUsageBadge />
+        <PlanUsageBadge className="cq-compact:hidden" />
       </button>
 
       {isOpen && anchor && createPortal(

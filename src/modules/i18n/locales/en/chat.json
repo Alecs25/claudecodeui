@@ -183,7 +183,8 @@
       "sendNow": "Send now"
     },
     "suggestion": {
-      "use": "Use"
+      "use": "Use",
+      "useFull": "Use suggestion"
     }
   },
   "composer": {
@@ -499,6 +500,8 @@
   "turnChanges": {
     "button_one": "Changes ({{count}} file)",
     "button_other": "Changes ({{count}} files)",
+    "short_one": "{{count}} file",
+    "short_other": "{{count}} files",
     "title_one": "Changes ({{count}} file)",
     "title_other": "Changes ({{count}} files)",
     "edit": "Edit",

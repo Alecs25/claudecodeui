@@ -17,7 +17,7 @@ type EffortOption = NonNullable<ProviderModelOption['effort']>['values'][number]
 
 /** "Sonnet (1M context)" → "Sonnet": the pill keeps the name, the menu keeps the detail. */
 function shortModelLabel(label: string): string {
-  return label.replace(/s*([^)]*)s*$/, '').trim() || label;
+  return label.replace(/\s*\([^)]*\)\s*$/, '').trim() || label;
 }
 
 type ComposerModelMenuProps = {
@@ -98,15 +98,17 @@ function ComposerModelMenu({
           updateAnchor();
           setIsOpen((current) => !current);
         }}
-        className="flex h-8 min-w-0 max-w-24 shrink items-center gap-1 rounded-full border border-border/60 bg-muted/40 px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted sm:max-w-56"
+        className="flex h-8 min-w-8 max-w-24 shrink items-center gap-1 rounded-full border border-border/60 bg-muted/40 px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted cq-compact:w-8 cq-compact:shrink-0 cq-compact:justify-center cq-compact:px-0 cq-full:max-w-56"
         aria-haspopup="menu"
         aria-expanded={isOpen}
         aria-label={ariaLabel}
         title={hasModelSection ? modelLabel : ariaLabel}
       >
-        <span className="truncate">{triggerLabel}</span>
+        <span className="truncate cq-compact:hidden">{triggerLabel}</span>
+        {/* A narrow column keeps only the initial ("O" for Opus); the title has the full name. */}
+        <span className="hidden cq-compact:inline" aria-hidden="true">{triggerLabel.charAt(0).toUpperCase()}</span>
         {hasModelSection && hasEffortSection && effort !== DEFAULT_EFFORT_VALUE && (
-          <span className="hidden shrink-0 text-muted-foreground sm:inline">· {effortLabel}</span>
+          <span className="hidden shrink-0 text-muted-foreground cq-full:inline">· {effortLabel}</span>
         )}
       </button>
 

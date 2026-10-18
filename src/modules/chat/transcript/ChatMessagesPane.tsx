@@ -199,15 +199,21 @@ function ChatMessagesPane({
   const renderTurnChangesButton = (index: number) => {
     const changes = turnFileChanges.get(index);
     if (!changes) return null;
+    const label = t('turnChanges.button', { count: changes.length, defaultValue: 'Changes ({{count}} files)' });
     return (
       <div className="flex justify-start px-3 sm:px-0">
         <button
           type="button"
           onClick={() => setOpenTurnChanges(changes)}
-          className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/40 px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label={label}
+          title={label}
+          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border/60 bg-muted/40 px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
-          <FileDiffIcon className="h-3.5 w-3.5" />
-          {t('turnChanges.button', { count: changes.length, defaultValue: 'Changes ({{count}} files)' })}
+          <FileDiffIcon className="h-3.5 w-3.5 shrink-0" />
+          <span className="cq-compact:hidden">{label}</span>
+          <span className="hidden cq-compact:inline">
+            {t('turnChanges.short', { count: changes.length, defaultValue: '{{count}} files' })}
+          </span>
         </button>
       </div>
     );
