@@ -159,7 +159,8 @@
       "sendNow": "Invia ora"
     },
     "suggestion": {
-      "use": "Usa"
+      "use": "Usa",
+      "useFull": "Usa il suggerimento"
     }
   },
   "providerSelection": {
@@ -387,6 +388,8 @@
   "turnChanges": {
     "button_one": "Modifiche ({{count}} file)",
     "button_other": "Modifiche ({{count}} file)",
+    "short_one": "{{count}} file",
+    "short_other": "{{count}} file",
     "title_one": "Modifiche ({{count}} file)",
     "title_other": "Modifiche ({{count}} file)",
     "edit": "Modifica",

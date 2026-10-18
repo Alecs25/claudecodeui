@@ -298,9 +298,9 @@ export default function ChatComposer({
       : t('input.send');
 
   return (
-    <div className="chat-composer-shell relative flex-shrink-0 px-2 pb-2 pt-0 sm:px-4 sm:pb-4 md:px-4 md:pb-6">
+    <div className="chat-composer-shell relative flex-shrink-0 px-2 pb-2 pt-0 sm:pb-4 md:pb-6 cq-full:px-4">
       {!hasPendingPermissions && (
-        <div className="pointer-events-none absolute bottom-full left-1/2 z-10 w-[calc(100%-1rem)] max-w-[54.25rem] -translate-x-1/2 translate-y-px bg-transparent sm:w-[calc(100%-2rem)]">
+        <div className="pointer-events-none absolute bottom-full left-1/2 z-10 w-[calc(100%-1rem)] max-w-[54.25rem] -translate-x-1/2 translate-y-px bg-transparent cq-full:w-[calc(100%-2rem)]">
           <ActivityIndicator
             activity={activity}
             onAbort={onAbortSession}
@@ -467,7 +467,7 @@ export default function ChatComposer({
               onBlur={() => onInputFocusChange?.(false)}
               onInput={onTextareaInput}
               placeholder={promptSuggestion ?? placeholder}
-              className={promptSuggestion ? 'pr-16' : undefined}
+              className={promptSuggestion ? 'pr-16 cq-compact:pr-4' : undefined}
               enterKeyHint={isOnScreenKeyboardDevice() ? 'enter' : 'send'}
             />
 
@@ -477,18 +477,30 @@ export default function ChatComposer({
                 <button
                   type="button"
                   onClick={() => onAcceptPromptSuggestion()}
-                  className="absolute right-2 top-1.5 rounded-full border border-border/60 bg-muted/60 px-2.5 py-0.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                  className="absolute right-2 top-1.5 rounded-full border border-border/60 bg-muted/60 px-2.5 py-0.5 text-xs font-medium text-foreground transition-colors hover:bg-muted cq-compact:hidden"
                 >
                   {t('input.suggestion.use', { defaultValue: 'Use' })}
                 </button>
               ) : (
                 <kbd
                   aria-hidden="true"
-                  className="pointer-events-none absolute right-3 top-2.5 rounded border border-border/60 px-1 font-mono text-[11px] leading-4 text-muted-foreground/70"
+                  className="pointer-events-none absolute right-3 top-2.5 rounded border border-border/60 px-1 font-mono text-[11px] leading-4 text-muted-foreground/70 cq-compact:hidden"
                 >
                   Tab
                 </kbd>
               )
+            )}
+            {/* A narrow column has no room beside the suggestion: the text takes the full width and the chip goes under it. */}
+            {promptSuggestion && onAcceptPromptSuggestion && (
+              <div className="hidden px-4 pb-1 cq-compact:block">
+                <button
+                  type="button"
+                  onClick={() => onAcceptPromptSuggestion()}
+                  className="rounded-full border border-border/60 bg-muted/60 px-2.5 py-0.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                >
+                  {t('input.suggestion.useFull', { defaultValue: 'Use suggestion' })}
+                </button>
+              </div>
             )}
         </PromptInputBody>
 
@@ -540,7 +552,7 @@ export default function ChatComposer({
               <PromptInputButton
                 tooltip={{ content: t('input.clearInput', { defaultValue: 'Clear input' }) }}
                 onClick={onClearInput}
-                className="hidden sm:flex"
+                className="cq-compact:hidden"
               >
                 <XIcon />
               </PromptInputButton>
@@ -586,7 +598,7 @@ export default function ChatComposer({
           </div>
 
           <div
-            className={`order-last hidden basis-full px-2 text-center text-xs leading-4 text-muted-foreground/50 transition-opacity duration-200 lg:block ${
+            className={`order-last hidden basis-full px-2 text-center text-xs leading-4 text-muted-foreground/50 transition-opacity duration-200 cq-wide:block ${
               input.trim() && !canQueueDraft ? 'opacity-0' : 'opacity-100'
             }`}
           >

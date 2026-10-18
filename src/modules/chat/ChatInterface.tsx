@@ -563,7 +563,7 @@ function ChatInterface({
 
   return (
     <PermissionContext.Provider value={permissionContextValue}>
-      <div ref={paneRef} data-chat-pane="" className="flex h-full min-h-0 flex-col">
+      <div ref={paneRef} data-chat-pane="" className="cq-column flex h-full min-h-0 flex-col">
         <MarkdownWorkspaceContext.Provider value={markdownWorkspaceValue}>
           <TranscriptSessionContext.Provider value={transcriptSessionValue}>
             <ChatMessagesPane

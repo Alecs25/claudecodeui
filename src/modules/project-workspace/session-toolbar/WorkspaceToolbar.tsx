@@ -51,8 +51,8 @@ export default function WorkspaceToolbar({
           className={cn(BUTTON_CLASS, isActive && ACTIVE_CLASS)}
         >
           <Icon className="h-4 w-4 flex-shrink-0" />
-          {/* Labels only where the tablet toolbar has room for them. */}
-          <span className="hidden md:inline">{label(pane)}</span>
+          {/* Labels only when the header leaves the session title room beside them, whatever the screen width. */}
+          <span className="hidden cq-wide:inline">{label(pane)}</span>
         </button>
       </Tooltip>
     );
