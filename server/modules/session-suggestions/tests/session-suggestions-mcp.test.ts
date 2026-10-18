@@ -9,7 +9,7 @@ const __dirname = getModuleDirectory(import.meta.url);
 
 /** Runs the stdio server once over the given requests and returns the responses by id. */
 async function callServer(requests: Record<string, unknown>[]): Promise<Map<unknown, any>> {
-  const child = spawn(process.execPath, ['--import', 'tsx', path.join(__dirname, 'session-suggestions-mcp.ts')], {
+  const child = spawn(process.execPath, ['--import', 'tsx', path.join(__dirname, '..', 'session-suggestions-mcp.ts')], {
     stdio: ['pipe', 'pipe', 'inherit'],
   });
   const responses = new Map<unknown, any>();

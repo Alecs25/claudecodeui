@@ -1,8 +1,8 @@
 import type { WebSocket } from 'ws';
 
 import { sessionsDb } from '@/modules/database/index.js';
-import { startClaudeSideChat, type ClaudeSideChat, type SideChatEvent } from '@/modules/providers/index.js';
-import type { AnyRecord } from '@/shared/types.js';
+import { startClaudeSideChat } from '@/modules/providers/index.js';
+import type { AnyRecord, ClaudeSideChat, SideChatEvent } from '@/shared/types.js';
 
 /**
  * Side chats keyed by the client's id, each tied to the socket that opened it.
@@ -26,7 +26,7 @@ type SideChatEntry = {
   idleTimer: ReturnType<typeof setTimeout> | null;
 };
 
-export type SideChatDependencies = {
+type SideChatDependencies = {
   getSession?: (sessionId: string) => ReturnType<typeof sessionsDb.getSessionById>;
   start?: typeof startClaudeSideChat;
 };
@@ -112,6 +112,7 @@ function openSideChat(
   return entry;
 }
 
+/** Used by the websocket module for the `chat.side-question` and `chat.side-close` frames. */
 export const sideChatService = {
   /** `chat.side-question`: opens the side chat on its first question, then keeps asking the same process. */
   ask(ws: WebSocket, data: AnyRecord, dependencies: SideChatDependencies = {}): void {

@@ -1,6 +1,7 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
 
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
+import type { ClaudeSideChat, SideChatEvent } from '@/shared/types.js';
 
 /**
  * Side chat ("/btw"): a question about the session that must not become part
@@ -14,7 +15,7 @@ import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
  * conversation's own context until it is closed.
  */
 
-/** Tools that only read: a side chat answers questions, it never changes the project. */
+/** Tools that only read: a side chat answers questions, it never changes the project. Exported for tests. */
 export const SIDE_CHAT_TOOLS = ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch'] as const;
 
 const SIDE_CHAT_PROMPT = [
@@ -24,18 +25,6 @@ const SIDE_CHAT_PROMPT = [
   'Answer briefly and directly. You can read files and search, but never modify anything:',
   'if the question asks for a change, describe it instead of making it.',
 ].join('\n');
-
-export type SideChatEvent =
-  | { event: 'text'; text: string }
-  | { event: 'tool'; name: string; detail?: string }
-  | { event: 'done' }
-  | { event: 'error'; error: string };
-
-export type ClaudeSideChat = {
-  /** Sends a question; false once the side chat is closed. */
-  ask(text: string): boolean;
-  close(): void;
-};
 
 type SdkMessage = {
   type?: string;
@@ -48,14 +37,14 @@ type SdkMessage = {
 
 type SideChatQuery = AsyncIterable<SdkMessage> & { close?: () => void };
 
-export type StartClaudeSideChatInput = {
+type StartClaudeSideChatInput = {
   providerSessionId: string;
   cwd: string;
   model?: string | null;
   onEvent: (event: SideChatEvent) => void;
 };
 
-export type StartClaudeSideChatDependencies = {
+type StartClaudeSideChatDependencies = {
   createQuery?: (input: { prompt: AsyncIterable<unknown>; options: Record<string, unknown> }) => SideChatQuery;
 };
 
@@ -73,7 +62,7 @@ function describeToolInput(input: unknown): string | undefined {
   return undefined;
 }
 
-/** Turns one SDK message into the events the client draws. */
+/** Turns one SDK message into the events the client draws. Exported for tests. */
 export function readSideChatEvents(message: SdkMessage): SideChatEvent[] {
   if (message.type === 'assistant' && Array.isArray(message.message?.content)) {
     const events: SideChatEvent[] = [];
@@ -132,6 +121,7 @@ function createQuestionStream() {
   };
 }
 
+/** SDK options of a side chat: a read-only, unpersisted fork. Exported for tests. */
 export function buildSideChatOptions(input: Omit<StartClaudeSideChatInput, 'onEvent'>): Record<string, unknown> {
   const options: Record<string, unknown> = {
     cwd: input.cwd,
@@ -165,6 +155,7 @@ export function buildSideChatOptions(input: Omit<StartClaudeSideChatInput, 'onEv
   return options;
 }
 
+/** Used by the side-chat module (through the providers barrel) to answer /btw questions. */
 export function startClaudeSideChat(
   input: StartClaudeSideChatInput,
   dependencies: StartClaudeSideChatDependencies = {},

@@ -21,4 +21,3 @@ export { closeSessionsWatcher } from './services/sessions-watcher.service.js';
 
 // startClaudeSideChat: used by the side-chat module for /btw questions, which only Claude can fork without a trace.
 export { startClaudeSideChat } from './list/claude/claude-side-chat.js';
-export type { ClaudeSideChat, SideChatEvent } from './list/claude/claude-side-chat.js';
