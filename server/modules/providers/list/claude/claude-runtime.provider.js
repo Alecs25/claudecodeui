@@ -37,6 +37,7 @@ import {
   notifyRunStopped,
   notifyUserIfEnabled
 } from '@/modules/notifications/index.js';
+import { planUsageService } from '@/modules/plan-usage/index.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
 import {
   fitClaudeContextWindow,
@@ -1757,6 +1758,11 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
           ws.send(createNormalizedMessage({ kind: 'status', text: 'prompt_suggestion', suggestion, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
         }
         continue;
+      }
+
+      // Plan usage (5-hour and weekly windows) for the whole app, not this chat.
+      if (message.type === 'rate_limit_event') {
+        planUsageService.updateFromRateLimitInfo(message.rate_limit_info);
       }
 
       // Transform and normalize message via adapter
