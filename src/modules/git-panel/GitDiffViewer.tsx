@@ -1,9 +1,13 @@
-import { useMemo } from 'react';
+import { Fragment, useMemo, type ReactNode } from 'react';
 
 type GitDiffViewerProps = {
   diff: string | null;
   isMobile: boolean;
   wrapText: boolean;
+  /** Makes each line clickable, e.g. to comment on it; receives the line's index in the diff. */
+  onLineClick?: (lineIndex: number) => void;
+  /** Drawn under a line, e.g. the comments on it. */
+  renderLineExtras?: (lineIndex: number) => ReactNode;
 };
 
 const PREVIEW_CHARACTER_LIMIT = 200_000;
@@ -28,8 +32,8 @@ function buildDiffPreview(diff: string): DiffPreview {
   };
 }
 
-/** Rendered by the git panel's changes, compare and history views to display one file's diff. */
-export default function GitDiffViewer({ diff, isMobile, wrapText }: GitDiffViewerProps) {
+/** Rendered by the git panel's changes, compare and history views, and the workspace's Changes pane, to display one file's diff. */
+export default function GitDiffViewer({ diff, isMobile, wrapText, onLineClick, renderLineExtras }: GitDiffViewerProps) {
   // Render a bounded preview to keep huge commit diffs from freezing the UI thread.
   const preview = useMemo(() => buildDiffPreview(diff || ''), [diff]);
   const isPreviewTruncated = preview.isCharacterTruncated || preview.isLineTruncated;
@@ -47,18 +51,30 @@ export default function GitDiffViewer({ diff, isMobile, wrapText }: GitDiffViewe
     const isDeletion = line.startsWith('-') && !line.startsWith('---');
     const isHeader = line.startsWith('@@');
 
+    const isClickable = Boolean(onLineClick) && !isHeader;
     return (
-      <div
-        key={index}
-        className={`px-3 py-0.5 font-mono text-xs ${isMobile && wrapText ? 'whitespace-pre-wrap break-all' : 'overflow-x-auto whitespace-pre'
-          } ${isAddition ? 'bg-green-50 text-green-700 dark:bg-green-950/50 dark:text-green-300' :
-            isDeletion ? 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300' :
-              isHeader ? 'bg-primary/5 text-primary' :
-                'text-muted-foreground/70'
-          }`}
-      >
-        {line}
-      </div>
+      <Fragment key={index}>
+        <div
+          role={isClickable ? 'button' : undefined}
+          tabIndex={isClickable ? 0 : undefined}
+          onClick={isClickable ? () => onLineClick?.(index) : undefined}
+          onKeyDown={isClickable ? (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              onLineClick?.(index);
+            }
+          } : undefined}
+          className={`px-3 py-0.5 font-mono text-xs ${isMobile && wrapText ? 'whitespace-pre-wrap break-all' : 'overflow-x-auto whitespace-pre'
+            } ${isAddition ? 'bg-green-50 text-green-700 dark:bg-green-950/50 dark:text-green-300' :
+              isDeletion ? 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300' :
+                isHeader ? 'bg-primary/5 text-primary' :
+                  'text-muted-foreground/70'
+            } ${isClickable ? 'cursor-pointer hover:outline hover:outline-1 hover:-outline-offset-1 hover:outline-primary/40 focus:outline-none focus-visible:ring-1 focus-visible:ring-primary' : ''}`}
+        >
+          {line}
+        </div>
+        {renderLineExtras?.(index)}
+      </Fragment>
     );
   };
 

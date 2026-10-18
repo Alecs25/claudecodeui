@@ -16,6 +16,7 @@ import {
 import { useDeviceSettings } from '@/shared/hooks/useDeviceSettings';
 import { parseToolPayload } from '@/modules/chat/utils/messageTransforms';
 import { parseWorkflowMeta } from '@/modules/chat/utils/workflowScriptMeta';
+import { publishBackgroundTasks, type BackgroundTaskItem } from '@/modules/chat/utils/backgroundTasksRegistry';
 
 type BackgroundTasksStripProps = {
   /** Every loaded row of the session, not the visible window: a task launched pages ago is still running. */
@@ -96,22 +97,6 @@ function describeTask(message: ChatMessage, t: TFunction) {
 
   return { kind, name, progress };
 }
-
-/** One running task as the strip and the panel draw it, whatever it was read from. */
-type BackgroundTaskItem = {
-  key: string;
-  kind: string;
-  name: string;
-  progress: string;
-  /** Epoch ms the task launched; undefined when nothing says. */
-  startedAt?: number;
-  /** The `chat.stop-task` frame, or undefined when nothing has named the task. */
-  stopFrame?: { type: 'chat.stop-task'; sessionId: string; taskId: string; toolUseId: string };
-  /** Opens the task's row; undefined for a task no page of this transcript holds. */
-  open?: () => void;
-  /** Why clicking it does what it does, appended to the title. */
-  hint?: string;
-};
 
 /** Chips fit side by side up to this many; past it, or on a phone, a one-line summary stands in. */
 const MAX_INLINE_CHIPS = 2;
@@ -239,14 +224,20 @@ function useNow(): number {
   return now;
 }
 
-function TaskPanel({ items, sendMessage, onClose }: {
+/**
+ * The running tasks one per row, with elapsed time and a stop button. Shown
+ * by the strip's dropdown and, full height, by the workspace's Background pane.
+ */
+export function BackgroundTaskList({ items, sendMessage, onOpen, className }: {
   items: BackgroundTaskItem[];
   sendMessage: (message: unknown) => void;
-  onClose: () => void;
+  /** Called before a row opens its task, e.g. to close the dropdown. */
+  onOpen?: () => void;
+  className?: string;
 }) {
   const now = useNow();
   return (
-    <ul className="absolute left-0 top-full z-20 mt-1 max-h-[60vh] w-[min(24rem,calc(100vw-2rem))] overflow-y-auto rounded-md border border-border/60 bg-popover py-1 text-xs text-popover-foreground shadow-lg">
+    <ul className={className}>
       {items.map((item) => {
         const { open } = item;
         const detail = item.progress || item.hint;
@@ -271,7 +262,7 @@ function TaskPanel({ items, sendMessage, onClose }: {
               <button
                 type="button"
                 onClick={() => {
-                  onClose();
+                  onOpen?.();
                   open();
                 }}
                 className="min-w-0 flex-1 rounded px-1.5 py-1.5 text-left hover:bg-muted"
@@ -306,6 +297,18 @@ export const BackgroundTasksStrip = memo(({ messages, tasks, sessionId, sendMess
   const items = collectBackgroundTaskItems({ messages, tasks, sessionId, onReveal, onLoadAll }, t);
   const isSummary = isMobile || items.length > MAX_INLINE_CHIPS;
   const showPanel = isPanelOpen && isSummary && items.length > 0;
+
+  // Read by the workspace's Background pane, which cannot see the transcript.
+  useEffect(() => {
+    if (sessionId) {
+      publishBackgroundTasks(sessionId, { items, sendMessage });
+    }
+  });
+  useEffect(() => () => {
+    if (sessionId) {
+      publishBackgroundTasks(sessionId, null);
+    }
+  }, [sessionId]);
 
   useEffect(() => {
     if (!showPanel) {
@@ -362,7 +365,14 @@ export const BackgroundTasksStrip = memo(({ messages, tasks, sessionId, sendMess
         </span>
         <ChevronDown className={`h-3 w-3 transition-transform ${showPanel ? 'rotate-180' : ''}`} />
       </button>
-      {showPanel && <TaskPanel items={items} sendMessage={sendMessage} onClose={() => setIsPanelOpen(false)} />}
+      {showPanel && (
+        <BackgroundTaskList
+          items={items}
+          sendMessage={sendMessage}
+          onOpen={() => setIsPanelOpen(false)}
+          className="absolute left-0 top-full z-20 mt-1 max-h-[60vh] w-[min(24rem,calc(100vw-2rem))] overflow-y-auto rounded-md border border-border/60 bg-popover py-1 text-xs text-popover-foreground shadow-lg"
+        />
+      )}
     </div>
   );
 });

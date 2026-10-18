@@ -32,6 +32,7 @@ import { escapeRegExp } from '@/modules/chat/utils/chatFormatting';
 import { WIDGET_SEND_PROMPT_EVENT } from '@/modules/chat/utils/inlineWidget';
 import { readBtwQuestion, requestSideChat } from '@/modules/chat/utils/sideChat';
 import { takePendingSuggestedPrompt } from '@/modules/chat/utils/sessionSuggestions';
+import { readSessionPromptDetail, SESSION_PROMPT_EVENT } from '@/modules/chat/utils/sessionPrompt';
 import { describeBackgroundTask, ownBackgroundTasks } from '@/modules/chat/utils/backgroundTasks';
 import { useFileMentions } from '@/modules/chat/hooks/useFileMentions';
 import { useInputHistory } from '@/modules/chat/hooks/useInputHistory';
@@ -1273,6 +1274,25 @@ export function useChatComposerState({
       }
     };
   }, [sessionKey, selectedProjectId, setInput]);
+  // A prompt addressed to one session: the Changes pane's "Send to Claude".
+  // Only the composer of that session answers, so a split view sends once.
+  const promptSessionId = selectedSession?.id || currentSessionId || null;
+  useEffect(() => {
+    if (!promptSessionId) {
+      return undefined;
+    }
+    const handleSessionPrompt = (event: Event) => {
+      const detail = readSessionPromptDetail(event);
+      if (!detail || detail.sessionId !== promptSessionId) {
+        return;
+      }
+      setInput(detail.text);
+      inputValueRef.current = detail.text;
+      handleSubmitRef.current?.(createFakeSubmitEvent());
+    };
+    window.addEventListener(SESSION_PROMPT_EVENT, handleSessionPrompt);
+    return () => window.removeEventListener(SESSION_PROMPT_EVENT, handleSessionPrompt);
+  }, [promptSessionId, setInput]);
 
   useEffect(() => {
     inputValueRef.current = input;

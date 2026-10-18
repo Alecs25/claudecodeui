@@ -78,7 +78,7 @@ const header = (activeTab: AppTab) => (
   <WebSocketProvider>
     <WorkspaceHeader
       activeTab={activeTab}
-      setActiveTab={() => undefined}
+      onTogglePane={() => undefined}
       selectedProject={PROJECT}
       selectedSession={null}
       shouldShowTasksTab={false}

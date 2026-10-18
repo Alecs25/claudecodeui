@@ -417,5 +417,46 @@
     "details": "Details",
     "noData": "No data yet",
     "badge": "5h {{percent}}%"
+  },
+  "panes": {
+    "terminal": "Terminal",
+    "changes": "Changes",
+    "preview": "Preview",
+    "files": "Files",
+    "git": "Git",
+    "plan": "Plan",
+    "background": "Background tasks",
+    "more": "More",
+    "back": "Back",
+    "close": "Close",
+    "resize": "Drag to resize",
+    "noBackgroundTasks": "No background tasks"
+  },
+  "sessionMenu": {
+    "title": "Session options",
+    "rename": "Rename",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "view": "View",
+    "sideChat": "Side chat",
+    "markCompleted": "Mark completed",
+    "reopen": "Reopen",
+    "openSplit": "Open side by side",
+    "closeSplit": "Close side by side",
+    "archive": "Archive",
+    "archiveConfirm": "Archive this session?",
+    "archiveFailed": "Could not archive the session."
+  },
+  "changesPane": {
+    "fileCount_one": "{{count}} file",
+    "fileCount_other": "{{count}} files",
+    "empty": "No changes",
+    "comment": "Comment",
+    "addComment": "Comment",
+    "deleteComment": "Delete comment",
+    "commentCount_one": "{{count}} comment",
+    "commentCount_other": "{{count}} comments",
+    "send": "Send to Claude",
+    "promptIntro": "Comments on the changes:"
   }
 }
