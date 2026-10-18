@@ -1646,7 +1646,10 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       });
       // `query()` returns before the CLI has answered the initialize request
       // that registers the hooks, so a rejected registration only shows here.
-      if (typeof hookedQuery.initializationResult === 'function') {
+      // Awaited only when the interaction hook is registered: the wait delays
+      // addSession below by the CLI start-up, and only that hook needs the
+      // fallback (disallowing the tools) when registration fails.
+      if (sdkOptions.hooks.PreToolUse && typeof hookedQuery.initializationResult === 'function') {
         await hookedQuery.initializationResult();
       }
       queryInstance = hookedQuery;
