@@ -39,7 +39,10 @@
     "clearSelection": "Deseleziona tutto",
     "deleteSelected_one": "Elimina {{count}} sessione",
     "deleteSelected_other": "Elimina {{count}} sessioni",
-    "completedSection": "Completate"
+    "completedSection": "Completate",
+    "newSessionIn": "Nuova sessione in {{project}}",
+    "showMoreCount": "Altre {{count}}",
+    "loadMore": "Carica altre sessioni"
   },
   "tooltips": {
     "viewEnvironments": "Visualizza ambienti",
@@ -58,7 +61,10 @@
     "clearSearch": "Cancella ricerca",
     "openCommandPalette": "Apri tavolozza comandi",
     "attentionRequiredIndicator": "La sessione richiede attenzione",
-    "unreadSessionIndicator": "Non letta"
+    "unreadSessionIndicator": "Non letta",
+    "waitingSessionIndicator": "In attesa di un permesso",
+    "processingSessionIndicator": "Sessione in elaborazione",
+    "backgroundWorkIndicator": "Attività in background"
   },
   "navigation": {
     "chat": "Chat",
@@ -78,7 +84,10 @@
     "rename": "Rinomina",
     "joinCommunity": "Unisciti alla community",
     "reportIssue": "Segnala problema",
-    "starOnGithub": "Metti stella su GitHub"
+    "starOnGithub": "Metti stella su GitHub",
+    "more": "Altro",
+    "close": "Chiudi",
+    "customize": "Personalizza"
   },
   "branding": {
     "openSource": "Open Source"
@@ -144,7 +153,8 @@
     "matches_one": "{{count}} corrispondenza",
     "matches_other": "{{count}} corrispondenze",
     "projectsScanned_one": "{{count}} progetto analizzato",
-    "projectsScanned_other": "{{count}} progetti analizzati"
+    "projectsScanned_other": "{{count}} progetti analizzati",
+    "open": "Cerca"
   },
   "deleteConfirmation": {
     "deleteProject": "Rimuovi progetto",
@@ -180,7 +190,9 @@
     "markRead": "Segna come letta",
     "markUnread": "Segna come non letta",
     "markCompleted": "Segna completata",
-    "reopen": "Riapri"
+    "reopen": "Riapri",
+    "completed": "Completata",
+    "pinnedSection": "Fissate"
   },
   "sessionFinished": {
     "untitled": "Sessione",
@@ -196,7 +208,44 @@
       "running": "In esecuzione",
       "unread": "Non lette",
       "pinned": "Fissate",
-      "completed": "Completate"
-    }
+      "completed": "Completate",
+      "waiting": "In attesa di permesso"
+    },
+    "title": "Conversazioni recenti",
+    "sectionTitle": "Recenti",
+    "emptyTitle": "Nessuna conversazione",
+    "loadFailed": "Impossibile caricare le conversazioni",
+    "loadMore": "Carica conversazioni precedenti",
+    "loadingMore": "Caricamento..."
+  },
+  "sessionMenu": {
+    "options": "Opzioni sessione",
+    "rename": "Rinomina",
+    "fork": "Crea copia",
+    "archive": "Archivia",
+    "delete": "Elimina…",
+    "retry": "Riprova"
+  },
+  "projectMenu": {
+    "options": "Opzioni progetto",
+    "rename": "Rinomina progetto",
+    "remove": "Rimuovi dalla barra…",
+    "starred": "Preferito"
+  },
+  "filters": {
+    "status": "Stato",
+    "project": "Progetto",
+    "allProjects": "Tutti",
+    "groupByProject": "Per progetto"
+  },
+  "archived": {
+    "title": "Archivio",
+    "restore": "Ripristina sessione",
+    "restoreProject": "Ripristina progetto",
+    "restoreAction": "Ripristina",
+    "deletePermanently": "Elimina definitivamente",
+    "emptyTitle": "Nessun elemento archiviato",
+    "noMatchingSessions": "Nessun elemento archiviato corrispondente",
+    "loadingTitle": "Caricamento archivio..."
   }
 }

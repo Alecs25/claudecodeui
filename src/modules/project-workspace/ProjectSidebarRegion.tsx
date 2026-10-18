@@ -39,6 +39,8 @@ function ProjectSidebarRegion({
     setSidebarOpen(false);
   }, [setSidebarOpen]);
 
+  const closeSidebar = useCallback(() => setSidebarOpen(false), [setSidebarOpen]);
+
   const handleBackdropTouch = useCallback((event: ReactTouchEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -160,14 +162,15 @@ function ProjectSidebarRegion({
         onTouchStart={handleBackdropTouch}
         aria-label={t('versionUpdate.ariaLabels.closeSidebar')}
       />
+      {/* Full width below the tablet breakpoint: the drawer is the whole screen, as in the mock. */}
       <div
-        className={`relative h-full w-[90vw] max-w-md transform border-r border-border/40 bg-card transition-transform duration-150 ease-out sm:w-[26rem] ${
+        className={`relative h-full w-full transform bg-card transition-transform duration-150 ease-out ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
         onClick={(event) => event.stopPropagation()}
         onTouchStart={(event) => event.stopPropagation()}
       >
-        <Sidebar {...sidebarSharedProps} />
+        <Sidebar {...sidebarSharedProps} onCloseSidebar={closeSidebar} />
       </div>
     </div>
   );

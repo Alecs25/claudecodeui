@@ -1543,13 +1543,17 @@ export type SessionRowActions = {
   activeSessions: ReadonlySet<string>;
   /** The subset of `activeSessions` that only has background tasks running, which show the purple dot instead of the spinner. */
   backgroundSessionIds: ReadonlySet<string>;
-  /** Sessions waiting on the user, which show the amber dot. */
+  /** Sessions with activity the user has not looked at yet, which show the unread dot. */
   attentionSessionIds: ReadonlySet<string>;
+  /** Sessions with a permission or question prompt open, which show the amber hand. */
+  waitingSessionIds: ReadonlySet<string>;
   onRenameDraftChange: (draft: string) => void;
   onStartEditingSession: (projectId: string, sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
   onSaveEditingSession: (projectId: string, sessionId: string, summary: string, provider: LLMProvider) => void;
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
+  /** Archives one session straight away; archiving is undone from the archive, so it asks nothing. */
+  onArchiveSession: (sessionId: string) => void;
   /** Branches a session into an independent one. Rows hide it for providers that cannot. */
   onForkSession?: (session: SessionWithProvider) => void;
   /** Pins, marks read/unread or completed one session. */
@@ -1560,6 +1564,8 @@ export type SessionRowActions = {
 
 export type SidebarProjectListProps = SessionRowActions & {
   projects: Project[];
+  /** The status the session rows are narrowed to; projects left with no matching row are hidden. */
+  statusFilter: SessionStatusFilter;
   filteredProjects: Project[];
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
@@ -1610,9 +1616,6 @@ export type ThemeMode = 'light' | 'dark' | 'system';
 /** The ordering applied to the project list, either alphabetically by name or by most recent activity, persisted alongside the user's appearance settings. */
 export type ProjectSortOrder = 'name' | 'date';
 
-/** Which list the sidebar is currently showing: projects, conversation search results, running sessions or archived items. */
-export type SidebarSearchMode = 'projects' | 'conversations' | 'running' | 'archived';
-
 /** A Project narrowed to the archived state so archived entries can be listed and restored without being mistaken for active projects. */
 export type ArchivedProjectListItem = Project & { isArchived: true };
 
@@ -1650,8 +1653,12 @@ export type SessionStatusFlags = {
 /** A change to some of a session's status flags; omitted flags stay as they are. */
 export type SessionStatusPatch = Partial<SessionStatusFlags>;
 
-/** The status the Conversations list is narrowed to; `all` shows every conversation. */
-export type SessionStatusFilter = 'all' | 'running' | 'unread' | 'pinned' | 'completed';
+/**
+ * The status the sidebar's session rows are narrowed to; `all` shows every
+ * session. `waiting` (a prompt open) is only known client-side, so it is never
+ * sent to the server's recents filter.
+ */
+export type SessionStatusFilter = 'all' | 'running' | 'waiting' | 'unread' | 'pinned' | 'completed';
 
 /** The subset of archived-session fields needed to render a recent-conversations row and reopen the session it points at, plus its status flags. */
 export type RecentConversationListItem = Pick<
