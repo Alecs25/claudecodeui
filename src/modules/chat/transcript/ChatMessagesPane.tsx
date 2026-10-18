@@ -23,9 +23,7 @@ import { BackgroundTasksStrip } from '@/modules/chat/transcript/BackgroundTasksS
 import TurnChangesDialog from '@/modules/chat/modals/TurnChangesDialog';
 import { findTurnFileChanges, type TurnFileChange } from '@/modules/chat/utils/turnChanges';
 import ChaptersMenu from '@/modules/chat/transcript/ChaptersMenu';
-import TranscriptViewModeMenu from '@/modules/chat/transcript/TranscriptViewModeMenu';
 import TranscriptVerboseContext from '@/modules/chat/context/TranscriptViewModeContext';
-import type { TranscriptViewMode } from '@/shared/uiPreferences';
 
 /**
  * How many of the newest rows mount with real content on the first commit,
@@ -81,9 +79,6 @@ type ChatMessagesPaneProps = {
   onGrantToolPermission: (suggestion: { entry: string; toolName: string }) => { success: boolean };
   showRawParameters?: boolean;
   showThinking?: boolean;
-  /** Absent outside the workspace (e.g. tests): the header then offers no view selector. */
-  transcriptViewMode?: TranscriptViewMode;
-  onTranscriptViewModeChange?: (mode: TranscriptViewMode) => void;
   selectedProject: Project;
   /** Loads an already-sent message back into the composer; absent when the provider cannot re-run from a point. */
   onEditMessage?: (message: ChatMessage) => void;
@@ -157,8 +152,6 @@ function ChatMessagesPane({
   onGrantToolPermission,
   showRawParameters,
   showThinking,
-  transcriptViewMode,
-  onTranscriptViewModeChange,
   selectedProject,
 }: ChatMessagesPaneProps) {
   const { t } = useTranslation('chat');
@@ -255,9 +248,6 @@ function ChatMessagesPane({
               hasUnloadedHistory={hasMoreMessages && !allMessagesLoaded}
               onLoadAll={loadAllMessages}
             />
-            {transcriptViewMode && onTranscriptViewModeChange && (
-              <TranscriptViewModeMenu mode={transcriptViewMode} onChange={onTranscriptViewModeChange} />
-            )}
             <ChatExportMenu
               messages={chatMessages}
               sessionTitle={selectedSession?.summary || selectedSession?.title}

@@ -609,8 +609,6 @@ function ChatInterface({
               onGrantToolPermission={handleGrantToolPermission}
               showRawParameters={showRawParameters}
               showThinking={showThinking}
-              transcriptViewMode={transcriptViewMode}
-              onTranscriptViewModeChange={onTranscriptViewModeChange}
               selectedProject={selectedProject}
               // Editing replaces the turn and everything after it, so it is only
               // offered when the session is idle — a half-truncated transcript with

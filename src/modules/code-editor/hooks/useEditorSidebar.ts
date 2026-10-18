@@ -118,6 +118,22 @@ export const useEditorSidebar = ({
     setEditorExpanded(false);
   }, []);
 
+  // For callers that take the right column for something else (a workspace
+  // pane): closes the editor, asking first when its buffer has unsaved edits.
+  // Returns false when the user kept the buffer.
+  const requestCloseEditor = useCallback((): boolean => {
+    if (editingFileRef.current === null) {
+      return true;
+    }
+    if (hasUnsavedChangesRef.current && !window.confirm(t('unsavedChanges.confirmClose'))) {
+      return false;
+    }
+    hasUnsavedChangesRef.current = false;
+    setEditingFile(null);
+    setEditorExpanded(false);
+    return true;
+  }, [t]);
+
   const handleToggleEditorExpand = useCallback(() => {
     setEditorExpanded((previous) => !previous);
   }, []);
@@ -214,6 +230,7 @@ export const useEditorSidebar = ({
     resizeHandleRef,
     handleFileOpen,
     handleCloseEditor,
+    requestCloseEditor,
     handleToggleEditorExpand,
     handleResizeStart,
     handleUnsavedChangesChange,

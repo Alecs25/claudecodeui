@@ -30,6 +30,8 @@ type ProjectMainState = Pick<
   | 'renameSession'
   | 'splitSession'
   | 'closeSplitSession'
+  | 'openSplitSession'
+  | 'handleSessionDelete'
 >;
 
 type ProjectCommandState = Pick<
@@ -112,10 +114,14 @@ export function ProjectsStateProvider({
       renameSession: state.renameSession,
       splitSession: state.splitSession,
       closeSplitSession: state.closeSplitSession,
+      openSplitSession: state.openSplitSession,
+      handleSessionDelete: state.handleSessionDelete,
     }),
     [
       state.splitSession,
       state.closeSplitSession,
+      state.openSplitSession,
+      state.handleSessionDelete,
       state.activeTab,
       state.externalMessageUpdate,
       state.handleProjectSelect,
