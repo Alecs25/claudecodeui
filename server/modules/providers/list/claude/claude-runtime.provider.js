@@ -26,7 +26,8 @@ import {
 } from '@/shared/image-attachments.js';
 import {
   CLAUDE_PREDEFINED_MODELS,
-  CLAUDE_ULTRACODE_EFFORT
+  CLAUDE_ULTRACODE_EFFORT,
+  resolveClaudeDefaultModelFlag
 } from '@/modules/providers/list/claude/claude-models.provider.js';
 import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import {
@@ -192,6 +193,10 @@ function readHeldTurnWaitMs() {
 const BG_WAIT_CEILING_MS = resolveBgWaitCeilingMs(process.env.CLOUDCLI_BG_WAIT_CEILING_MS);
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
+// Permission modes in which the CLI approves tools without calling
+// `canUseTool`. Interaction-required tools reach the owner in these modes only
+// through the PreToolUse hook registered in queryClaudeSDK.
+const MODES_SKIPPING_CAN_USE_TOOL = new Set(['auto', 'bypassPermissions']);
 
 const SEND_USER_FILE_TOOL = 'mcp__cloudcli-send-file__send_user_file';
 // Kept in sync with MARK_CHAPTER_TOOL in modules/chapters (this file is plain JS).
@@ -432,10 +437,16 @@ function mapCliOptionsToSDK(options = {}) {
 
   sdkOptions.disallowedTools = settings.disallowedTools || [];
 
-  sdkOptions.model = options.model || CLAUDE_PREDEFINED_MODELS.DEFAULT;
+  // `model` is the option the user picked and `modelFlag` what the CLI is started
+  // with for it. They differ only for "Default", which can run the model set in
+  // Claude Code's own settings or leave the flag off (see resolveClaudeDefaultModelFlag).
+  if (options.modelFlag) {
+    sdkOptions.model = options.modelFlag;
+  }
 
+  // Effort is validated against the option the user picked, whatever the flag is.
   applyClaudeEffort(sdkOptions, resolveClaudeEffort(
-    sdkOptions.model,
+    options.model,
     effort,
     options.effortModels || CLAUDE_PREDEFINED_MODELS,
   ));
@@ -943,29 +954,40 @@ function extractCumulativeTokenBudget(sdkMessage, reportedContextWindow) {
     return null;
   }
 
-  // Fallback for older SDK messages with only modelUsage
-  const modelKey = Object.keys(sdkMessage.modelUsage)[0];
-  const modelData = sdkMessage.modelUsage[modelKey];
-
-  if (!modelData || typeof modelData !== 'object') {
-    return null;
+  // Fallback for SDK messages with only modelUsage. A turn can bill several
+  // models (a subagent or a background task on a different model), each under
+  // its own key, so every entry is summed; reading only the first key dropped
+  // the rest and depended on object key order.
+  // A cumulative count that is present but not a number falls back to the
+  // regular count instead of shadowing it.
+  const firstCount = (...candidates) => candidates.find((count) => Number.isFinite(count));
+  const totals = { inputTokens: 0, outputTokens: 0, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 };
+  let entries = 0;
+  for (const modelData of Object.values(sdkMessage.modelUsage)) {
+    if (!modelData || typeof modelData !== 'object') {
+      continue;
+    }
+    const counts = [
+      firstCount(modelData.cumulativeInputTokens, modelData.inputTokens),
+      firstCount(modelData.cumulativeOutputTokens, modelData.outputTokens),
+      modelData.cacheReadInputTokens,
+      modelData.cacheCreationInputTokens,
+    ];
+    // An entry with no count at all (`{}`) is not a zero bill; skip it so a
+    // modelUsage with nothing usable still yields no budget.
+    if (!counts.some((count) => Number.isFinite(count))) {
+      continue;
+    }
+    entries += 1;
+    totals.inputTokens += readNumber(counts[0]);
+    totals.outputTokens += readNumber(counts[1]);
+    totals.cacheReadInputTokens += readNumber(counts[2]);
+    totals.cacheCreationInputTokens += readNumber(counts[3]);
   }
 
-  const inputTokens = readNumber(modelData.cumulativeInputTokens ?? modelData.inputTokens);
-  const outputTokens = readNumber(modelData.cumulativeOutputTokens ?? modelData.outputTokens);
-  const totalUsed = inputTokens + outputTokens;
-  const contextWindow = resolveContextWindow(reportedContextWindow);
-
-  return {
-    used: totalUsed,
-    total: contextWindow,
-    inputTokens,
-    outputTokens,
-    breakdown: {
-      input: inputTokens,
-      output: outputTokens,
-    },
-  };
+  // Same shape and accounting as the `usage` branch above, cache reads and
+  // writes included.
+  return entries > 0 ? buildTokenBudget(totals, reportedContextWindow) : null;
 }
 
 // Tool calls that leave work running past the end of a turn. Bash and Agent only
@@ -1244,6 +1266,33 @@ function createHeldPromptStream(messages) {
 }
 
 /**
+ * Outcome of a turn's `result` message. The SDK reports a failed turn either
+ * with an `error_*` subtype (error_max_turns, error_during_execution,
+ * error_max_budget_usd, ...) or with `is_error` on a `success` subtype (an API
+ * error the CLI gave up on). Either way the turn did not complete.
+ *
+ * Exported for the runtime tests.
+ * @param {Object} message - SDK `result` message
+ * @returns {{ failed: boolean, reason: string }} `reason` is human-readable
+ *   for a failed turn and `'completed'` otherwise
+ */
+export function resultOutcome(message) {
+  const subtype = typeof message?.subtype === 'string' ? message.subtype : 'success';
+  const failed = message?.is_error === true || subtype !== 'success';
+  if (!failed) {
+    return { failed: false, reason: 'completed' };
+  }
+  const details = Array.isArray(message?.errors)
+    ? message.errors.filter((item) => typeof item === 'string' && item)
+    : [];
+  const text = details.length > 0
+    ? details.join('; ')
+    : (typeof message?.result === 'string' ? message.result : '');
+  const kind = subtype === 'success' ? 'error' : subtype;
+  return { failed: true, reason: text ? `${kind}: ${text}` : kind };
+}
+
+/**
  * Loads MCP server configurations from ~/.claude.json
  * @param {string} cwd - Current working directory for project-specific configs
  * @returns {Object|null} MCP servers object or null if none found
@@ -1345,6 +1394,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
   // for tools that emit none (Monitor, ScheduleWakeup, CronCreate, TaskCreate)
   // and for an SDK that does not report tasks at all.
   let sawTaskEventThisTurn = false;
+  // Set when this turn showed the client assistant text or an error, so an
+  // error `result` can tell whether its reason was already on screen.
+  let explanationSentThisTurn = false;
   // True while the process is being held open for background work, so a later
   // `result` can be recognised as that work reporting back.
   let heldForBackgroundWork = false;
@@ -1422,10 +1474,15 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       console.warn('[Claude SDK] Unable to load provider models for effort validation:', error);
     }
 
+    const selectedModel = resolvedModel || options.model || CLAUDE_PREDEFINED_MODELS.DEFAULT;
     const sdkOptions = mapCliOptionsToSDK({
       ...options,
       providerSessionId,
-      model: resolvedModel || options.model,
+      model: selectedModel,
+      // "Default" runs whatever Claude Code would run here (issue #1096).
+      modelFlag: selectedModel === CLAUDE_PREDEFINED_MODELS.DEFAULT
+        ? await resolveClaudeDefaultModelFlag(options.cwd)
+        : selectedModel,
       effortModels,
     });
 
@@ -1460,12 +1517,6 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       }]
     };
 
-    // Caveat: in 'auto' and 'bypassPermissions' modes the SDK resolves approval
-    // at the permission-mode step and skips this callback, so interactive tools
-    // (AskUserQuestion, ExitPlanMode) won't reach the UI — the classifier/bypass
-    // auto-approves them and the model acts on a generated answer. Move these
-    // tools to a PreToolUse hook (runs before the mode check) if we need them
-    // to work in those modes.
     sdkOptions.canUseTool = async (toolName, input, context) => {
       const requiresInteraction = TOOLS_REQUIRING_INTERACTION.has(toolName);
 
@@ -1490,6 +1541,14 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         }
       }
 
+      return requestOwnerApproval(toolName, input, context?.signal);
+    };
+
+    // Asks the owner through the UI and waits for the answer. Interaction-
+    // required tools wait indefinitely; everything else uses the approval
+    // timeout.
+    const requestOwnerApproval = async (toolName, input, signal) => {
+      const requiresInteraction = TOOLS_REQUIRING_INTERACTION.has(toolName);
       const requestId = createRequestId();
       ws.send(createNormalizedMessage({ kind: 'permission_request', requestId, toolName, input, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
       emitNotification(createNotificationEvent({
@@ -1505,7 +1564,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
 
       const decision = await waitForToolApproval(requestId, {
         timeoutMs: requiresInteraction ? 0 : undefined,
-        signal: context?.signal,
+        signal,
         metadata: {
           // Keyed by the app session id so `chat.subscribe` can look pending
           // approvals up directly; provider id only for legacy callers.
@@ -1548,21 +1607,66 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       return { behavior: 'deny', message: decision.message ?? 'User denied tool use' };
     };
 
+    // Interaction-required tools (AskUserQuestion, ExitPlanMode) go to the
+    // owner in every permission mode. In 'auto' and 'bypassPermissions' the CLI
+    // approves tools at the permission-mode step and never calls `canUseTool`,
+    // so the model would act on an answer it generated itself. PreToolUse hooks
+    // run before that step, so those modes ask the owner through one. The
+    // other modes keep `canUseTool` as the only approval path: the CLI still
+    // calls it for these tools after a hook's 'allow', so a hook there would
+    // ask the owner twice.
+    if (MODES_SKIPPING_CAN_USE_TOOL.has(sdkOptions.permissionMode)) {
+      sdkOptions.hooks.PreToolUse = [{
+        matcher: [...TOOLS_REQUIRING_INTERACTION].join('|'),
+        hooks: [async (input, _toolUseId, hookOptions) => {
+          const toolName = input?.tool_name;
+          if (!TOOLS_REQUIRING_INTERACTION.has(toolName)) {
+            return {};
+          }
+          const result = await requestOwnerApproval(toolName, input?.tool_input, hookOptions?.signal);
+          return {
+            hookSpecificOutput: result.behavior === 'allow'
+              ? { hookEventName: 'PreToolUse', permissionDecision: 'allow', updatedInput: result.updatedInput }
+              : { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: result.message }
+          };
+        }]
+      }];
+    }
+
     // The SDK's own `query`, unless the caller supplies one (tests script the
     // stream to drive the hold logic below without a CLI process).
     const createQuery = context.createQuery ?? query;
     let heldPrompt = createHeldPromptStream(promptMessages);
     releasePromptStream = heldPrompt.release;
+    let hookedQuery = null;
     try {
-      queryInstance = createQuery({
+      hookedQuery = createQuery({
         prompt: heldPrompt.stream,
         options: sdkOptions
       });
+      // `query()` returns before the CLI has answered the initialize request
+      // that registers the hooks, so a rejected registration only shows here.
+      // Awaited only when the interaction hook is registered: the wait delays
+      // addSession below by the CLI start-up, and only that hook needs the
+      // fallback (disallowing the tools) when registration fails.
+      if (sdkOptions.hooks.PreToolUse && typeof hookedQuery.initializationResult === 'function') {
+        await hookedQuery.initializationResult();
+      }
+      queryInstance = hookedQuery;
     } catch (hookError) {
       // Older/newer SDK versions may not accept hook shapes yet.
       // Keep notification behavior operational via runtime events even if hook registration fails.
       console.warn('Failed to initialize Claude query with hooks, retrying without hooks:', hookError?.message || hookError);
+      // Shut down the failed attempt's CLI process before starting another.
+      hookedQuery?.close?.();
       delete sdkOptions.hooks;
+      // Without the PreToolUse hook, a mode that skips `canUseTool` would let
+      // the model answer interaction-required tools itself: disallow them.
+      if (MODES_SKIPPING_CAN_USE_TOOL.has(sdkOptions.permissionMode)) {
+        sdkOptions.disallowedTools = [
+          ...new Set([...(sdkOptions.disallowedTools || []), ...TOOLS_REQUIRING_INTERACTION])
+        ];
+      }
       // Discard the abandoned stream and build a fresh one for the retry.
       heldPrompt.release();
       heldPrompt = createHeldPromptStream(promptMessages);
@@ -1630,6 +1734,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         }
         if (isSubagentPromptEcho(msg)) {
           continue;
+        }
+        if (msg.kind === 'error' || msg.kind === 'stream_delta' || (msg.kind === 'text' && msg.role === 'assistant')) {
+          explanationSentThisTurn = true;
         }
         ws.send(msg);
       }
@@ -1719,14 +1826,34 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         const stillOutstanding = backgroundWork.hasOutstanding(sessionKey());
         if (!turnCompleteSent && !abortPending) {
           turnCompleteSent = true;
-          ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: 0 }));
-          notifyRunStopped({
-            userId: ws?.userId || null,
-            provider: 'claude',
-            sessionId: sessionId || capturedSessionId || null,
-            sessionName: sessionSummary,
-            stopReason: 'completed'
-          });
+          // The terminal status follows the result: an error result ends the
+          // turn as failed instead of being reported as a success.
+          const outcome = resultOutcome(message);
+          if (outcome.failed && (message.subtype !== 'success' || !explanationSentThisTurn)) {
+            // An `error_*` subtype comes with no assistant text explaining it,
+            // so the chat would otherwise just stop. An `is_error` success
+            // result usually streams its error text as an assistant message
+            // first; repeat the reason only when the turn showed nothing.
+            ws.send(createNormalizedMessage({ kind: 'error', content: `Claude ended the turn with ${outcome.reason}`, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+          }
+          ws.send(createCompleteMessage({ provider: 'claude', sessionId: capturedSessionId || sessionId || null, exitCode: outcome.failed ? 1 : 0 }));
+          if (outcome.failed) {
+            notifyRunFailed({
+              userId: ws?.userId || null,
+              provider: 'claude',
+              sessionId: sessionId || capturedSessionId || null,
+              sessionName: sessionSummary,
+              error: new Error(outcome.reason)
+            });
+          } else {
+            notifyRunStopped({
+              userId: ws?.userId || null,
+              provider: 'claude',
+              sessionId: sessionId || capturedSessionId || null,
+              sessionName: sessionSummary,
+              stopReason: 'completed'
+            });
+          }
         } else if (heldForBackgroundWork && !heldForSteer && !abortPending && !stillOutstanding) {
           // A result after the turn already reported complete means the work we
           // held the process open for has finished and pushed a follow-up turn
@@ -1760,6 +1887,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         sawTaskEventThisTurn = false;
         steeredThisTurn = false;
         heldForSteer = false;
+        explanationSentThisTurn = false;
         if (holdForTurn) {
           heldForBackgroundWork = true;
           scheduleRelease();

@@ -35,7 +35,8 @@ import type {
 /**
  * Indicates whether the backend is running in hosted Platform mode rather than
  * self-hosted OSS mode. The server bootstrap, Agent, Auth, and Browser Use
- * modules use this shared flag to keep environment-dependent behavior aligned.
+ * modules and `validateWorkspacePath` use this shared flag to keep
+ * environment-dependent behavior aligned.
  * Environment variables must be loaded before this module is evaluated.
  */
 export const IS_PLATFORM = process.env.VITE_IS_PLATFORM === 'true';
@@ -304,6 +305,23 @@ export function normalizeProjectPath(inputPath: string): string {
 }
 
 /**
+ * Reports whether `target` is `root` itself or nested under it.
+ *
+ * Uses `path.relative` rather than string-prefix matching so this is correct
+ * for root paths (e.g. "/" or "C:\\") that already end in a separator, where
+ * naively appending another separator before comparing would never match.
+ */
+export function isPathWithinRoot(
+  root: string,
+  target: string,
+  pathApi: path.PlatformPath = path,
+): boolean {
+  const relative = pathApi.relative(root, target);
+  const isParentTraversal = relative === '..' || relative.startsWith(`..${pathApi.sep}`);
+  return relative === '' || (!isParentTraversal && !pathApi.isAbsolute(relative));
+}
+
+/**
  * Validates that a user-supplied workspace path is safe to use.
  *
  * Call this before any filesystem mutation that creates or registers projects.
@@ -374,13 +392,17 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
     }
 
     const resolvedWorkspaceRoot = normalizeProjectPath(await realpath(WORKSPACES_ROOT));
-    if (
-      !resolvedPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
-      && resolvedPath !== resolvedWorkspaceRoot
-    ) {
+    if (!isPathWithinRoot(resolvedWorkspaceRoot, resolvedPath)) {
       return {
         valid: false,
-        error: `Workspace path must be within the allowed workspace root: ${WORKSPACES_ROOT}`,
+        // The root defaults to the home directory, so without naming the
+        // setting this reads like a fixed limit of the app. Hosted (Platform)
+        // installs manage the server's environment for the user, so the hint
+        // is left out there.
+        error: `Workspace path must be within the allowed workspace root: ${WORKSPACES_ROOT}`
+          + (IS_PLATFORM
+            ? ''
+            : '. To change the root, set the WORKSPACES_ROOT environment variable and restart the server.'),
       };
     }
 
@@ -391,10 +413,7 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
         const symlinkTarget = await readlink(absolutePath);
         const resolvedSymlinkPath = path.resolve(path.dirname(absolutePath), symlinkTarget);
         const realSymlinkPath = await realpath(resolvedSymlinkPath);
-        if (
-          !realSymlinkPath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)
-          && realSymlinkPath !== resolvedWorkspaceRoot
-        ) {
+        if (!isPathWithinRoot(resolvedWorkspaceRoot, realSymlinkPath)) {
           return {
             valid: false,
             error: 'Symlink target is outside the allowed workspace root',
@@ -760,6 +779,66 @@ export const writeJsonConfig = async (filePath: string, data: Record<string, unk
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
 };
+
+// ---------------------------
+//----------------- CLAUDE CODE SETTINGS FILE UTILITIES ------------
+// The Claude CLI refuses to load a settings file larger than this (2 MiB).
+const MAX_CLAUDE_SETTINGS_FILE_BYTES = 2 * 1024 * 1024;
+
+/**
+ * Reads one Claude Code settings file (`settings.json`, `settings.local.json`,
+ * managed settings) the way the Claude CLI loads it, without ever blocking on it.
+ *
+ * Used by the Claude settings permissions service (the permissions panel in
+ * Settings) and by the Claude models provider (the model "Default" runs).
+ *
+ * - `missing`: there is no such file.
+ * - `invalid`: a file the CLI would not apply either. That is anything but a
+ *   regular file, a file over the CLI's 2 MiB cap, an unreadable file, or content
+ *   that is not a JSON object. A project can be a cloned repository, and the
+ *   repository decides what its `.claude/settings*.json` are. `stat` follows a
+ *   symlink without opening its target, so a FIFO or a device such as /dev/zero
+ *   is never read: that would stall the server's fs threadpool or exhaust its
+ *   memory.
+ * - `ok`: the parsed object. An empty or whitespace-only file loads as `{}`, as
+ *   in the CLI. An empty file is not even opened, since kernel pseudo-files report
+ *   a size of 0 even when a read would block. The text is decoded like the CLI
+ *   does: UTF-16LE when it starts with that byte order mark, UTF-8 otherwise,
+ *   without a leading BOM. Windows editors and PowerShell often save one.
+ */
+export async function readClaudeSettingsFile(
+  filePath: string,
+): Promise<{ status: 'ok'; settings: AnyRecord } | { status: 'missing' | 'invalid'; settings: null }> {
+  let content: string;
+  try {
+    const stats = await stat(filePath);
+    if (!stats.isFile() || stats.size > MAX_CLAUDE_SETTINGS_FILE_BYTES) {
+      return { status: 'invalid', settings: null };
+    }
+    if (stats.size === 0) {
+      return { status: 'ok', settings: {} };
+    }
+
+    const bytes = await readFile(filePath);
+    const isUtf16LittleEndian = bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe;
+    content = bytes.toString(isUtf16LittleEndian ? 'utf16le' : 'utf8').replace(/^\uFEFF/, '');
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return { status: code === 'ENOENT' || code === 'ENOTDIR' ? 'missing' : 'invalid', settings: null };
+  }
+
+  if (!content.trim()) {
+    return { status: 'ok', settings: {} };
+  }
+
+  let settings: AnyRecord | null;
+  try {
+    settings = readObjectRecord(JSON.parse(content));
+  } catch {
+    settings = null;
+  }
+  return settings ? { status: 'ok', settings } : { status: 'invalid', settings: null };
+}
 
 // ---------------------------
 //----------------- PROVIDER SKILL FILE UTILITIES ------------
