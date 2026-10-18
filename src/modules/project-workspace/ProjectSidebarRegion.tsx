@@ -8,6 +8,7 @@ import type {
 import { useTranslation } from 'react-i18next';
 
 import { useProjectSidebarState } from '@/modules/project-workspace/context/ProjectsStateContext';
+import { useSidebarAutoCollapse } from '@/modules/project-workspace/hooks/useSidebarAutoCollapse';
 import { Sidebar } from '@/modules/sidebar';
 import { useUiPreferences } from '@/shared/context/UiPreferencesContext';
 import {
@@ -25,10 +26,15 @@ function ProjectSidebarRegion({
   const { t } = useTranslation('common');
   const { sidebarOpen, setSidebarOpen, sidebarSharedProps } = useProjectSidebarState();
   const { width: sidebarWidth, setWidth: setSidebarWidth, resetWidth: resetSidebarWidth } = useSidebarWidth();
-  // Hide sidebar leaves a 48px icon rail behind, which sizes itself — the stored
+  // Hide sidebar leaves a 52px icon rail behind, which sizes itself — the stored
   // width and the drag handle only apply while the full sidebar is on screen.
   const { sidebarVisible } = useUiPreferences();
-  const isSidebarResizable = !isMobile && sidebarVisible;
+  const { isAutoCollapsed, markManualExpand } = useSidebarAutoCollapse({
+    isMobile,
+    sidebarVisible,
+    sidebarWidth,
+  });
+  const isSidebarResizable = !isMobile && sidebarVisible && !isAutoCollapsed;
   // Drag origin; null while no resize is in progress.
   const resizeOriginRef = useRef<{ pointerX: number; width: number } | null>(null);
   const resizeFrameRef = useRef<number | null>(null);
@@ -123,7 +129,7 @@ function ProjectSidebarRegion({
         className="relative h-full flex-shrink-0 border-r border-border/50"
         style={isSidebarResizable ? { width: sidebarWidth } : undefined}
       >
-        <Sidebar {...sidebarSharedProps} />
+        <Sidebar {...sidebarSharedProps} isAutoCollapsed={isAutoCollapsed} onManualExpand={markManualExpand} />
         {isSidebarResizable && (
           <div
             role="separator"

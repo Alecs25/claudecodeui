@@ -7,6 +7,7 @@ import {
 } from '@/modules/project-workspace/context/ProjectsStateContext';
 import { START_SUGGESTED_SESSION_EVENT } from '@/shared/constants';
 import type { StartSuggestedSessionDetail } from '@/shared/types';
+import { WorkspaceLayoutProvider } from '@/modules/project-workspace/context/WorkspaceLayoutContext';
 import ProjectEffects from '@/modules/project-workspace/controllers/ProjectEffects';
 import type { ProjectWorkspaceShellProps } from '@/shared/types';
 import ProjectCommandPalette from '@/modules/project-workspace/ProjectCommandPalette';
@@ -23,29 +24,31 @@ function ProjectWorkspaceShell({
   navigate,
 }: ProjectWorkspaceShellProps) {
   return (
-    <div
-      className="fixed inset-0 flex bg-background"
-      style={{ bottom: 'var(--keyboard-height, 0px)' }}
-    >
-      <ProjectEffects navigate={navigate} />
-      <ProjectSidebarRegion isMobile={isMobile} />
+    <WorkspaceLayoutProvider>
+      <div
+        className="fixed inset-0 flex bg-background"
+        style={{ bottom: 'var(--keyboard-height, 0px)' }}
+      >
+        <ProjectEffects navigate={navigate} />
+        <ProjectSidebarRegion isMobile={isMobile} />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <ProjectMainRegion
-          isMobile={isMobile}
-          ws={ws}
-          sendMessage={sendMessage}
-          navigate={navigate}
-        />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <ProjectMainRegion
+            isMobile={isMobile}
+            ws={ws}
+            sendMessage={sendMessage}
+            navigate={navigate}
+          />
+        </div>
+
+        <ProjectCommandPalette />
+        <SessionFinishedToasts navigate={navigate} />
+        <WorkspaceSideChat />
+        <SuggestedSessionStarter />
+        {/* Last flex child on purpose: when pinned it docks to the right of the main region. */}
+        <ProjectQuickSettingsRegion />
       </div>
-
-      <ProjectCommandPalette />
-      <SessionFinishedToasts navigate={navigate} />
-      <WorkspaceSideChat />
-      <SuggestedSessionStarter />
-      {/* Last flex child on purpose: when pinned it docks to the right of the main region. */}
-      <ProjectQuickSettingsRegion />
-    </div>
+    </WorkspaceLayoutProvider>
   );
 }
 
