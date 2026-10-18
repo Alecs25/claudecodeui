@@ -7,7 +7,7 @@ import type { ProviderRunFunction } from '@/shared/types.js';
 import { AppError, getGitErrorDetails } from '@/shared/utils.js';
 
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
-import { parseGitLogWithStats, parseGitStatusOutput } from './git-parsing.service.js';
+import { parseGitLogWithStats, parseGitNumstatOutput, parseGitStatusOutput } from './git-parsing.service.js';
 import { deleteLocalBranch } from './git-branch.service.js';
 import { getBranchDiffForFile, listBranchDiffFiles } from './git-branch-diff.service.js';
 
@@ -366,6 +366,68 @@ router.get('/status', async (req, res) => {
       error: isNotGitRepository ? 'Not a git repository' : 'Git operation failed',
       details: isNotGitRepository ? error.message : `Failed to get git status: ${error.message}`,
       notGitRepository: isNotGitRepository
+    });
+  }
+});
+
+// Uncommitted line counts against HEAD, staged and unstaged together, plus
+// untracked files counted as all-added: what the session toolbar's "+N -M"
+// chip and the Changes pane list. One request, so the chip can poll it.
+const UNTRACKED_COUNT_FILE_LIMIT = 200;
+const UNTRACKED_COUNT_BYTE_LIMIT = 1_000_000;
+router.get('/numstat', async (req, res) => {
+  const { project } = req.query;
+
+  if (!project) {
+    return res.status(400).json({ error: 'Project id is required' });
+  }
+
+  try {
+    const projectPath = await getActualProjectPath(project);
+    await validateGitRepository(projectPath);
+
+    const branch = await getCurrentBranchName(projectPath);
+    const hasCommits = await repositoryHasCommits(projectPath);
+    // Without a first commit there is no HEAD to diff against; the index is
+    // the closest base.
+    const diffArgs = hasCommits ? ['diff', 'HEAD', '--numstat', '-z'] : ['diff', '--cached', '--numstat', '-z'];
+    const { stdout: numstatOutput } = await spawnAsync('git', diffArgs, { cwd: projectPath });
+    const files = parseGitNumstatOutput(numstatOutput).map((entry) => ({ ...entry, status: 'modified' }));
+
+    const { stdout: untrackedOutput } = await spawnAsync(
+      'git',
+      ['ls-files', '--others', '--exclude-standard', '-z'],
+      { cwd: projectPath },
+    );
+    const untrackedPaths = untrackedOutput.split('\0').filter(Boolean);
+    for (const [index, filePath] of untrackedPaths.entries()) {
+      let added = null;
+      // Past the limits the file is listed without a count rather than read.
+      if (index < UNTRACKED_COUNT_FILE_LIMIT) {
+        try {
+          const absolutePath = path.join(projectPath, filePath);
+          const stats = await fs.stat(absolutePath);
+          if (stats.isFile() && stats.size <= UNTRACKED_COUNT_BYTE_LIMIT) {
+            const content = await fs.readFile(absolutePath, 'utf-8');
+            added = content.includes('\0') ? null : content.split('\n').length - (content.endsWith('\n') ? 1 : 0);
+          }
+        } catch (error) {
+          console.warn('[git numstat] Could not count untracked file:', filePath, error.message);
+        }
+      }
+      files.push({ path: filePath, added, deleted: added === null ? null : 0, status: 'untracked' });
+    }
+
+    const sum = (key) => files.reduce((total, file) => total + (file[key] ?? 0), 0);
+    res.json({ branch, hasCommits, files, added: sum('added'), deleted: sum('deleted') });
+  } catch (error) {
+    const isNotGitRepository = error instanceof AppError && error.code === 'NOT_A_GIT_REPOSITORY';
+    if (!isNotGitRepository) {
+      console.error('Git numstat error:', error);
+    }
+    res.json({
+      error: isNotGitRepository ? 'Not a git repository' : 'Git operation failed',
+      notGitRepository: isNotGitRepository,
     });
   }
 });

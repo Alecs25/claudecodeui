@@ -64,3 +64,36 @@ export function parseGitLogWithStats(stdout: string): GitCommitSummary[] {
   }
   return commits;
 }
+
+type GitNumstatEntry = {
+  path: string;
+  /** Null for a binary file, which git reports as "-". */
+  added: number | null;
+  deleted: number | null;
+};
+
+const parseNumstatCount = (value: string): number | null => (value === '-' ? null : Number.parseInt(value, 10) || 0);
+
+/**
+ * Parses `git diff --numstat -z`. A rename leaves the path field empty and
+ * follows it with the old and new paths as two more NUL-separated fields; the
+ * new path is the one the working tree has.
+ */
+export function parseGitNumstatOutput(stdout: string): GitNumstatEntry[] {
+  const entries: GitNumstatEntry[] = [];
+  const fields = stdout.split('\0');
+  for (let index = 0; index < fields.length; index += 1) {
+    const field = fields[index];
+    if (!field) continue;
+    const [addedText, deletedText, ...pathParts] = field.split('\t');
+    if (addedText === undefined || deletedText === undefined) continue;
+    let filePath = pathParts.join('\t');
+    if (!filePath) {
+      filePath = fields[index + 2] ?? '';
+      index += 2;
+    }
+    if (!filePath) continue;
+    entries.push({ path: filePath, added: parseNumstatCount(addedText), deleted: parseNumstatCount(deletedText) });
+  }
+  return entries;
+}

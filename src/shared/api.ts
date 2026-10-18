@@ -354,6 +354,9 @@ export const api = {
   git: {
     status: (projectId: string, options: ApiRequestOptions = {}) =>
       get(`/api/git/status${query({ project: projectId })}`, options),
+    // Uncommitted +/- line counts per file against HEAD, untracked files included.
+    numstat: (projectId: string, options: ApiRequestOptions = {}) =>
+      get(`/api/git/numstat${query({ project: projectId })}`, options),
     diff: (projectId: string, filePath: string, options: ApiRequestOptions = {}) =>
       get(`/api/git/diff${query({ project: projectId, file: filePath })}`, options),
     commitDiff: (projectId: string, commit: string) =>
