@@ -1,4 +1,4 @@
-import { memo, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useDeviceSettings } from '@/shared/hooks/useDeviceSettings';
@@ -13,6 +13,7 @@ import type { LLMProvider, LoadingProgress, MCPServerStatus, Project, ProjectSes
 import SidebarCollapsed from '@/modules/sidebar/SidebarCollapsed';
 import SidebarContent from '@/modules/sidebar/SidebarContent';
 import SidebarModals from '@/modules/sidebar/SidebarModals';
+import { hasSessionsNeedingAttention } from '@/modules/sidebar/utils/sessionAttention';
 
 type SidebarProps = {
   projects: Project[];
@@ -40,6 +41,10 @@ type SidebarProps = {
   isMobile: boolean;
   /** Closes the phone drawer; absent where the sidebar is docked. */
   onCloseSidebar?: () => void;
+  /** Folded to the rail because a right pane needs the room; the stored preference is untouched. */
+  isAutoCollapsed?: boolean;
+  /** Told when the user expands the sidebar by hand, so the open pane does not fold it again. */
+  onManualExpand?: () => void;
 };
 
 type TaskMasterSidebarContext = {
@@ -69,6 +74,8 @@ function Sidebar({
   onCloseSettings,
   isMobile,
   onCloseSidebar,
+  isAutoCollapsed = false,
+  onManualExpand,
 }: SidebarProps) {
   const { t } = useTranslation(['sidebar', 'common']);
   const { isPWA } = useDeviceSettings({ trackMobile: false });
@@ -162,7 +169,7 @@ function Sidebar({
     isSearchOpen,
     toggleSearch,
     collapseSidebar: handleCollapseSidebar,
-    expandSidebar: handleExpandSidebar,
+    expandSidebar: expandStoredSidebar,
     setShowNewProject,
     setSearchFilter,
     setPendingDeletion,
@@ -241,9 +248,63 @@ function Sidebar({
     void setSessionStatus(sessionId, patch);
   }, [setSessionStatus]);
 
-  // On a phone the drawer covers the session, so picking one closes it.
+  const isCollapsed = isSidebarCollapsed || (!isMobile && isAutoCollapsed);
+
+  // The rail's session list, opened over the chat. Derived from `isCollapsed`
+  // too, so expanding the sidebar closes it without an extra render.
+  const [isSessionsOverlayRequested, setIsSessionsOverlayRequested] = useState(false);
+  const isSessionsOverlayOpen = isCollapsed && isSessionsOverlayRequested;
+  const closeSessionsOverlay = useCallback(() => setIsSessionsOverlayRequested(false), []);
+  const toggleSessionsOverlay = useCallback(() => setIsSessionsOverlayRequested((open) => !open), []);
+  const openSessionsSearch = useCallback(() => {
+    setIsSessionsOverlayRequested(true);
+    if (!isSearchOpen) {
+      toggleSearch();
+    }
+  }, [isSearchOpen, toggleSearch]);
+
+  // Any way of landing on another session (row, search hit, archive) closes the list.
+  const [overlaySessionId, setOverlaySessionId] = useState(selectedSession?.id ?? null);
+  if ((selectedSession?.id ?? null) !== overlaySessionId) {
+    setOverlaySessionId(selectedSession?.id ?? null);
+    setIsSessionsOverlayRequested(false);
+  }
+
+  useEffect(() => {
+    if (!isSessionsOverlayOpen) {
+      return undefined;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsSessionsOverlayRequested(false);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isSessionsOverlayOpen]);
+
+  const handleExpandSidebar = useCallback(() => {
+    onManualExpand?.();
+    expandStoredSidebar();
+  }, [expandStoredSidebar, onManualExpand]);
+
+  const handleNewSession = useCallback((project: Project) => {
+    setIsSessionsOverlayRequested(false);
+    onNewSession(project);
+  }, [onNewSession]);
+
+  const showSessionsAttentionDot = useMemo(() => isCollapsed && hasSessionsNeedingAttention({
+    projects,
+    waitingSessionIds,
+    attentionSessionIds,
+    selectedSessionId: selectedSession?.id ?? null,
+  }), [attentionSessionIds, isCollapsed, projects, selectedSession?.id, waitingSessionIds]);
+
+  // On a phone the drawer covers the session, and on the rail the list covers
+  // the chat, so picking one (even the one on screen) closes either.
   const handleRowSessionSelect = useCallback((session: SessionWithProvider, projectId: string) => {
     handleSessionClick(session, projectId);
+    setIsSessionsOverlayRequested(false);
     if (isMobile) {
       onCloseSidebar?.();
     }
@@ -330,7 +391,7 @@ function Sidebar({
     onSetSessionStatus: handleSetSessionStatus,
     onOpenInSplitView: onOpenInSplitView ? handleOpenInSplitView : undefined,
     onLoadMoreSessions: loadMoreSessionsForProject,
-    onNewSession,
+    onNewSession: handleNewSession,
     onStartEditingSession: startEditingSession,
     onCancelEditingSession: cancelRename,
     onSaveEditingSession: handleSaveSessionName,
@@ -341,6 +402,99 @@ function Sidebar({
     onDeleteSelectedSessions: showDeleteSelectedSessionsConfirmation,
     t,
   };
+
+  const renderSidebarContent = (closeHandler?: () => void) => (
+    <SidebarContent
+      isPWA={isPWA}
+      isMobile={isMobile}
+      sortedProjects={sortedProjects}
+      newSessionProject={newSessionProject}
+      onNewSession={handleNewSession}
+      statusFilter={statusFilter}
+      onStatusFilterChange={setStatusFilter}
+      projectFilter={projectFilter}
+      onProjectFilterChange={setProjectFilter}
+      groupByProject={groupByProject}
+      onGroupByProjectChange={setGroupByProject}
+      isSearchOpen={isSearchOpen}
+      onToggleSearch={toggleSearch}
+      searchFilter={searchFilter}
+      onSearchFilterChange={setSearchFilter}
+      conversationResults={conversationResults}
+      isSearching={isSearching}
+      searchProgress={searchProgress}
+      isArchiveOpen={isArchiveOpen}
+      onOpenArchive={openArchive}
+      onCloseArchive={closeArchive}
+      archivedProjects={archivedProjects}
+      archivedSessions={archivedSessions}
+      archivedSessionsCount={archivedSessionsCount}
+      isArchivedSessionsLoading={isArchivedSessionsLoading}
+      onRestoreArchivedProject={restoreArchivedProject}
+      onArchivedSessionClick={openArchivedSession}
+      onRestoreArchivedSession={restoreArchivedSession}
+      onDeleteArchivedSession={(session) => {
+        showDeleteSessionConfirmation(
+          session.sessionId,
+          session.sessionTitle,
+          { isArchived: true },
+        );
+      }}
+      flatConversations={usesServerRecents ? recentConversations : localFlatConversations}
+      flatHasMore={usesServerRecents && recentConversationsHasMore}
+      isFlatLoading={usesServerRecents && isRecentConversationsLoading}
+      isLoadingMoreFlat={isLoadingMoreRecentConversations}
+      flatError={usesServerRecents && recentConversationsError}
+      onLoadMoreFlat={loadMoreRecentConversations}
+      onRetryFlat={reloadRecentConversations}
+      onConversationResultClick={(projectId: string | null, sessionId: string, provider: string, messageTimestamp?: string | null, messageSnippet?: string | null) => {
+        // `projectId` (DB key) is the canonical identifier post-migration.
+        // The server emits null when it can't resolve a project row for
+        // the search hit; treat that as "no project" and still navigate
+        // to the session so the user can open it from the URL.
+        const resolvedProvider = (provider || 'claude') as LLMProvider;
+        const project = projectId ? projects.find(p => p.projectId === projectId) : null;
+        const searchTarget = { __searchTargetTimestamp: messageTimestamp || null, __searchTargetSnippet: messageSnippet || null };
+        const sessionObj = {
+          id: sessionId,
+          __provider: resolvedProvider,
+          __projectId: projectId ?? undefined,
+          ...searchTarget,
+        };
+        if (project) {
+          handleProjectSelect(project);
+          const sessions = getProjectSessions(project);
+          const existing = sessions.find(s => s.id === sessionId);
+          if (existing) {
+            handleSessionClick({ ...existing, ...searchTarget }, project.projectId);
+          } else {
+            handleSessionClick(sessionObj, project.projectId);
+          }
+        } else {
+          handleSessionClick(sessionObj, projectId ?? '');
+        }
+        // The drawer's or the overlay's close; nothing to close where the sidebar is docked.
+        closeHandler?.();
+      }}
+      onRefresh={() => {
+        void refreshProjects();
+      }}
+      isRefreshing={isRefreshing}
+      onCreateProject={() => setShowNewProject(true)}
+      onChooseFolderForSession={handleChooseFolderForSession}
+      onCollapseSidebar={handleCollapseSidebar}
+      onCloseSidebar={closeHandler}
+      updateAvailable={updateAvailable}
+      restartRequired={restartRequired}
+      releaseInfo={releaseInfo}
+      latestVersion={latestVersion}
+      currentVersion={currentVersion}
+      onShowVersionModal={() => setShowVersionModal(true)}
+      onShowSettings={onShowSettings}
+      projectListProps={projectListProps}
+      t={t}
+    />
+  );
 
   return (
     <>
@@ -366,110 +520,49 @@ function Sidebar({
         t={t}
       />
 
-      {isSidebarCollapsed ? (
-        <SidebarCollapsed
-          onExpand={handleExpandSidebar}
-          onShowSettings={onShowSettings}
-          updateAvailable={updateAvailable}
-          restartRequired={restartRequired}
-          onShowVersionModal={() => setShowVersionModal(true)}
-          t={t}
-        />
-      ) : (
+      {isCollapsed ? (
         <>
-        <SidebarContent
-            isPWA={isPWA}
-            isMobile={isMobile}
-            sortedProjects={sortedProjects}
-            newSessionProject={newSessionProject}
-            onNewSession={onNewSession}
-            statusFilter={statusFilter}
-            onStatusFilterChange={setStatusFilter}
-            projectFilter={projectFilter}
-            onProjectFilterChange={setProjectFilter}
-            groupByProject={groupByProject}
-            onGroupByProjectChange={setGroupByProject}
-            isSearchOpen={isSearchOpen}
-            onToggleSearch={toggleSearch}
-            searchFilter={searchFilter}
-            onSearchFilterChange={setSearchFilter}
-            conversationResults={conversationResults}
-            isSearching={isSearching}
-            searchProgress={searchProgress}
-            isArchiveOpen={isArchiveOpen}
-            onOpenArchive={openArchive}
-            onCloseArchive={closeArchive}
-            archivedProjects={archivedProjects}
-            archivedSessions={archivedSessions}
-            archivedSessionsCount={archivedSessionsCount}
-            isArchivedSessionsLoading={isArchivedSessionsLoading}
-            onRestoreArchivedProject={restoreArchivedProject}
-            onArchivedSessionClick={openArchivedSession}
-            onRestoreArchivedSession={restoreArchivedSession}
-            onDeleteArchivedSession={(session) => {
-              showDeleteSessionConfirmation(
-                session.sessionId,
-                session.sessionTitle,
-                { isArchived: true },
-              );
-            }}
-            flatConversations={usesServerRecents ? recentConversations : localFlatConversations}
-            flatHasMore={usesServerRecents && recentConversationsHasMore}
-            isFlatLoading={usesServerRecents && isRecentConversationsLoading}
-            isLoadingMoreFlat={isLoadingMoreRecentConversations}
-            flatError={usesServerRecents && recentConversationsError}
-            onLoadMoreFlat={loadMoreRecentConversations}
-            onRetryFlat={reloadRecentConversations}
-            onConversationResultClick={(projectId: string | null, sessionId: string, provider: string, messageTimestamp?: string | null, messageSnippet?: string | null) => {
-              // `projectId` (DB key) is the canonical identifier post-migration.
-              // The server emits null when it can't resolve a project row for
-              // the search hit; treat that as "no project" and still navigate
-              // to the session so the user can open it from the URL.
-              const resolvedProvider = (provider || 'claude') as LLMProvider;
-              const project = projectId ? projects.find(p => p.projectId === projectId) : null;
-              const searchTarget = { __searchTargetTimestamp: messageTimestamp || null, __searchTargetSnippet: messageSnippet || null };
-              const sessionObj = {
-                id: sessionId,
-                __provider: resolvedProvider,
-                __projectId: projectId ?? undefined,
-                ...searchTarget,
-              };
-              if (project) {
-                handleProjectSelect(project);
-                const sessions = getProjectSessions(project);
-                const existing = sessions.find(s => s.id === sessionId);
-                if (existing) {
-                  handleSessionClick({ ...existing, ...searchTarget }, project.projectId);
-                } else {
-                  handleSessionClick(sessionObj, project.projectId);
-                }
-              } else {
-                handleSessionClick(sessionObj, projectId ?? '');
-              }
-              if (isMobile) {
-                onCloseSidebar?.();
-              }
-            }}
-            onRefresh={() => {
-              void refreshProjects();
-            }}
-            isRefreshing={isRefreshing}
-            onCreateProject={() => setShowNewProject(true)}
-            onChooseFolderForSession={handleChooseFolderForSession}
-            onCollapseSidebar={handleCollapseSidebar}
-            onCloseSidebar={onCloseSidebar}
-            updateAvailable={updateAvailable}
-            restartRequired={restartRequired}
-            releaseInfo={releaseInfo}
-            latestVersion={latestVersion}
-            currentVersion={currentVersion}
-            onShowVersionModal={() => setShowVersionModal(true)}
-            onShowSettings={onShowSettings}
-            projectListProps={projectListProps}
-            t={t}
-          />
+          <div className={isSessionsOverlayOpen ? 'relative z-50 h-full' : 'h-full'}>
+            <SidebarCollapsed
+              onExpand={handleExpandSidebar}
+              onShowSettings={onShowSettings}
+              updateAvailable={updateAvailable}
+              restartRequired={restartRequired}
+              onShowVersionModal={() => setShowVersionModal(true)}
+              projects={sortedProjects}
+              newSessionProject={newSessionProject}
+              onNewSession={handleNewSession}
+              onChooseFolderForSession={handleChooseFolderForSession}
+              isSessionsOpen={isSessionsOverlayOpen}
+              onToggleSessions={toggleSessionsOverlay}
+              onOpenSearch={openSessionsSearch}
+              hasSessionsNeedingAttention={showSessionsAttentionDot}
+              t={t}
+            />
+          </div>
+          {isSessionsOverlayOpen && (
+            <>
+              <button
+                type="button"
+                className="fixed inset-0 z-40 cursor-default bg-black/20"
+                onClick={closeSessionsOverlay}
+                aria-label={t('actions.close', { defaultValue: 'Close' })}
+                tabIndex={-1}
+                data-testid="sidebar-overlay-scrim"
+              />
+              {/* Over the chat, not beside it: the pane that folded the sidebar keeps its room. */}
+              <div
+                className="absolute inset-y-0 left-full z-50 w-[min(300px,calc(100vw-52px))] border-r border-border/50 bg-card shadow-xl"
+                role="dialog"
+                aria-label={t('sessions.title')}
+                data-testid="sidebar-overlay"
+              >
+                {renderSidebarContent(closeSessionsOverlay)}
+              </div>
+            </>
+          )}
         </>
-      )}
+      ) : renderSidebarContent(onCloseSidebar)}
 
     </>
   );
