@@ -1462,6 +1462,11 @@ export type FileTreeServices = {
     path: string;
     suggestions: Array<{ path: string; name: string; type: 'directory' }>;
   }>;
+  searchWorkspaceFolders(searchQuery: string, inputRoot: string | null): Promise<{
+    query: string;
+    root: string | null;
+    results: Array<{ path: string; name: string; type: 'directory' }>;
+  }>;
   createWorkspaceFolder(folderPath: string): Promise<{ success: true; path: string }>;
   readTextFile(projectId: string, filePath: string): Promise<{ content: string; path: string }>;
   openFile(projectId: string, filePath: string): Promise<{ contentType: string; stream: Readable }>;
@@ -1648,4 +1653,34 @@ export type CliApplication = {
  */
 export type SandboxCommandService = {
   execute(argumentsList: string[]): Promise<number>;
+};
+
+// ---------------------------
+//----------------- SIDE CHAT CONTRACTS ------------
+
+/**
+ * One event of a side chat (/btw), as the Claude side-chat process reports it
+ * and the side-chat module forwards it to the client in a `side_chat` frame.
+ *
+ * `text` is a block of the answer, `tool` a read-only tool call (`detail` says
+ * what it looks at), `done` the end of one answer and `error` a failure that
+ * ends the answer; the side chat itself stays open after both.
+ */
+export type SideChatEvent =
+  | { event: 'text'; text: string }
+  | { event: 'tool'; name: string; detail?: string }
+  | { event: 'done' }
+  | { event: 'error'; error: string };
+
+/**
+ * A live side chat: one forked, unpersisted Claude process that keeps the side
+ * conversation in memory.
+ *
+ * `ask` returns false once the side chat is closed, so callers can report that
+ * instead of waiting for an answer that will never come. `close` is idempotent
+ * and discards the side conversation for good.
+ */
+export type ClaudeSideChat = {
+  ask(text: string): boolean;
+  close(): void;
 };

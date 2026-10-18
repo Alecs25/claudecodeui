@@ -55,6 +55,8 @@ type UseChatRealtimeHandlersArgs = {
   onPlanModeChange?: (sessionId: string, change: PlanModeChange, provider?: LLMProvider) => void;
   /** Settles a queued message sent into the running turn (`chat.steer`). */
   onSteerResult?: (sessionId: string, accepted: boolean) => void;
+  /** Offers the CLI's predicted next prompt for a session whose turn just ended. */
+  onPromptSuggestion?: (sessionId: string, suggestion: string) => void;
 };
 
 /* ------------------------------------------------------------------ */
@@ -92,6 +94,7 @@ export function useChatRealtimeHandlers({
   sessionStore,
   onPlanModeChange,
   onSteerResult,
+  onPromptSuggestion,
 }: UseChatRealtimeHandlersArgs) {
   // Main-thread plan tool calls still waiting for their result, by tool-use
   // id: the call names the change, but only a successful result makes it. A
@@ -253,6 +256,8 @@ export function useChatRealtimeHandlers({
         // It carries no sessionId, so falling through would file it into the
         // viewed session's transcript as a bogus message.
         case 'sent_files':
+        // Plan usage — owned by usePlanUsage; app-wide, not tied to a session.
+        case 'plan_usage':
           return;
 
         default:
@@ -427,6 +432,11 @@ export function useChatRealtimeHandlers({
             if (sid === activeViewSessionId) {
               setTokenBudget(msg.tokenBudget as Record<string, unknown>);
             }
+          } else if (msg.text === 'prompt_suggestion') {
+            // Not activity: it arrives after the turn's `complete`.
+            if (sid && typeof msg.suggestion === 'string' && msg.suggestion) {
+              onPromptSuggestion?.(sid, msg.suggestion);
+            }
           } else if (msg.text && sid) {
             onSessionProcessing?.(sid, {
               statusText: msg.text as string,
@@ -512,5 +522,6 @@ export function useChatRealtimeHandlers({
     sessionStore,
     onPlanModeChange,
     onSteerResult,
+    onPromptSuggestion,
   ]);
 }

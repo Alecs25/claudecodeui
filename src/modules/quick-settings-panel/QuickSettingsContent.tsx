@@ -2,6 +2,7 @@ import {
   Braces,
   Brain,
   Languages,
+  Lightbulb,
   MessageSquareText,
   Mic,
   Moon,
@@ -49,6 +50,11 @@ const INPUT_SETTING_TOGGLES: PreferenceToggleItem[] = [
     key: 'voiceEnabled',
     labelKey: 'quickSettings.voiceEnabled',
     icon: Mic,
+  },
+  {
+    key: 'promptSuggestions',
+    labelKey: 'quickSettings.promptSuggestions',
+    icon: Lightbulb,
   },
 ];
 

@@ -156,7 +156,7 @@
     "loading": "Loading…"
   },
   "input": {
-    "placeholder": "Type / for commands, @ for files, or ask {{provider}} anything...",
+    "placeholder": "Message {{provider}}…",
     "placeholderDefault": "Type your message...",
     "disabled": "Input disabled",
     "attachFiles": "Attach files",
@@ -181,6 +181,9 @@
       "edit": "Edit queued message",
       "delete": "Delete queued message",
       "sendNow": "Send now"
+    },
+    "suggestion": {
+      "use": "Use"
     }
   },
   "composer": {
@@ -194,6 +197,37 @@
       "title": "Replacing an earlier message",
       "filesNotReverted": "files the agent already changed are not reverted",
       "cancel": "Cancel"
+    },
+    "plusMenu": {
+      "label": "Add",
+      "attach": "Attach files",
+      "commands": "Commands",
+      "mcp": "MCP connectors",
+      "schedule": "Schedule message",
+      "voice": "Voice"
+    },
+    "permissionPill": {
+      "short": {
+        "default": "Ask",
+        "auto": "Auto",
+        "acceptEdits": "Edits",
+        "bypassPermissions": "Bypass",
+        "plan": "Plan"
+      },
+      "full": {
+        "default": "Ask permissions",
+        "auto": "Auto mode",
+        "acceptEdits": "Accept edits",
+        "bypassPermissions": "Bypass permissions",
+        "plan": "Plan mode"
+      }
+    },
+    "effortLevels": {
+      "low": "low",
+      "medium": "medium",
+      "high": "high",
+      "xhigh": "extra high",
+      "max": "max"
     }
   },
   "providerSelection": {
@@ -497,5 +531,20 @@
   "questions": {
     "title": "Questions",
     "skipped": "Skipped"
+  },
+  "sideChat": {
+    "title": "Side chat",
+    "notSaved": "Not added to the session",
+    "close": "Close",
+    "empty": "Ask about this session",
+    "answering": "Answering…",
+    "placeholder": "Ask a side question",
+    "send": "Send"
+  },
+  "sessionSuggestion": {
+    "start": "Start session",
+    "dismiss": "Dismiss",
+    "started": "Session started",
+    "dismissed": "Dismissed"
   }
 }

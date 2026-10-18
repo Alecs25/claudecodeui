@@ -10,7 +10,7 @@ import type {
   RefObject,
   TouchEvent,
 } from 'react';
-import { PaperclipIcon, MessageSquareIcon, XIcon, Loader2, ArrowUpIcon, PencilIcon } from 'lucide-react';
+import { XIcon, Loader2, ArrowUpIcon, PencilIcon } from 'lucide-react';
 
 import { useVoiceInput } from '@/modules/chat/hooks/useVoiceInput';
 import { useVoiceAvailable } from '@/modules/chat/hooks/useVoiceAvailable';
@@ -34,10 +34,10 @@ import PermissionRequestsBanner from '@/modules/chat/composer/PermissionRequests
 import TokenUsageSummary from '@/modules/chat/composer/TokenUsageSummary';
 import QueuedMessageCard from '@/modules/chat/composer/QueuedMessageCard';
 import BackgroundSendDialog from '@/modules/chat/composer/BackgroundSendDialog';
-import { ScheduleMessagePopover } from '@/modules/chat/composer/ScheduleMessagePopover';
 import { ScheduledMessageList } from '@/modules/chat/composer/ScheduledMessageList';
 import ComposerModelMenu from '@/modules/chat/composer/ComposerModelMenu';
 import ComposerPermissionMenu from '@/modules/chat/composer/ComposerPermissionMenu';
+import ComposerPlusMenu from '@/modules/chat/composer/ComposerPlusMenu';
 
 type MentionableFile = {
   name: string;
@@ -124,6 +124,12 @@ type ChatComposerProps = {
   isInputFocused?: boolean;
   onInputFocusChange?: (focused: boolean) => void;
   placeholder: string;
+  /** The CLI's predicted next prompt, shown greyed in the empty box; null when there is none to offer. */
+  promptSuggestion?: string | null;
+  /** Puts the suggestion in the box; false when there was none. */
+  onAcceptPromptSuggestion?: () => boolean;
+  /** Opens Settings at the MCP servers, from the "+" menu. */
+  onOpenMcpSettings?: () => void;
   isTextareaExpanded: boolean;
   sendByCtrlEnter?: boolean;
 };
@@ -204,6 +210,9 @@ export default function ChatComposer({
   isInputFocused = false,
   onInputFocusChange,
   placeholder,
+  promptSuggestion = null,
+  onAcceptPromptSuggestion,
+  onOpenMcpSettings,
   isTextareaExpanded,
   sendByCtrlEnter,
 }: ChatComposerProps) {
@@ -457,65 +466,50 @@ export default function ChatComposer({
               onFocus={() => onInputFocusChange?.(true)}
               onBlur={() => onInputFocusChange?.(false)}
               onInput={onTextareaInput}
-              placeholder={placeholder}
+              placeholder={promptSuggestion ?? placeholder}
+              className={promptSuggestion ? 'pr-16' : undefined}
               enterKeyHint={isOnScreenKeyboardDevice() ? 'enter' : 'send'}
             />
+
+            {/* A keyboard takes the suggestion with Tab or →; a phone has neither, so it gets a chip to tap. */}
+            {promptSuggestion && onAcceptPromptSuggestion && (
+              isOnScreenKeyboardDevice() ? (
+                <button
+                  type="button"
+                  onClick={() => onAcceptPromptSuggestion()}
+                  className="absolute right-2 top-1.5 rounded-full border border-border/60 bg-muted/60 px-2.5 py-0.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                >
+                  {t('input.suggestion.use', { defaultValue: 'Use' })}
+                </button>
+              ) : (
+                <kbd
+                  aria-hidden="true"
+                  className="pointer-events-none absolute right-3 top-2.5 rounded border border-border/60 px-1 font-mono text-[11px] leading-4 text-muted-foreground/70"
+                >
+                  Tab
+                </kbd>
+              )
+            )}
         </PromptInputBody>
 
         <PromptInputFooter className="flex-wrap gap-y-1">
-          <PromptInputTools className="min-w-0">
-            <PromptInputButton
-              tooltip={{ content: t('input.attachFiles') }}
-              onClick={openAttachmentPicker}
-              aria-label={t('input.attachFiles')}
-            >
-              <PaperclipIcon />
-            </PromptInputButton>
-
-            {onVoiceTranscript && voiceAvailable && (
-              <VoiceInputButton state={voiceState} onToggle={voiceToggle} errorMsg={voiceError} />
-            )}
-
-            <PromptInputButton
-              tooltip={{ content: t('input.showAllCommands') }}
-              onClick={onToggleCommandMenu}
-              className="relative"
-            >
-              <MessageSquareIcon />
-              {slashCommandsCount > 0 && (
-                <span
-                  className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground"
-                >
-                  {slashCommandsCount}
-                </span>
-              )}
-            </PromptInputButton>
-
-            {hasInput && (
-              <PromptInputButton
-                tooltip={{ content: t('input.clearInput', { defaultValue: 'Clear input' }) }}
-                onClick={onClearInput}
-                className="hidden sm:flex"
-              >
-                <XIcon />
-              </PromptInputButton>
-            )}
-
-          </PromptInputTools>
-
-          <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
-            <ScheduleMessagePopover
-              disabled={!input.trim()}
+          {/* Claude Code's order: add, permissions, model, context, then send on the right. */}
+          <PromptInputTools className="min-w-0 flex-1 flex-nowrap gap-1.5">
+            <ComposerPlusMenu
+              onAttachFiles={openAttachmentPicker}
+              onOpenCommands={onToggleCommandMenu}
+              commandCount={slashCommandsCount}
+              onOpenMcpSettings={onOpenMcpSettings}
+              canSchedule={Boolean(input.trim())}
               onSchedule={onScheduleMessage}
+              onStartVoice={onVoiceTranscript && voiceAvailable && voiceState === 'idle' ? voiceToggle : undefined}
             />
 
-            {/* Beside the model picker, as in Claude Code: the window it fills belongs to that model. */}
-            <TokenUsageSummary
-              usage={tokenBudget}
-              onClick={onShowTokenUsage}
-              onCompact={onCompact}
-              canCompact={!isLoading}
-              isCompacting={isCompacting}
+            <ComposerPermissionMenu
+              permissionMode={permissionMode}
+              permissionModes={availablePermissionModes}
+              onSelectPermissionMode={onSelectPermissionMode}
+              providerLabel={providerLabel}
             />
 
             <ComposerModelMenu
@@ -528,13 +522,32 @@ export default function ChatComposer({
               modelsLoading={modelsLoading}
             />
 
-            <ComposerPermissionMenu
-              permissionMode={permissionMode}
-              permissionModes={availablePermissionModes}
-              onSelectPermissionMode={onSelectPermissionMode}
-              providerLabel={providerLabel}
+            {/* Beside the model picker, as in Claude Code: the window it fills belongs to that model. */}
+            <TokenUsageSummary
+              usage={tokenBudget}
+              onClick={onShowTokenUsage}
+              onCompact={onCompact}
+              canCompact={!isLoading}
+              isCompacting={isCompacting}
             />
 
+            {/* Voice starts from the "+" menu; while it records or has failed, the bar shows its state and the stop. */}
+            {onVoiceTranscript && voiceAvailable && (voiceState !== 'idle' || voiceError) && (
+              <VoiceInputButton state={voiceState} onToggle={voiceToggle} errorMsg={voiceError} />
+            )}
+
+            {hasInput && (
+              <PromptInputButton
+                tooltip={{ content: t('input.clearInput', { defaultValue: 'Clear input' }) }}
+                onClick={onClearInput}
+                className="hidden sm:flex"
+              >
+                <XIcon />
+              </PromptInputButton>
+            )}
+          </PromptInputTools>
+
+          <div className="ml-2 flex shrink-0 items-center">
             <PromptInputSubmit
               onClick={
                 canQueueDraft

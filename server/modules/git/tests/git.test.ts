@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { parseGitLogWithStats, parseGitStatusOutput } from '../git-parsing.service.js';
+import { parseGitLogWithStats, parseGitNumstatOutput, parseGitStatusOutput } from '../git-parsing.service.js';
 
 // Builds `git status --porcelain=v1 -z` output: NUL-separated entries with a
 // trailing NUL, exactly as git emits it.
@@ -103,4 +103,14 @@ test('parseGitLogWithStats parses commits with parents, refs, and shortstat line
 
 test('parseGitLogWithStats handles empty output', () => {
   assert.deepEqual(parseGitLogWithStats(''), []);
+});
+
+test('parseGitNumstatOutput reads counts, binary files and renames', () => {
+  const output = ['10\t1\tmodels/task.py', '-\t-\tlogo.png', '3\t2\t', 'old name.ts', 'new name.ts', ''].join('\0');
+  assert.deepEqual(parseGitNumstatOutput(output), [
+    { path: 'models/task.py', added: 10, deleted: 1 },
+    { path: 'logo.png', added: null, deleted: null },
+    { path: 'new name.ts', added: 3, deleted: 2 },
+  ]);
+  assert.deepEqual(parseGitNumstatOutput(''), []);
 });

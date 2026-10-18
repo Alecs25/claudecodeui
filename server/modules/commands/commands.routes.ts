@@ -221,6 +221,12 @@ const builtInCommands = [
     namespace: "builtin",
     metadata: { type: "builtin" },
   },
+  {
+    name: "/btw",
+    description: "Ask a side question without adding it to the session",
+    namespace: "builtin",
+    metadata: { type: "builtin" },
+  },
 ];
 
 /**

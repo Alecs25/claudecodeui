@@ -5,6 +5,8 @@ import AgentCategoryContentSection from '@/modules/settings/tabs/agents-settings
 import AgentCategoryTabsSection from '@/modules/settings/tabs/agents-settings/sections/AgentCategoryTabsSection';
 import AgentSelectorSection from '@/modules/settings/tabs/agents-settings/sections/AgentSelectorSection';
 
+const AGENT_CATEGORIES: AgentCategory[] = ['account', 'permissions', 'mcp', 'skills'];
+
 type ProviderAuthStatusByProvider = Record<AgentProvider, ProviderAuthStatus>;
 
 type AgentsSettingsTabProps = {
@@ -17,8 +19,8 @@ type AgentsSettingsTabProps = {
   codexPermissionMode: CodexPermissionMode;
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
   projects: AgentSettingsProject[];
-  /** The section to open on, when Settings was opened on a deep link such as "agents:mcp". */
-  initialCategory?: AgentCategory;
+  /** Category to open on, e.g. "mcp" from the composer's connectors entry. */
+  initialCategory?: string;
 };
 
 /** Rendered by Settings for the "agents" tab, hosting per-provider account, permission, MCP and skill settings. */
@@ -35,14 +37,9 @@ export default function AgentsSettingsTab({
   initialCategory,
 }: AgentsSettingsTabProps) {
   const [selectedAgent, setSelectedAgent] = useState<AgentProvider>('claude');
-  const [selectedCategory, setSelectedCategory] = useState<AgentCategory>(initialCategory ?? 'account');
-
-  // Settings stays mounted between openings, so a new deep link must move the section.
-  useEffect(() => {
-    if (initialCategory) {
-      setSelectedCategory(initialCategory);
-    }
-  }, [initialCategory]);
+  const [selectedCategory, setSelectedCategory] = useState<AgentCategory>(() => (
+    AGENT_CATEGORIES.includes(initialCategory as AgentCategory) ? initialCategory as AgentCategory : 'account'
+  ));
   const visibleCategories = useMemo<AgentCategory[]>(() => (
     selectedAgent === 'opencode'
       ? ['account', 'permissions', 'mcp']

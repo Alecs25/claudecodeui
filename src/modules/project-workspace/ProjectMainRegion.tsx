@@ -27,6 +27,8 @@ function ProjectMainRegion({
     renameSession,
     splitSession,
     closeSplitSession,
+    openSplitSession,
+    handleSessionDelete,
   } = useProjectMainState();
 
   const handleOpenSidebar = useCallback(() => {
@@ -72,6 +74,8 @@ function ProjectMainRegion({
       onRenameSession={renameSession}
       splitSession={splitSession}
       onCloseSplitSession={closeSplitSession}
+      onOpenSplitSession={isMobile ? undefined : openSplitSession}
+      onSessionArchived={handleSessionDelete}
     />
   );
 }

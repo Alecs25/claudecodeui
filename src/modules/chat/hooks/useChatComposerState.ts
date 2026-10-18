@@ -13,8 +13,9 @@ import { useDropzone } from 'react-dropzone';
 import { useTranslation } from 'react-i18next';
 
 import { api } from '@/shared/api';
-import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
+import { PROVIDER_PERMISSION_PREFERENCE_KEYS, START_SUGGESTED_SESSION_EVENT } from '@/shared/constants';
 import { readUserPreference } from '@/shared/userSettings';
+import { useOptionalUiPreferences } from '@/shared/context/UiPreferencesContext';
 import { isOnScreenKeyboardDevice } from '@/shared/utils';
 import type { BackgroundSendChoice, BackgroundSendPrompt, CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
 import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
@@ -29,6 +30,9 @@ import {
 } from '@/shared/chatDrafts';
 import { escapeRegExp } from '@/modules/chat/utils/chatFormatting';
 import { WIDGET_SEND_PROMPT_EVENT } from '@/modules/chat/utils/inlineWidget';
+import { readBtwQuestion, requestSideChat } from '@/modules/chat/utils/sideChat';
+import { takePendingSuggestedPrompt } from '@/modules/chat/utils/sessionSuggestions';
+import { readSessionPromptDetail, SESSION_PROMPT_EVENT } from '@/modules/chat/utils/sessionPrompt';
 import { describeBackgroundTask, ownBackgroundTasks } from '@/modules/chat/utils/backgroundTasks';
 import { useFileMentions } from '@/modules/chat/hooks/useFileMentions';
 import { useInputHistory } from '@/modules/chat/hooks/useInputHistory';
@@ -208,6 +212,8 @@ export function useChatComposerState({
   supportsSteering = false,
 }: UseChatComposerStateArgs) {
   const { t } = useTranslation('chat');
+  // On unless turned off in Quick settings; the composer's own tests mount no provider.
+  const promptSuggestionsEnabled = useOptionalUiPreferences()?.promptSuggestions ?? true;
   // The composer text together with the chat scope it belongs to. They are one
   // state rather than a value plus a ref because they have to move in lockstep:
   // on a session switch there is one commit where the scope has already changed
@@ -433,6 +439,20 @@ export function useChatComposerState({
         return;
       }
 
+      // Picked from the slash menu: /btw is answered by the side chat, not
+      // by the server's command endpoint.
+      if (command.name === '/btw') {
+        requestSideChat({
+          sessionId: currentSessionId || selectedSession?.id || null,
+          question: readBtwQuestion(rawInput ?? input) ?? '',
+        });
+        if (!options?.preserveInput) {
+          setInput('');
+          inputValueRef.current = '';
+        }
+        return;
+      }
+
       try {
         const effectiveInput = rawInput ?? input;
         // Everything typed after the command name is its argument text, line
@@ -507,6 +527,7 @@ export function useChatComposerState({
       selectedProject,
       selectedSession?.id,
       addMessage,
+      setInput,
       tokenBudget,
     ],
   );
@@ -671,11 +692,13 @@ export function useChatComposerState({
       toolsSettings,
       skipPermissions: toolsSettings?.skipPermissions || false,
       sessionSummary: getNotificationSessionSummary(selectedSession, currentInput),
+      promptSuggestions: promptSuggestionsEnabled,
     };
   }, [
     currentProviderEffort,
     currentProviderModel,
     permissionMode,
+    promptSuggestionsEnabled,
     provider,
     resolvePermissionModeForProvider,
     selectedSession,
@@ -779,6 +802,24 @@ export function useChatComposerState({
         )
         || !selectedProject
       ) {
+        return;
+      }
+
+      // /btw goes to the side chat, which answers from a fork of the session:
+      // it works mid-turn, so it must be caught before the queueing below.
+      const btwQuestion = submitOptions?.skipCommandInterception || queuedSubmission
+        ? null
+        : readBtwQuestion(currentInput);
+      if (btwQuestion !== null) {
+        requestSideChat({ sessionId: sessionKey, question: btwQuestion });
+        recordSentMessage(currentInput);
+        setInput('');
+        inputValueRef.current = '';
+        resetCommandMenuState();
+        setIsTextareaExpanded(false);
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+        }
         return;
       }
 
@@ -1204,6 +1245,55 @@ export function useChatComposerState({
     return () => window.removeEventListener(WIDGET_SEND_PROMPT_EVENT, handleWidgetPrompt);
   }, [setInput]);
 
+  // A suggestion card's "Start session" queues its prompt and opens a new
+  // session in the project; the composer of that empty chat sends it as the
+  // first message, through the normal submit so a session gets allocated.
+  useEffect(() => {
+    if (sessionKey || !selectedProjectId) {
+      return undefined;
+    }
+    let submitTimer: ReturnType<typeof setTimeout> | null = null;
+    const sendPendingPrompt = () => {
+      const prompt = takePendingSuggestedPrompt(selectedProjectId);
+      if (!prompt) {
+        return;
+      }
+      // Deferred past the new-session reset that the same click triggers.
+      submitTimer = setTimeout(() => {
+        setInput(prompt);
+        inputValueRef.current = prompt;
+        handleSubmitRef.current?.(createFakeSubmitEvent(), undefined, { skipCommandInterception: true });
+      }, 0);
+    };
+    sendPendingPrompt();
+    window.addEventListener(START_SUGGESTED_SESSION_EVENT, sendPendingPrompt);
+    return () => {
+      window.removeEventListener(START_SUGGESTED_SESSION_EVENT, sendPendingPrompt);
+      if (submitTimer) {
+        clearTimeout(submitTimer);
+      }
+    };
+  }, [sessionKey, selectedProjectId, setInput]);
+  // A prompt addressed to one session: the Changes pane's "Send to Claude".
+  // Only the composer of that session answers, so a split view sends once.
+  const promptSessionId = selectedSession?.id || currentSessionId || null;
+  useEffect(() => {
+    if (!promptSessionId) {
+      return undefined;
+    }
+    const handleSessionPrompt = (event: Event) => {
+      const detail = readSessionPromptDetail(event);
+      if (!detail || detail.sessionId !== promptSessionId) {
+        return;
+      }
+      setInput(detail.text);
+      inputValueRef.current = detail.text;
+      handleSubmitRef.current?.(createFakeSubmitEvent());
+    };
+    window.addEventListener(SESSION_PROMPT_EVENT, handleSessionPrompt);
+    return () => window.removeEventListener(SESSION_PROMPT_EVENT, handleSessionPrompt);
+  }, [promptSessionId, setInput]);
+
   useEffect(() => {
     inputValueRef.current = input;
   }, [input]);
@@ -1315,9 +1405,65 @@ export function useChatComposerState({
     [handleCommandInputChange, resetCommandMenuState, setCursorPosition],
   );
 
+  // The CLI's prediction of the next prompt, kept with the session it came
+  // from: a suggestion for one chat must not show up in another.
+  const [promptSuggestion, setPromptSuggestion] = useState<{ sessionId: string; text: string } | null>(null);
+  const handlePromptSuggestion = useCallback((sessionId: string, text: string) => {
+    setPromptSuggestion({ sessionId, text });
+  }, []);
+
+  // A new turn makes the prediction stale. Dropped during render rather than
+  // in an effect, so a turn that predicts nothing cannot bring the old one back.
+  if (isLoading && promptSuggestion) {
+    setPromptSuggestion(null);
+  }
+
+  // Shown only in an empty, idle box, the way Claude Code greys it in.
+  const visiblePromptSuggestion = (
+    promptSuggestionsEnabled
+    && promptSuggestion
+    && promptSuggestion.sessionId === sessionKey
+    && !input
+    && attachedFiles.length === 0
+    && !isLoading
+    && !queuedDraft
+  ) ? promptSuggestion.text : null;
+
+  const acceptPromptSuggestion = useCallback((): boolean => {
+    if (!visiblePromptSuggestion) {
+      return false;
+    }
+    setInput(visiblePromptSuggestion);
+    inputValueRef.current = visiblePromptSuggestion;
+    setPromptSuggestion(null);
+    // After the commit, so the caret lands after the text the box now holds.
+    requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      if (!textarea) {
+        return;
+      }
+      textarea.focus();
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+      resizeTextarea(textarea);
+    });
+    return true;
+  }, [resizeTextarea, setInput, visiblePromptSuggestion]);
+
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
       if (handleCommandMenuKeyDown(event)) {
+        return;
+      }
+
+      // Tab or → takes the suggestion; with nothing suggested Tab keeps
+      // cycling the permission mode below.
+      if (
+        (event.key === 'Tab' || event.key === 'ArrowRight')
+        && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey
+        && visiblePromptSuggestion
+        && acceptPromptSuggestion()
+      ) {
+        event.preventDefault();
         return;
       }
 
@@ -1365,6 +1511,7 @@ export function useChatComposerState({
       }
     },
     [
+      acceptPromptSuggestion,
       cyclePermissionMode,
       handleCommandMenuKeyDown,
       handleFileMentionsKeyDown,
@@ -1375,6 +1522,7 @@ export function useChatComposerState({
       sendByCtrlEnter,
       showCommandMenu,
       showFileDropdown,
+      visiblePromptSuggestion,
     ],
   );
 
@@ -1569,6 +1717,9 @@ export function useChatComposerState({
     steerQueuedDraft,
     isSteeringQueuedDraft,
     handleSteerResult,
+    promptSuggestion: visiblePromptSuggestion,
+    handlePromptSuggestion,
+    acceptPromptSuggestion,
     handleVoiceTranscript,
     handleInputChange,
     handleKeyDown,

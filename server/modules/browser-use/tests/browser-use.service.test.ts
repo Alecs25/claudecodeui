@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
+import Module, { createRequire } from 'node:module';
 import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -198,6 +198,21 @@ if (process.argv[2] === 'install') {
   return { binDir, logPath };
 }
 
+function writeChromiumlessPlaywright(parentDir: string) {
+  // Stands in for a Playwright that resolves outside the runtime dir but whose Chromium was never
+  // downloaded, e.g. ~/node_modules/playwright left by older installs that ran in the launch directory.
+  const moduleDir = path.join(parentDir, 'node_modules', 'playwright');
+  fs.mkdirSync(moduleDir, { recursive: true });
+  fs.writeFileSync(path.join(moduleDir, 'package.json'), JSON.stringify({ name: 'playwright', main: 'index.cjs' }), 'utf8');
+  fs.writeFileSync(path.join(moduleDir, 'index.cjs'), [
+    "const path = require('node:path');",
+    'module.exports = {',
+    "  __runtimeDir: 'ambient',",
+    "  chromium: { executablePath() { return path.join(__dirname, 'missing-chromium', 'chrome'); } },",
+    '};',
+  ].join('\n'), 'utf8');
+}
+
 function readJsonLines(filePath: string): any[] {
   return fs.readFileSync(filePath, 'utf8')
     .trim()
@@ -244,8 +259,9 @@ test('installRuntime recovers from directory setup failures and resolves Playwri
 
     const result = await browserUseService.installRuntime();
     const commands = readJsonLines(fakeNpm.logPath);
+    // Load by path: a bare lookup from runtimeDir could return a Playwright found above it earlier.
     const require = createRequire(path.join(runtimeDir, 'package.json'));
-    const playwright = require('playwright');
+    const playwright = require(path.join(runtimeDir, 'node_modules', 'playwright'));
 
     assert.equal(result.success, true);
     assert.equal(result.status.playwrightInstalled, true);
@@ -324,3 +340,122 @@ test('agent sessions launch, navigate to localhost, and clean up with runtime Pl
     }
   }
 });
+
+test('installRuntime takes effect when a Playwright without Chromium resolves above the runtime directory', async () => {
+  const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cloudcli-browser-ambient-'));
+  const homeDir = path.join(rootDir, 'home');
+  const runtimeDir = path.join(homeDir, '.cloudcli', 'browser-use', 'runtime');
+  writeChromiumlessPlaywright(homeDir);
+  const fakeNpm = writeFakeNpm(rootDir);
+  const originalRuntimeDir = process.env.CLOUDCLI_BROWSER_USE_RUNTIME_DIR;
+  const originalPath = process.env.PATH;
+  process.env.CLOUDCLI_BROWSER_USE_RUNTIME_DIR = runtimeDir;
+  process.env.PATH = `${fakeNpm.binDir}${path.delimiter}${originalPath || ''}`;
+
+  try {
+    const before = await browserUseService.getStatus();
+    assert.equal(before.playwrightInstalled, true);
+    assert.equal(before.chromiumInstalled, false);
+
+    const result = await browserUseService.installRuntime();
+
+    assert.equal(result.success, true);
+    assert.equal(result.status.playwrightInstalled, true);
+    assert.equal(result.status.chromiumInstalled, true);
+  } finally {
+    if (originalRuntimeDir === undefined) {
+      delete process.env.CLOUDCLI_BROWSER_USE_RUNTIME_DIR;
+    } else {
+      process.env.CLOUDCLI_BROWSER_USE_RUNTIME_DIR = originalRuntimeDir;
+    }
+    if (originalPath === undefined) {
+      delete process.env.PATH;
+    } else {
+      process.env.PATH = originalPath;
+    }
+  }
+});
+
+/**
+ * Makes `require('playwright')` from the CloudCLI install find `globalModulesDir`, the way a
+ * `npm i -g playwright` next to a global CloudCLI does, by putting it on NODE_PATH for this process.
+ * Returns a restore function that also forgets every module loaded from under `rootDir`.
+ */
+function resolvePlaywrightFromInstall(globalModulesDir: string, rootDir: string): () => void {
+  const moduleApi = Module as unknown as { _initPaths: () => void };
+  const originalNodePath = process.env.NODE_PATH;
+  process.env.NODE_PATH = globalModulesDir;
+  moduleApi._initPaths();
+  return () => {
+    if (originalNodePath === undefined) {
+      delete process.env.NODE_PATH;
+    } else {
+      process.env.NODE_PATH = originalNodePath;
+    }
+    moduleApi._initPaths();
+    for (const cachedPath of Object.keys(require.cache)) {
+      if (cachedPath.startsWith(rootDir)) {
+        delete require.cache[cachedPath];
+      }
+    }
+  };
+}
+
+const require = createRequire(import.meta.url);
+
+/** An `npm` that fails at once, so installRuntime only re-probes the runtime and reports its status. */
+function writeFailingNpm(rootDir: string): string {
+  const binDir = path.join(rootDir, 'failing-bin');
+  fs.mkdirSync(binDir, { recursive: true });
+  if (process.platform === 'win32') {
+    fs.writeFileSync(path.join(binDir, 'npm.cmd'), '@exit /b 1\r\n', 'utf8');
+  } else {
+    fs.writeFileSync(path.join(binDir, 'npm'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  }
+  return binDir;
+}
+
+for (const [label, installCopyHasChromium] of [
+  ['keeps a Playwright from the CloudCLI install that has Chromium when the runtime copy has none', true],
+  ['prefers a runtime copy with Chromium over a Chromium-less Playwright from the CloudCLI install', false],
+] as const) {
+  test(`getStatus ${label}`, async () => {
+    // A runtime copy without Chromium is what Install Runtime leaves behind on Linux when
+    // `playwright install-deps` stops at sudo before the Chromium download.
+    const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cloudcli-browser-candidates-'));
+    const globalDir = path.join(rootDir, 'global');
+    const runtimeDir = path.join(rootDir, 'home', '.cloudcli', 'browser-use', 'runtime');
+    if (installCopyHasChromium) {
+      writeFakePlaywright(globalDir);
+      writeChromiumlessPlaywright(runtimeDir);
+    } else {
+      writeChromiumlessPlaywright(globalDir);
+      writeFakePlaywright(runtimeDir);
+    }
+    const originalRuntimeDir = process.env.CLOUDCLI_BROWSER_USE_RUNTIME_DIR;
+    const originalPath = process.env.PATH;
+    process.env.CLOUDCLI_BROWSER_USE_RUNTIME_DIR = runtimeDir;
+    process.env.PATH = `${writeFailingNpm(rootDir)}${path.delimiter}${originalPath || ''}`;
+    const restore = resolvePlaywrightFromInstall(path.join(globalDir, 'node_modules'), rootDir);
+
+    try {
+      // The failed install drops any probe an earlier test cached and reports a fresh one.
+      const { status } = await browserUseService.installRuntime();
+
+      assert.equal(status.playwrightInstalled, true);
+      assert.equal(status.chromiumInstalled, true);
+    } finally {
+      restore();
+      if (originalRuntimeDir === undefined) {
+        delete process.env.CLOUDCLI_BROWSER_USE_RUNTIME_DIR;
+      } else {
+        process.env.CLOUDCLI_BROWSER_USE_RUNTIME_DIR = originalRuntimeDir;
+      }
+      if (originalPath === undefined) {
+        delete process.env.PATH;
+      } else {
+        process.env.PATH = originalPath;
+      }
+    }
+  });
+}

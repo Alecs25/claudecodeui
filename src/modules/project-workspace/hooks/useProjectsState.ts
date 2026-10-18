@@ -8,7 +8,8 @@ import type { ServerEvent,
   LoadingProgress,
   Project,
   ProjectSession,IsSessionProcessing,
-  SessionStatusFlags } from '@/shared/types';
+  SessionStatusFlags,
+  SettingsOpenTarget } from '@/shared/types';
 import { mergeProjectSelectionMetadata } from '@/modules/project-workspace/utils/projectSelectionMetadata';
 import { readSelectedProvider } from '@/shared/selectedProvider';
 
@@ -1389,7 +1390,7 @@ export function useProjectsState({
       isLoading: isLoadingProjects,
       loadingProgress,
       onRefresh: handleSidebarRefresh,
-      onShowSettings: (tab?: string) => openSettings(tab),
+      onShowSettings: (tab?: SettingsOpenTarget) => openSettings(tab),
       showSettings,
       settingsInitialTab,
       onCloseSettings: () => setShowSettings(false),

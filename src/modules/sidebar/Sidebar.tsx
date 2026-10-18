@@ -9,7 +9,7 @@ import { useTaskMaster, useTasksSettings } from '@/modules/task-master';
 import { usePaletteOps } from '@/modules/command-palette';
 import { useBackgroundSessionIdSet, useBusySessionIdSet } from '@/shared/context/SessionProtectionContext';
 import WebSocketContext from '@/shared/context/WebSocketContext';
-import type { LLMProvider, LoadingProgress, MCPServerStatus, Project, ProjectSession, SessionStatusPatch, SessionWithProvider, SidebarProjectListProps } from '@/shared/types';
+import type { LLMProvider, LoadingProgress, MCPServerStatus, Project, ProjectSession, SessionStatusPatch, SettingsOpenTarget, SessionWithProvider, SidebarProjectListProps } from '@/shared/types';
 import SidebarCollapsed from '@/modules/sidebar/SidebarCollapsed';
 import SidebarContent from '@/modules/sidebar/SidebarContent';
 import SidebarModals from '@/modules/sidebar/SidebarModals';
@@ -33,7 +33,7 @@ type SidebarProps = {
   loadingProgress: LoadingProgress | null;
   onRefresh: () => Promise<void> | void;
   /** Opens Settings, at `tab` when given ("agents:mcp" opens the agents tab on its MCP section). */
-  onShowSettings: (tab?: string) => void;
+  onShowSettings: (tab?: SettingsOpenTarget) => void;
   showSettings: boolean;
   settingsInitialTab: string;
   onCloseSettings: () => void;

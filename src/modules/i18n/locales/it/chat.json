@@ -140,7 +140,7 @@
     "technicalDetails": "Dettagli tecnici"
   },
   "input": {
-    "placeholder": "Digita / per i comandi, @ per i file, o chiedi qualcosa a {{provider}}...",
+    "placeholder": "Scrivi a {{provider}}…",
     "placeholderDefault": "Scrivi il tuo messaggio...",
     "disabled": "Input disabilitato",
     "attachFiles": "Allega file",
@@ -157,6 +157,9 @@
     "scrollToBottom": "Scorri in basso",
     "queue": {
       "sendNow": "Invia ora"
+    },
+    "suggestion": {
+      "use": "Usa"
     }
   },
   "providerSelection": {
@@ -274,6 +277,37 @@
       "title": "Sostituzione di un messaggio precedente",
       "filesNotReverted": "i file già modificati non vengono ripristinati",
       "cancel": "Annulla"
+    },
+    "plusMenu": {
+      "label": "Aggiungi",
+      "attach": "Allega file",
+      "commands": "Comandi",
+      "mcp": "Connettori MCP",
+      "schedule": "Pianifica messaggio",
+      "voice": "Voce"
+    },
+    "permissionPill": {
+      "short": {
+        "default": "Manuale",
+        "auto": "Auto",
+        "acceptEdits": "Modifiche",
+        "bypassPermissions": "Bypass",
+        "plan": "Piano"
+      },
+      "full": {
+        "default": "Manuale",
+        "auto": "Automatica",
+        "acceptEdits": "Modifiche automatiche",
+        "bypassPermissions": "Bypass",
+        "plan": "Piano"
+      }
+    },
+    "effortLevels": {
+      "low": "basso",
+      "medium": "medio",
+      "high": "alto",
+      "xhigh": "molto alto",
+      "max": "massimo"
     }
   },
   "export": {
@@ -385,5 +419,20 @@
   "questions": {
     "title": "Domande",
     "skipped": "Saltata"
+  },
+  "sideChat": {
+    "title": "Chat laterale",
+    "notSaved": "Non entra nella sessione",
+    "close": "Chiudi",
+    "empty": "Chiedi qualcosa su questa sessione",
+    "answering": "Sta rispondendo…",
+    "placeholder": "Domanda laterale",
+    "send": "Invia"
+  },
+  "sessionSuggestion": {
+    "start": "Avvia sessione",
+    "dismiss": "Ignora",
+    "started": "Sessione avviata",
+    "dismissed": "Ignorato"
   }
 }

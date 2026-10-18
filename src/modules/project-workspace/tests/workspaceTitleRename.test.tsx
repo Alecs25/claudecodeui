@@ -51,12 +51,10 @@ const session: ProjectSession = {
 
 const onRenameSession = vi.fn<(sessionId: string, summary: string) => Promise<boolean>>();
 
-const renderTitle = (overrides: { selectedSession?: ProjectSession | null; activeTab?: 'chat' | 'files' } = {}) => render(
+const renderTitle = (overrides: { selectedSession?: ProjectSession | null } = {}) => render(
   <WorkspaceTitle
-    activeTab={overrides.activeTab ?? 'chat'}
     selectedProject={project}
     selectedSession={overrides.selectedSession === undefined ? session : overrides.selectedSession}
-    shouldShowTasksTab={false}
     onRenameSession={onRenameSession}
   />,
 );
@@ -75,7 +73,7 @@ test('double-clicking the session title opens an input seeded with the title, fo
 
   const heading = titleHeading();
   assert.equal(heading.textContent, 'Original title');
-  assert.equal(heading.getAttribute('title'), 'Original title (double-click to rename)');
+  assert.equal(heading.closest('button')?.getAttribute('title'), 'Original title (double-click to rename)');
   assert.equal(queryRenameInput(), null);
 
   fireEvent.doubleClick(heading);
@@ -178,13 +176,8 @@ test('a refused rename is reported the way the sidebar reports it', async () => 
   assert.equal(queryRenameInput(), null);
 });
 
-test('the title is not editable without a session or off the chat tab', () => {
-  const { unmount } = renderTitle({ selectedSession: null });
-  fireEvent.doubleClick(titleHeading());
-  assert.equal(queryRenameInput(), null);
-  unmount();
-
-  renderTitle({ activeTab: 'files' });
+test('the title is not editable without a session', () => {
+  renderTitle({ selectedSession: null });
   fireEvent.doubleClick(titleHeading());
   assert.equal(queryRenameInput(), null);
   assert.equal(onRenameSession.mock.calls.length, 0);

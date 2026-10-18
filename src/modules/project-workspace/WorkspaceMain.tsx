@@ -1,14 +1,15 @@
 import React, { useCallback, useEffect, type Dispatch, type SetStateAction, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
-import { ChatInterface } from '@/modules/chat';
+import { ChatInterface, requestSessionPrompt } from '@/modules/chat';
 import { FileTree } from '@/modules/file-tree';
 import { StandaloneShell } from '@/modules/standalone-shell';
 import { GitPanel } from '@/modules/git-panel';
-import { PluginTabContent } from '@/modules/plugins';
+import { PluginTabContent, usePlugins } from '@/modules/plugins';
 import { BrowserUsePanel, useBrowserUseEnabled } from '@/modules/browser-use';
 import { usePaletteOpsRegister } from '@/modules/command-palette';
 import { TaskMasterPanel, useTaskMasterProjectSync, useTasksSettings } from '@/modules/task-master';
-import type { AppTab, DirectoryRevealRequest, Project, ProjectSession, SessionEstablishedContext, SessionNavigationOptions, SettingsMainTab } from '@/shared/types';
+import type { AppTab, DirectoryRevealRequest, Project, ProjectSession, SessionEstablishedContext, SessionNavigationOptions, SettingsOpenTarget } from '@/shared/types';
 import { useSetUiPreferences, useUiPreferences } from '@/shared/context/UiPreferencesContext';
 import {
   getTranscriptViewMode,
@@ -21,6 +22,12 @@ import WorkspaceHeader from '@/modules/project-workspace/WorkspaceHeader';
 import WorkspaceStateView from '@/modules/project-workspace/WorkspaceStateView';
 import WorkspaceErrorBoundary from '@/modules/project-workspace/WorkspaceErrorBoundary';
 import SplitSessionPane from '@/modules/project-workspace/SplitSessionPane';
+import WorkspaceSidePane from '@/modules/project-workspace/side-pane/WorkspaceSidePane';
+import ChangesPane from '@/modules/project-workspace/side-pane/ChangesPane';
+import BackgroundTasksPane from '@/modules/project-workspace/side-pane/BackgroundTasksPane';
+import { PANE_DEFINITIONS, type BuiltInPaneId } from '@/modules/project-workspace/session-toolbar/paneDefinitions';
+import { useGitChangeSummary } from '@/modules/project-workspace/hooks/useGitChangeSummary';
+import { usePaneShortcuts } from '@/modules/project-workspace/hooks/usePaneShortcuts';
 
 type WorkspaceMainProps = {
   selectedProject: Project | null;
@@ -34,7 +41,7 @@ type WorkspaceMainProps = {
   isLoading: boolean;
   onNavigateToSession: (targetSessionId: string, options?: SessionNavigationOptions) => void;
   onSessionEstablished: (sessionId: string, context: SessionEstablishedContext) => void;
-  onShowSettings: (tab?: SettingsMainTab) => void;
+  onShowSettings: (tab?: SettingsOpenTarget) => void;
   externalMessageUpdate: number;
   newSessionTrigger: number;
   /** Switches the app to another project — used by the git panel's Worktrees view. */
@@ -46,9 +53,18 @@ type WorkspaceMainProps = {
   /** The session shown beside the main chat in split view, or null for a single pane. */
   splitSession: { session: ProjectSession; project: Project } | null;
   onCloseSplitSession: () => void;
+  /** Opens a session in the split pane; absent where the layout has no room for one. */
+  onOpenSplitSession?: (session: ProjectSession) => void;
+  /** Drops an archived session from the lists and leaves it if it was open. */
+  onSessionArchived?: (sessionId: string) => void;
 };
 
-/** Rendered by ProjectMainRegion to show the selected project's active tab: chat, files, shell, git, tasks, browser or a plugin. */
+/**
+ * Rendered by ProjectMainRegion: the session header with its toolbar, the
+ * chat, and the one pane the toolbar opened (terminal, changes, preview,
+ * files, git, plan, background tasks or a plugin) at its right, or over it on
+ * a phone. The code editor and the split session use the same right column.
+ */
 function WorkspaceMain({
   selectedProject,
   selectedSession,
@@ -69,7 +85,11 @@ function WorkspaceMain({
   onRenameSession,
   splitSession,
   onCloseSplitSession,
+  onOpenSplitSession,
+  onSessionArchived,
 }: WorkspaceMainProps) {
+  const { t } = useTranslation();
+  const { plugins } = usePlugins();
   const preferences = useUiPreferences();
   const setPreferences = useSetUiPreferences();
   const { sendByCtrlEnter } = preferences;
@@ -100,6 +120,7 @@ function WorkspaceMain({
     resizeHandleRef,
     handleFileOpen,
     handleCloseEditor,
+    requestCloseEditor,
     handleToggleEditorExpand,
     handleResizeStart,
     handleUnsavedChangesChange,
@@ -125,18 +146,83 @@ function WorkspaceMain({
     }
   }, [shouldShowBrowserTab, activeTab, setActiveTab]);
 
+  const { summary: gitChanges, refresh: refreshGitChanges } = useGitChangeSummary(selectedProject?.projectId);
+  const isPaneOpen = activeTab !== 'chat';
+
+  // One thing at a time in the right column: a pane takes it from the editor
+  // (asking first about unsaved edits) and from the split session.
+  const openPane = useCallback((pane: AppTab) => {
+    if (pane !== 'chat') {
+      if (!requestCloseEditor()) {
+        return;
+      }
+      if (splitSession && !isMobile) {
+        onCloseSplitSession();
+      }
+    }
+    setActiveTab(pane);
+  }, [isMobile, onCloseSplitSession, requestCloseEditor, setActiveTab, splitSession]);
+
+  const togglePane = useCallback((pane: AppTab) => {
+    if (pane === activeTab) {
+      setActiveTab('chat');
+      return;
+    }
+    openPane(pane);
+  }, [activeTab, openPane, setActiveTab]);
+
+  const closePane = useCallback(() => {
+    setActiveTab('chat');
+  }, [setActiveTab]);
+
+  usePaneShortcuts(Boolean(selectedProject), togglePane);
+
+  // "Open side by side" puts the session viewed before this one next to it.
+  // Tracked during render (React's "adjust state on prop change" pattern), so
+  // the menu is right on the first render after a switch.
+  const [previousSession, setPreviousSession] = useState<ProjectSession | null>(null);
+  const [lastSession, setLastSession] = useState<ProjectSession | null>(selectedSession);
+  if (selectedSession?.id !== lastSession?.id) {
+    if (lastSession && selectedSession) {
+      setPreviousSession(lastSession);
+    }
+    setLastSession(selectedSession);
+  }
+
+  const splitMenu = isMobile || !onOpenSplitSession ? undefined : {
+    isOpen: Boolean(splitSession),
+    canOpen: Boolean(previousSession && previousSession.id !== selectedSession?.id),
+    onToggle: () => {
+      if (splitSession) {
+        onCloseSplitSession();
+      } else if (previousSession) {
+        onOpenSplitSession(previousSession);
+      }
+    },
+  };
+
+  const selectedSessionId = selectedSession?.id ?? null;
+  const sendDiffComments = useCallback((prompt: string) => {
+    if (!selectedSessionId) {
+      return;
+    }
+    requestSessionPrompt(selectedSessionId, prompt);
+    // On a phone the pane covers the chat the answer arrives in.
+    if (isMobile) {
+      setActiveTab('chat');
+    }
+  }, [isMobile, selectedSessionId, setActiveTab]);
+
   // Stable so React.memo(ChatInterface) can bail out: an inline arrow here made
   // every WorkspaceMain render re-render the whole chat tree, including during
   // an editor-divider drag.
   const showAllTasks = useCallback(() => {
-    setActiveTab('tasks');
-  }, [setActiveTab]);
+    openPane('tasks');
+  }, [openPane]);
 
   const openFile = useCallback((filePath: string) => {
-    if (handleFileOpen(filePath)) {
-      setActiveTab('files');
-    }
-  }, [handleFileOpen, setActiveTab]);
+    handleFileOpen(filePath);
+  }, [handleFileOpen]);
 
   // Opens the editor side panel in place, keeping the current tab (e.g. chat).
   const openFileInEditor = useCallback((filePath: string, line?: number | null) => {
@@ -145,9 +231,9 @@ function WorkspaceMain({
 
   // Directories cannot be read as text: reveal them in the file tree instead.
   const openDirectory = useCallback((directoryPath: string) => {
-    setActiveTab('files');
+    openPane('files');
     setRevealDirectory({ path: directoryPath });
-  }, [setActiveTab]);
+  }, [openPane]);
 
   // Stable arguments keep usePaletteOpsRegister's effect from tearing down and
   // rewriting the whole palette registry on every render.
@@ -161,11 +247,89 @@ function WorkspaceMain({
     return <WorkspaceStateView mode="empty" isMobile={isMobile} onMenuClick={onMenuClick} />;
   }
 
+  const paneTitle = (() => {
+    if (activeTab.startsWith('plugin:')) {
+      const pluginName = activeTab.replace('plugin:', '');
+      return plugins.find((plugin) => plugin.name === pluginName)?.displayName ?? pluginName;
+    }
+    const definition = PANE_DEFINITIONS[activeTab as BuiltInPaneId];
+    return definition ? t(definition.labelKey, { defaultValue: definition.defaultLabel }) : '';
+  })();
+
+  const renderPaneContent = () => {
+    switch (activeTab) {
+      case 'shell':
+        return (
+          <StandaloneShell
+            project={selectedProject}
+            session={selectedSession}
+            showHeader={false}
+            isActive
+          />
+        );
+      case 'files':
+        return (
+          <FileTree
+            selectedProject={selectedProject}
+            onFileOpen={handleFileOpen}
+            revealDirectory={revealDirectory}
+          />
+        );
+      case 'git':
+        return (
+          <GitPanel
+            selectedProject={selectedProject}
+            isMobile={isMobile}
+            onFileOpen={handleFileOpen}
+            onProjectSelect={onProjectSelect}
+            onProjectsRefresh={onProjectsRefresh}
+          />
+        );
+      case 'tasks':
+        return shouldShowTasksTab ? <TaskMasterPanel isVisible /> : null;
+      case 'browser':
+        return shouldShowBrowserTab ? <BrowserUsePanel isVisible onShowSettings={onShowSettings} /> : null;
+      case 'diff':
+        return (
+          <ChangesPane
+            // Comments point at lines of one project's diff: another project starts clean.
+            key={selectedProject.projectId}
+            projectId={selectedProject.projectId}
+            changes={gitChanges}
+            onRefresh={refreshGitChanges}
+            onSendComments={selectedSession ? sendDiffComments : undefined}
+            isMobile={isMobile}
+          />
+        );
+      case 'background':
+        return (
+          <BackgroundTasksPane
+            sessionId={selectedSession?.id ?? null}
+            onTaskOpened={isMobile ? closePane : undefined}
+          />
+        );
+      default:
+        return activeTab.startsWith('plugin:') ? (
+          <PluginTabContent
+            pluginName={activeTab.replace('plugin:', '')}
+            selectedProject={selectedProject}
+            selectedSession={selectedSession}
+          />
+        ) : null;
+    }
+  };
+
+  // The editor and a pane share the right column; the editor, opened from a
+  // link or the file tree, sits on top and the pane comes back when it closes.
+  const showSidePane = isPaneOpen && (isMobile || !editingFile);
+  // On a phone the pane covers the chat, which stays mounted underneath.
+  const isChatVisible = !(isMobile && isPaneOpen);
+
   return (
     <div className="flex h-full flex-col">
       <WorkspaceHeader
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        onTogglePane={togglePane}
         selectedProject={selectedProject}
         selectedSession={selectedSession}
         shouldShowTasksTab={shouldShowTasksTab}
@@ -173,15 +337,19 @@ function WorkspaceMain({
         isMobile={isMobile}
         onMenuClick={onMenuClick}
         onRenameSession={onRenameSession}
+        changes={gitChanges}
+        viewMode={transcriptViewMode}
+        onViewModeChange={setTranscriptViewMode}
+        split={splitMenu}
+        onSessionArchived={onSessionArchived}
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className={`flex min-h-0 min-w-[200px] flex-col overflow-hidden ${editorExpanded ? 'hidden' : ''} flex-1`}>
-          <div className={`h-full ${activeTab === 'chat' ? 'flex' : 'hidden'}`}>
-            <div className="h-full min-w-0 flex-1">
+        <div className={`flex min-h-0 min-w-[200px] flex-1 overflow-hidden ${editorExpanded ? 'hidden' : ''}`}>
+          <div className="h-full min-w-0 flex-1">
             <WorkspaceErrorBoundary showDetails>
               <ChatInterface
-                isActive={activeTab === 'chat'}
+                isActive={isChatVisible}
                 selectedProject={selectedProject}
                 selectedSession={selectedSession}
                 ws={ws}
@@ -200,80 +368,41 @@ function WorkspaceMain({
                 onShowAllTasks={tasksEnabled ? showAllTasks : null}
               />
             </WorkspaceErrorBoundary>
-            </div>
-            {splitSession && (
-              <SplitSessionPane
-                project={splitSession.project}
-                session={splitSession.session}
-                isActive={activeTab === 'chat'}
-                ws={ws}
-                sendMessage={sendMessage}
-                // The editor resolves paths against the main project, so links
-                // from a session of another project are not opened there.
-                onFileOpen={splitSession.project.projectId === selectedProject.projectId ? handleFileOpen : undefined}
-                onNavigateToSession={onNavigateToSession}
-                onSessionEstablished={onSessionEstablished}
-                onShowSettings={onShowSettings}
-                showRawParameters={showRawParameters}
-                showThinking={showThinking}
-                transcriptViewMode={transcriptViewMode}
-                sendByCtrlEnter={sendByCtrlEnter}
-                onClose={onCloseSplitSession}
-              />
-            )}
           </div>
-
-          {activeTab === 'files' && (
-            <div className="h-full overflow-hidden">
-              <FileTree
-                selectedProject={selectedProject}
-                onFileOpen={handleFileOpen}
-                revealDirectory={revealDirectory}
-              />
-            </div>
-          )}
-
-          {activeTab === 'shell' && (
-            <div className="h-full w-full overflow-hidden">
-              <StandaloneShell
-                project={selectedProject}
-                session={selectedSession}
-                showHeader={false}
-                isActive={activeTab === 'shell'}
-              />
-            </div>
-          )}
-
-          {activeTab === 'git' && (
-            <div className="h-full overflow-hidden">
-              <GitPanel
-                selectedProject={selectedProject}
-                isMobile={isMobile}
-                onFileOpen={handleFileOpen}
-                onProjectSelect={onProjectSelect}
-                onProjectsRefresh={onProjectsRefresh}
-              />
-            </div>
-          )}
-
-          {shouldShowTasksTab && <TaskMasterPanel isVisible={activeTab === 'tasks'} />}
-
-          {shouldShowBrowserTab && activeTab === 'browser' && (
-            <div className="h-full overflow-hidden">
-              <BrowserUsePanel isVisible={activeTab === 'browser'} onShowSettings={onShowSettings} />
-            </div>
-          )}
-
-          {activeTab.startsWith('plugin:') && (
-            <div className="h-full overflow-hidden">
-              <PluginTabContent
-                pluginName={activeTab.replace('plugin:', '')}
-                selectedProject={selectedProject}
-                selectedSession={selectedSession}
-              />
-            </div>
+          {splitSession && (
+            <SplitSessionPane
+              project={splitSession.project}
+              session={splitSession.session}
+              isActive={isChatVisible}
+              ws={ws}
+              sendMessage={sendMessage}
+              // The editor resolves paths against the main project, so links
+              // from a session of another project are not opened there.
+              onFileOpen={splitSession.project.projectId === selectedProject.projectId ? handleFileOpen : undefined}
+              onNavigateToSession={onNavigateToSession}
+              onSessionEstablished={onSessionEstablished}
+              onShowSettings={onShowSettings}
+              showRawParameters={showRawParameters}
+              showThinking={showThinking}
+              transcriptViewMode={transcriptViewMode}
+              sendByCtrlEnter={sendByCtrlEnter}
+              onClose={onCloseSplitSession}
+            />
           )}
         </div>
+
+        {showSidePane && (
+          <WorkspaceSidePane
+            title={paneTitle}
+            isMobile={isMobile}
+            width={editorWidth}
+            resizeHandleRef={resizeHandleRef}
+            onResizeStart={handleResizeStart}
+            onClose={closePane}
+          >
+            {renderPaneContent()}
+          </WorkspaceSidePane>
+        )}
 
         <EditorSidebar
           editingFile={editingFile}
@@ -287,7 +416,6 @@ function WorkspaceMain({
           onToggleEditorExpand={handleToggleEditorExpand}
           onUnsavedChangesChange={handleUnsavedChangesChange}
           projectPath={selectedProject.path}
-          fillSpace={activeTab === 'files'}
         />
       </div>
     </div>

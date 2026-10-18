@@ -6,6 +6,7 @@ import { subscribeToUserPreferences } from '@/shared/userSettings';
 import { usePaletteOps } from '@/modules/command-palette';
 import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationProjectResult, ConversationSearchResults, LLMProvider, Project, ProjectSession, ProjectSortOrder, RecentConversationListItem, SearchProgress, ActiveSidebarRename, PendingSidebarDeletion, SessionStatusFilter, SessionStatusFlags, SessionStatusPatch, SessionTitleSearchResult, SessionWithProvider, ServerEvent, SidebarSessionSelection } from '@/shared/types';
 import {
+  filterProjects,
   getAllSessions,
   sortProjects,
 } from '@/modules/sidebar/utils/sidebarProjectFormatting';
@@ -498,7 +499,9 @@ export function useSidebarController({
     }
 
     const query = debouncedSearchQuery;
-    if (!isSearchOpen || query.length < 2) {
+    // Open search runs the transcript search too, so a query that matches no
+    // project or session title still finds the chats that mention it.
+    if (!isSearchOpen || isArchiveOpen || query.length < 2) {
       searchSeqRef.current += 1;
       setConversationResults(null);
       setSearchProgress(null);
@@ -607,7 +610,7 @@ export function useSidebarController({
         eventSourceRef.current = null;
       }
     };
-  }, [debouncedSearchQuery, isSearchOpen]);
+  }, [debouncedSearchQuery, isArchiveOpen, isSearchOpen]);
 
   // All sidebar state keys (expanded, starred, loading, etc.) use the DB
   // `projectId` as their identifier after the migration.
@@ -625,11 +628,6 @@ export function useSidebarController({
       });
     },
     [updateCollapsedProjects],
-  );
-
-  const isProjectExpanded = useCallback(
-    (projectId: string) => !collapsedProjectIds.has(projectId),
-    [collapsedProjectIds],
   );
 
   const handleSessionClick = useCallback(
@@ -779,12 +777,15 @@ export function useSidebarController({
     [projectSortOrder, projectsWithResolvedStarState],
   );
 
-  const filteredProjects = useMemo(
-    () => (projectFilter === null
+  // The project filter first, then the search: names, paths and loaded session
+  // titles (a project kept for its sessions shows only those). The archive has
+  // its own search over archived items.
+  const filteredProjects = useMemo(() => {
+    const scoped = projectFilter === null
       ? sortedProjects
-      : sortedProjects.filter((project) => project.projectId === projectFilter)),
-    [projectFilter, sortedProjects],
-  );
+      : sortedProjects.filter((project) => project.projectId === projectFilter);
+    return isArchiveOpen ? scoped : filterProjects(scoped, debouncedSearchQuery);
+  }, [debouncedSearchQuery, isArchiveOpen, projectFilter, sortedProjects]);
 
   // The flat view of one project, or of a status the server cannot filter by,
   // built from the sessions already loaded and shaped like recents rows.
@@ -824,6 +825,22 @@ export function useSidebarController({
         })))
       .sort((a, b) => (b.lastActivity ?? '').localeCompare(a.lastActivity ?? ''));
   }, [activeSessionIds, attentionSessionIds, filteredProjects, groupByProject, statusFilter, usesServerRecents, waitingSessionIds]);
+
+  // Projects kept only because a session title matched the search.
+  const sessionMatchedProjectIds = useMemo(
+    () => new Set(
+      filteredProjects
+        .filter((project) => project.sessionsMatchedFilter === true)
+        .map((project) => project.projectId),
+    ),
+    [filteredProjects],
+  );
+
+  // Groups are open unless folded; a search hit opens its group so it is seen.
+  const isProjectExpanded = useCallback(
+    (projectId: string) => !collapsedProjectIds.has(projectId) || sessionMatchedProjectIds.has(projectId),
+    [collapsedProjectIds, sessionMatchedProjectIds],
+  );
 
   const filteredArchivedSessions = useMemo(() => {
     const normalizedSearch = debouncedSearchQuery.trim().toLowerCase();

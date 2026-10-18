@@ -16,6 +16,7 @@ import type {
   ProjectSession,
   SessionEstablishedContext,
   SessionNavigationOptions,
+  SettingsOpenTarget,
 } from '@/shared/types';
 import type { TranscriptViewMode } from '@/shared/uiPreferences';
 import { useChatProviderState } from '@/modules/chat/hooks/useChatProviderState';
@@ -44,7 +45,7 @@ type ChatInterfaceProps = {
   onFileOpen?: (filePath: string, diffInfo?: any) => void;
   onNavigateToSession?: (targetSessionId: string, options?: SessionNavigationOptions) => void;
   onSessionEstablished?: (sessionId: string, context: SessionEstablishedContext) => void;
-  onShowSettings?: () => void;
+  onShowSettings?: (tab?: SettingsOpenTarget) => void;
   showRawParameters?: boolean;
   showThinking?: boolean;
   /** Normal / Thinking / Verbose; cycled with Ctrl+O while the chat tab is active. */
@@ -244,6 +245,9 @@ function ChatInterface({
     steerQueuedDraft,
     isSteeringQueuedDraft,
     handleSteerResult,
+    promptSuggestion,
+    handlePromptSuggestion,
+    acceptPromptSuggestion,
     handleVoiceTranscript,
     handleInputChange,
     handleKeyDown,
@@ -330,6 +334,7 @@ function ChatInterface({
     sessionStore,
     onPlanModeChange: applyPlanModeChange,
     onSteerResult: handleSteerResult,
+    onPromptSuggestion: handlePromptSuggestion,
   });
 
   // Lets other modules (the quick settings Commands tab) hand text to the
@@ -609,8 +614,6 @@ function ChatInterface({
               onGrantToolPermission={handleGrantToolPermission}
               showRawParameters={showRawParameters}
               showThinking={showThinking}
-              transcriptViewMode={transcriptViewMode}
-              onTranscriptViewModeChange={onTranscriptViewModeChange}
               selectedProject={selectedProject}
               // Editing replaces the turn and everything after it, so it is only
               // offered when the session is idle — a half-truncated transcript with
@@ -718,6 +721,9 @@ function ChatInterface({
           isInputFocused={isInputFocused}
           onInputFocusChange={handleInputFocusChange}
           placeholder={t('input.placeholder', { provider: selectedProviderLabel })}
+          promptSuggestion={promptSuggestion}
+          onAcceptPromptSuggestion={acceptPromptSuggestion}
+          onOpenMcpSettings={onShowSettings ? () => onShowSettings('agents:mcp') : undefined}
           isTextareaExpanded={isTextareaExpanded}
           sendByCtrlEnter={sendByCtrlEnter}
         />

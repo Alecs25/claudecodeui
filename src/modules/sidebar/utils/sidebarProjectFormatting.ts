@@ -147,6 +147,44 @@ export const sortProjects = (
   return byName;
 };
 
+const toSearchWords = (searchFilter: string): string[] =>
+  searchFilter.trim().toLowerCase().split(/\s+/).filter(Boolean);
+
+const includesAllWords = (value: string, words: string[]): boolean => {
+  const lower = value.toLowerCase();
+  return words.every((word) => lower.includes(word));
+};
+
+const sessionTitleMatches = (session: ProjectSession, words: string[]): boolean =>
+  includesAllWords(String(session.summary || session.name || session.title || ''), words);
+
+export const filterProjects = (projects: Project[], searchFilter: string): Project[] => {
+  const words = toSearchWords(searchFilter);
+  if (words.length === 0) {
+    return projects;
+  }
+
+  return projects.flatMap((project) => {
+    const displayName = project.displayName || project.projectId;
+    // `project.path`/`fullPath` is the most useful search target now that the
+    // folder-derived name is gone; fall back to displayName above.
+    const searchPath = project.path || project.fullPath || '';
+    if (includesAllWords(displayName, words) || includesAllWords(searchPath, words)) {
+      return [project];
+    }
+
+    // A project whose name does not match still shows when one of its loaded
+    // sessions does, narrowed to those sessions. `sessionsMatchedFilter` lets
+    // the sidebar expand it so the hits are visible.
+    const sessions = (project.sessions || []).filter((session) => sessionTitleMatches(session, words));
+    if (sessions.length === 0) {
+      return [];
+    }
+
+    return [{ ...project, sessions, sessionsMatchedFilter: true }];
+  });
+};
+
 export const getTaskIndicatorStatus = (
   project: Project,
   mcpServerStatus: { hasMCPServer?: boolean; isConfigured?: boolean } | null,

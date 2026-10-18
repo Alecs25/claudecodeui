@@ -5,7 +5,7 @@ import { X } from 'lucide-react';
 
 import { ChatInterface } from '@/modules/chat';
 import { LLMProviderLogo } from '@/shared/ui';
-import type { Project, ProjectSession, SessionEstablishedContext, SessionNavigationOptions, SettingsMainTab } from '@/shared/types';
+import type { Project, ProjectSession, SessionEstablishedContext, SessionNavigationOptions, SettingsOpenTarget } from '@/shared/types';
 import WorkspaceErrorBoundary from '@/modules/project-workspace/WorkspaceErrorBoundary';
 
 type SplitSessionPaneProps = {
@@ -17,7 +17,7 @@ type SplitSessionPaneProps = {
   onFileOpen?: ComponentProps<typeof ChatInterface>['onFileOpen'];
   onNavigateToSession: (targetSessionId: string, options?: SessionNavigationOptions) => void;
   onSessionEstablished: (sessionId: string, context: SessionEstablishedContext) => void;
-  onShowSettings: (tab?: SettingsMainTab) => void;
+  onShowSettings: (tab?: SettingsOpenTarget) => void;
   showRawParameters: boolean;
   showThinking: boolean;
   /** Follows the main pane's mode; only the main pane cycles it with Ctrl+O. */

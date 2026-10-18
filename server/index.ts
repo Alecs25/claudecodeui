@@ -25,6 +25,7 @@ import {
     authenticateToken,
     authenticateWebSocket,
     authRoutes,
+    noStoreApiResponses,
     validateApiKey,
 } from './modules/auth/index.js';
 import { taskmasterRoutes } from './modules/taskmaster/index.js';
@@ -59,6 +60,8 @@ import sentFilesMcpRoutes from './modules/sent-files/sent-files-mcp.routes.js';
 import { sentFilesService } from './modules/sent-files/index.js';
 import { visualizeService } from './modules/visualize/index.js';
 import { chaptersService } from './modules/chapters/index.js';
+import { sessionSuggestionsService } from './modules/session-suggestions/index.js';
+import { planUsageRoutes, planUsageService } from './modules/plan-usage/index.js';
 import { initializeDatabase, sessionsDb } from './modules/database/index.js';
 import { configureWebPush, setSessionViewedCheck } from './modules/notifications/index.js';
 
@@ -195,6 +198,12 @@ app.use(cors({
     credentials: true,
     exposedHeaders: ['X-Refreshed-Token', 'X-Auth-Error'],
 }));
+
+// Auth headers travel on every /api response and a cached copy replays them
+// (#1308): drop the default weak ETag so JSON bodies stop being revalidated,
+// and tell browsers not to store /api responses at all.
+app.set('etag', false);
+app.use('/api', noStoreApiResponses);
 app.use(express.json({
     limit: '50mb',
     type: (req) => {
@@ -267,6 +276,7 @@ app.use('/api/browser-use', authenticateToken, browserUseRoutes);
 // Files sent to the user by agents (send_user_file MCP tool): MCP side uses its own token.
 app.use('/api/sent-files-mcp', sentFilesMcpRoutes);
 app.use('/api/sent-files', authenticateToken, sentFilesRoutes);
+app.use('/api/plan-usage', authenticateToken, planUsageRoutes);
 
 // Unified provider MCP routes (protected)
 app.use('/api/providers', authenticateToken, providerRoutes);
@@ -404,6 +414,7 @@ async function startServer() {
         // Initialize authentication database
         await initializeDatabase();
         initializeClaudeContextWindowStore(path.join(path.dirname(process.env.DATABASE_PATH || path.join(os.homedir(), '.cloudcli', 'auth.db')), 'context-windows.json'));
+        planUsageService.initialize(path.join(path.dirname(process.env.DATABASE_PATH || path.join(os.homedir(), '.cloudcli', 'auth.db')), 'plan-usage.json'));
 
         // Configure Web Push (VAPID keys)
         configureWebPush();
@@ -436,6 +447,9 @@ async function startServer() {
             await chaptersService.registerAgentMcp().catch((error: Error) => {
                 console.warn('[WARN] Could not register the mark_chapter MCP server:', error.message);
             });
+            await sessionSuggestionsService.registerAgentMcp().catch((error: Error) => {
+                console.warn('[WARN] Could not register the suggest_session MCP server:', error.message);
+            });
 
             console.log('');
             console.log(terminalTextStyles.dim('═'.repeat(63)));
@@ -446,6 +460,9 @@ async function startServer() {
             console.log(`${terminalTextStyles.info('[INFO]')} Installed at: ${terminalTextStyles.dim(appInstallPath)}`);
             console.log(`${terminalTextStyles.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
             console.log('');
+
+            // Reads the plan usage once the server is up, without holding up the start.
+            planUsageService.scheduleStartupRefresh();
 
             // Start watching the projects folder for changes
             await initializeSessionsWatcher();

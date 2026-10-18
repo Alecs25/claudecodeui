@@ -1,10 +1,10 @@
 import { AlertTriangle, ArrowUpCircle, Settings, SlidersHorizontal } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
-import type { ReleaseInfo } from '@/shared/types';
+import type { ReleaseInfo, SettingsOpenTarget } from '@/shared/types';
 
 // Agents → MCP servers: where connectors and skills are configured; plugins sit next to it.
-const CUSTOMIZE_SETTINGS_TAB = 'agents:mcp';
+const CUSTOMIZE_SETTINGS_TAB: SettingsOpenTarget = 'agents:mcp';
 
 type SidebarFooterProps = {
   updateAvailable: boolean;
@@ -13,7 +13,7 @@ type SidebarFooterProps = {
   latestVersion: string | null;
   currentVersion: string;
   onShowVersionModal: () => void;
-  onShowSettings: (tab?: string) => void;
+  onShowSettings: (tab?: SettingsOpenTarget) => void;
   t: TFunction;
 };
 

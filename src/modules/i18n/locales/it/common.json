@@ -275,5 +275,60 @@
     "backgroundSummary_one": "{{count}} in background",
     "backgroundSummary_other": "{{count}} in background",
     "stopTask": "Ferma"
+  },
+  "planUsage": {
+    "title": "Piano Claude",
+    "session": "Sessione (5 ore)",
+    "week": "Settimana",
+    "weekModel": "Settimana ({{model}})",
+    "resetsToday": "si azzera alle {{time}}",
+    "resetsOn": "si azzera {{date}}",
+    "updatedNow": "aggiornato ora",
+    "updatedAgo": "aggiornato {{minutes}} min fa",
+    "refresh": "Aggiorna",
+    "details": "Dettagli",
+    "noData": "Nessun dato",
+    "badge": "5h {{percent}}%"
+  },
+  "panes": {
+    "terminal": "Terminale",
+    "changes": "Modifiche",
+    "preview": "Anteprima",
+    "files": "File",
+    "git": "Git",
+    "plan": "Piano",
+    "background": "Attività in background",
+    "more": "Altro",
+    "back": "Indietro",
+    "close": "Chiudi",
+    "resize": "Trascina per ridimensionare",
+    "noBackgroundTasks": "Nessuna attività in background"
+  },
+  "sessionMenu": {
+    "title": "Opzioni sessione",
+    "rename": "Rinomina",
+    "pin": "Fissa",
+    "unpin": "Sblocca",
+    "view": "Vista",
+    "sideChat": "Chat laterale",
+    "markCompleted": "Segna completata",
+    "reopen": "Riapri",
+    "openSplit": "Apri affiancata",
+    "closeSplit": "Chiudi affiancata",
+    "archive": "Archivia",
+    "archiveConfirm": "Archiviare questa sessione?",
+    "archiveFailed": "Impossibile archiviare la sessione."
+  },
+  "changesPane": {
+    "fileCount_one": "{{count}} file",
+    "fileCount_other": "{{count}} file",
+    "empty": "Nessuna modifica",
+    "comment": "Commento",
+    "addComment": "Commenta",
+    "deleteComment": "Elimina commento",
+    "commentCount_one": "{{count}} commento",
+    "commentCount_other": "{{count}} commenti",
+    "send": "Invia a Claude",
+    "promptIntro": "Commenti sulle modifiche:"
   }
 }

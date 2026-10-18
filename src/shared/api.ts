@@ -303,6 +303,13 @@ export const api = {
   workflowAgentActivity: (sessionId: string, runId: string, agentId: string) =>
     get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/workflows/${encodeURIComponent(runId)}/agents/${encodeURIComponent(agentId)}`),
 
+  // Claude plan usage (5-hour and weekly windows). Refresh runs the CLI's
+  // local /usage command; the server limits it to once a minute.
+  planUsage: {
+    get: () => get('/api/plan-usage'),
+    refresh: () => post('/api/plan-usage/refresh'),
+  },
+
   // Scheduled messages: send a message to a session at a future time.
   scheduledMessages: {
     list: (sessionId?: string) =>
@@ -348,12 +355,19 @@ export const api = {
   browseFilesystem: (dirPath: string | null = null) =>
     get(`/api/file-tree/browse-filesystem${query({ path: dirPath })}`),
 
+  // Bounded recursive folder search rooted at the browsed directory
+  searchFilesystem: (searchQuery: string, rootPath?: string | null) =>
+    get(`/api/file-tree/search-filesystem${query({ query: searchQuery, root: rootPath })}`),
+
   createFolder: (folderPath: string) => post('/api/file-tree/create-folder', { path: folderPath }),
 
   // Git endpoints. The `project` param carries the DB projectId post-migration.
   git: {
     status: (projectId: string, options: ApiRequestOptions = {}) =>
       get(`/api/git/status${query({ project: projectId })}`, options),
+    // Uncommitted +/- line counts per file against HEAD, untracked files included.
+    numstat: (projectId: string, options: ApiRequestOptions = {}) =>
+      get(`/api/git/numstat${query({ project: projectId })}`, options),
     diff: (projectId: string, filePath: string, options: ApiRequestOptions = {}) =>
       get(`/api/git/diff${query({ project: projectId, file: filePath })}`, options),
     commitDiff: (projectId: string, commit: string) =>

@@ -68,8 +68,11 @@ export type ProviderModelActions = {
 
 //----------------- PROJECTS AND SESSIONS ------------
 
-/** Identifies the workspace pane the user is looking at; plugin panes are namespaced by plugin id. */
-export type AppTab = 'chat' | 'files' | 'shell' | 'git' | 'tasks' | 'browser' | `plugin:${string}`;
+/**
+ * Identifies the workspace pane the user is looking at; plugin panes are namespaced by plugin id.
+ * 'chat' alone shows the chat; every other value is the pane open beside it (or over it on a phone).
+ */
+export type AppTab = 'chat' | 'files' | 'shell' | 'git' | 'tasks' | 'browser' | 'diff' | 'background' | `plugin:${string}`;
 
 /** A message queued to be sent to a session at a future time. */
 export type ScheduledMessage = {
@@ -807,9 +810,11 @@ export type BackgroundSendPrompt = {
   work: string[];
 };
 
-/** Viewport-relative placement box (right/bottom offsets plus max height and width) computed for a composer popover so the model and permission menus stay inside the window. */
+/** Viewport-relative placement box (a left or right offset, the bottom offset, max height and width) computed for a composer popover so the composer menus stay inside the window. */
 export type ComposerMenuAnchor = {
-  right: number;
+  /** Set for a menu that opens from a trigger on the left of the bar and grows rightward. */
+  left?: number;
+  right?: number;
   bottom: number;
   maxHeight: number;
   maxWidth: number;
@@ -1391,7 +1396,8 @@ export type PreferenceToggleKey =
   | 'showRawParameters'
   | 'showThinking'
   | 'sendByCtrlEnter'
-  | 'voiceEnabled';
+  | 'voiceEnabled'
+  | 'promptSuggestions';
 
 /** The full set of quick settings booleans keyed by PreferenceToggleKey, held together so the panel can read every toggle from one object. */
 export type QuickSettingsPreferences = Record<PreferenceToggleKey, boolean>;
@@ -1417,6 +1423,9 @@ export type AgentContext = {
 
 /** Identifier of a top-level section in the settings dialog; use it whenever a tab is stored, compared or requested so deep links, the sidebar and the command palette all agree on the same set of names. */
 export type SettingsMainTab = 'agents' | 'appearance' | 'git' | 'api' | 'voice' | 'tasks' | 'browser' | 'notifications' | 'plugins' | 'about';
+
+/** Where opening Settings lands: a main tab, or the agents tab at a category ("agents:mcp", the composer's MCP connectors entry). */
+export type SettingsOpenTarget = SettingsMainTab | `agents:${AgentCategory}`;
 
 /** The coding-agent CLI a settings screen is configuring, aliasing LLMProvider so agent-scoped settings read as being about an agent rather than a chat model. */
 export type AgentProvider = LLMProvider;
@@ -1922,3 +1931,44 @@ type TaskStatus =
 
 /** A TaskMaster task's priority; high, medium and low are the known values and the string fallback tolerates anything else TaskMaster emits. */
 type TaskPriority = 'high' | 'medium' | 'low' | string;
+
+// ---------------------------
+
+//----------------- SIDE CHAT ------------
+
+/**
+ * Detail of the `cloudcli:open-side-chat` window event (OPEN_SIDE_CHAT_EVENT).
+ * `sessionId` is the session whose context the side chat reads (the one on
+ * screen when omitted); `question` is sent straight away when present, as
+ * `/btw <question>` does.
+ */
+export type OpenSideChatDetail = {
+  sessionId?: string | null;
+  question?: string;
+};
+
+/**
+ * One message of the side chat transcript: a question the user asked, or the
+ * answer to it with the read-only tools it used and, if it failed, why.
+ * Lives only in the side chat panel and is discarded when it closes.
+ */
+export type SideChatEntry = {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  tools: string[];
+  error?: string;
+};
+
+// ---------------------------
+
+//----------------- SESSION SUGGESTIONS ------------
+
+/**
+ * Detail of START_SUGGESTED_SESSION_EVENT: the project the suggestion came from,
+ * where the new session opens, and the prompt it starts with.
+ */
+export type StartSuggestedSessionDetail = {
+  project: Project;
+  prompt: string;
+};
