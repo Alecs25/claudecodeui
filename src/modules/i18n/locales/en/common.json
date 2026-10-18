@@ -403,5 +403,19 @@
     "taskRowNotLoaded": "Launched earlier in this conversation; click to load it",
     "taskOfAgent": "Launched by one of this session's agents"
   },
-  "cancel": "Cancel"
+  "cancel": "Cancel",
+  "planUsage": {
+    "title": "Claude plan",
+    "session": "Session (5 hours)",
+    "week": "Week",
+    "weekModel": "Week ({{model}})",
+    "resetsToday": "resets at {{time}}",
+    "resetsOn": "resets {{date}}",
+    "updatedNow": "updated just now",
+    "updatedAgo": "updated {{minutes}} min ago",
+    "refresh": "Refresh",
+    "details": "Details",
+    "noData": "No data yet",
+    "badge": "5h {{percent}}%"
+  }
 }

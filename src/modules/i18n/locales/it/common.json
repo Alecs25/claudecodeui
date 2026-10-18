@@ -275,5 +275,19 @@
     "backgroundSummary_one": "{{count}} in background",
     "backgroundSummary_other": "{{count}} in background",
     "stopTask": "Ferma"
+  },
+  "planUsage": {
+    "title": "Piano Claude",
+    "session": "Sessione (5 ore)",
+    "week": "Settimana",
+    "weekModel": "Settimana ({{model}})",
+    "resetsToday": "si azzera alle {{time}}",
+    "resetsOn": "si azzera {{date}}",
+    "updatedNow": "aggiornato ora",
+    "updatedAgo": "aggiornato {{minutes}} min fa",
+    "refresh": "Aggiorna",
+    "details": "Dettagli",
+    "noData": "Nessun dato",
+    "badge": "5h {{percent}}%"
   }
 }

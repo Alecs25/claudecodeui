@@ -2,6 +2,7 @@ import { AlertTriangle, LogIn } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Badge, Button, LLMProviderLogo } from '@/shared/ui';
+import { PlanUsageSection } from '@/modules/plan-usage';
 import type { AgentProvider, ProviderAuthStatus, ProviderAuthSubscriptionOverride } from '@/shared/types';
 
 type AccountContentProps = {
@@ -187,6 +188,11 @@ export default function AccountContent({ agent, authStatus, onLogin }: AccountCo
           )}
         </div>
       </div>
+
+      {/* Only a subscription login has plan limits; an API key is billed per token. */}
+      {agent === 'claude' && authStatus.authenticated && authStatus.method !== 'api_key' && (
+        <PlanUsageSection className="rounded-lg border border-border p-4" />
+      )}
     </div>
   );
 }
