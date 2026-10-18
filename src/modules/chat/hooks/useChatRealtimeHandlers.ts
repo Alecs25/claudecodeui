@@ -256,6 +256,8 @@ export function useChatRealtimeHandlers({
         // It carries no sessionId, so falling through would file it into the
         // viewed session's transcript as a bogus message.
         case 'sent_files':
+        // Plan usage — owned by usePlanUsage; app-wide, not tied to a session.
+        case 'plan_usage':
           return;
 
         default:

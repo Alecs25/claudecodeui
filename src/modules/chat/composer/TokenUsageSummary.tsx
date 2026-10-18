@@ -11,6 +11,7 @@ import {
   ComposerMenuSeparator,
   ComposerMenuSurface,
 } from '@/modules/chat/composer/ComposerMenuPrimitives';
+import { PlanUsageBadge, PlanUsageSection } from '@/modules/plan-usage';
 
 type TokenUsageSummaryProps = {
   usage: Record<string, unknown> | null;
@@ -158,6 +159,7 @@ function TokenUsageSummary({ usage, onClick, onCompact, canCompact = false, isCo
         <span className="hidden font-medium tabular-nums sm:inline">
           {percent === null ? formatTokenCount(usedTokens) : `${percent}%`}
         </span>
+        <PlanUsageBadge />
       </button>
 
       {isOpen && anchor && createPortal(
@@ -175,6 +177,9 @@ function TokenUsageSummary({ usage, onClick, onCompact, canCompact = false, isCo
               }}
             />
           )}
+
+          <ComposerMenuSeparator />
+          <PlanUsageSection className="min-w-56 px-2.5 pb-1.5" />
 
           {onCompact && (
             <>

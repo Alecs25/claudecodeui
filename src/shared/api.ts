@@ -303,6 +303,13 @@ export const api = {
   workflowAgentActivity: (sessionId: string, runId: string, agentId: string) =>
     get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/workflows/${encodeURIComponent(runId)}/agents/${encodeURIComponent(agentId)}`),
 
+  // Claude plan usage (5-hour and weekly windows). Refresh runs the CLI's
+  // local /usage command; the server limits it to once a minute.
+  planUsage: {
+    get: () => get('/api/plan-usage'),
+    refresh: () => post('/api/plan-usage/refresh'),
+  },
+
   // Scheduled messages: send a message to a session at a future time.
   scheduledMessages: {
     list: (sessionId?: string) =>
