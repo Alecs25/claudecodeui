@@ -15,8 +15,17 @@ import {
 
 type EffortOption = NonNullable<ProviderModelOption['effort']>['values'][number];
 
-/** "Sonnet (1M context)" → "Sonnet": the pill keeps the name, the menu keeps the detail. */
-function shortModelLabel(label: string): string {
+// A raw model id ("claude-opus-5-5", "claude-sonnet-5-5[1m]") reaches the pill
+// when the catalog has no display name for it.
+const RAW_CLAUDE_MODEL_ID = /^claude-([a-z]+)-(\d+)(?:-(\d+))?/i;
+
+/** "Sonnet (1M context)" → "Sonnet", "claude-opus-5-5" → "Opus 5.5": the pill keeps the name, the menu keeps the detail. */
+export function shortModelLabel(label: string): string {
+  const rawId = RAW_CLAUDE_MODEL_ID.exec(label.trim());
+  if (rawId) {
+    const family = rawId[1].charAt(0).toUpperCase() + rawId[1].slice(1).toLowerCase();
+    return rawId[3] ? `${family} ${rawId[2]}.${rawId[3]}` : `${family} ${rawId[2]}`;
+  }
   return label.replace(/\s*\([^)]*\)\s*$/, '').trim() || label;
 }
 
