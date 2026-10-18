@@ -1,5 +1,12 @@
-import { memo } from 'react';
+import { memo, useEffect } from 'react';
 
+import { SideChatHost } from '@/modules/chat';
+import {
+  useProjectActiveSessionState,
+  useProjectCommandState,
+} from '@/modules/project-workspace/context/ProjectsStateContext';
+import { START_SUGGESTED_SESSION_EVENT } from '@/shared/constants';
+import type { StartSuggestedSessionDetail } from '@/shared/types';
 import ProjectEffects from '@/modules/project-workspace/controllers/ProjectEffects';
 import type { ProjectWorkspaceShellProps } from '@/shared/types';
 import ProjectCommandPalette from '@/modules/project-workspace/ProjectCommandPalette';
@@ -34,10 +41,37 @@ function ProjectWorkspaceShell({
 
       <ProjectCommandPalette />
       <SessionFinishedToasts navigate={navigate} />
+      <WorkspaceSideChat />
+      <SuggestedSessionStarter />
       {/* Last flex child on purpose: when pinned it docks to the right of the main region. */}
       <ProjectQuickSettingsRegion />
     </div>
   );
+}
+
+/** Feeds the side chat the session on screen, which Ctrl+; and /btw ask about. */
+function WorkspaceSideChat() {
+  const { activeSessionId } = useProjectActiveSessionState();
+  return <SideChatHost activeSessionId={activeSessionId} />;
+}
+
+/**
+ * Opens a new session when a suggestion card asks for one; the chat module
+ * already queued the prompt that the new session's composer sends.
+ */
+function SuggestedSessionStarter() {
+  const { handleNewSession, selectedProject } = useProjectCommandState();
+  useEffect(() => {
+    const handleStart = (event: Event) => {
+      const project = (event as CustomEvent<StartSuggestedSessionDetail>).detail?.project ?? selectedProject;
+      if (project) {
+        handleNewSession(project);
+      }
+    };
+    window.addEventListener(START_SUGGESTED_SESSION_EVENT, handleStart);
+    return () => window.removeEventListener(START_SUGGESTED_SESSION_EVENT, handleStart);
+  }, [handleNewSession, selectedProject]);
+  return null;
 }
 
 export default memo(ProjectWorkspaceShell);

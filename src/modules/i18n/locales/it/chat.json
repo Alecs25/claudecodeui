@@ -419,5 +419,20 @@
   "questions": {
     "title": "Domande",
     "skipped": "Saltata"
+  },
+  "sideChat": {
+    "title": "Chat laterale",
+    "notSaved": "Non entra nella sessione",
+    "close": "Chiudi",
+    "empty": "Chiedi qualcosa su questa sessione",
+    "answering": "Sta rispondendo…",
+    "placeholder": "Domanda laterale",
+    "send": "Invia"
+  },
+  "sessionSuggestion": {
+    "start": "Avvia sessione",
+    "dismiss": "Ignora",
+    "started": "Sessione avviata",
+    "dismissed": "Ignorato"
   }
 }
