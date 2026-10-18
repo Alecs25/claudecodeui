@@ -4,6 +4,7 @@ import type { WebSocket } from 'ws';
 
 import { sessionDraftsDb, sessionsDb } from '@/modules/database/index.js';
 import { providerModelsService, sessionsService } from '@/modules/providers/index.js';
+import { sideChatService } from '@/modules/side-chat/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
 import { sessionRunStatus } from '@/modules/websocket/services/session-run-status.service.js';
@@ -882,6 +883,12 @@ export function handleChatConnection(
         case 'client.presence':
           handleClientPresence(ws, userId, data);
           return;
+        case 'chat.side-question':
+          sideChatService.ask(ws, data);
+          return;
+        case 'chat.side-close':
+          sideChatService.close(ws, data);
+          return;
         default:
           sendProtocolError(ws, 'UNKNOWN_MESSAGE_TYPE', `Unknown message type "${messageType}".`);
           return;
@@ -897,5 +904,6 @@ export function handleChatConnection(
     console.log('[INFO] Chat client disconnected');
     connectedClients.delete(ws);
     viewerPresence.remove(ws);
+    sideChatService.closeAllFor(ws);
   });
 }

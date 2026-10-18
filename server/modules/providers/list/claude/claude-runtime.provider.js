@@ -196,6 +196,8 @@ const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode'])
 const SEND_USER_FILE_TOOL = 'mcp__cloudcli-send-file__send_user_file';
 // Kept in sync with MARK_CHAPTER_TOOL in modules/chapters (this file is plain JS).
 const MARK_CHAPTER_TOOL = 'mcp__cloudcli-chapters__mark_chapter';
+// Kept in sync with SUGGEST_SESSION_TOOL in modules/session-suggestions.
+const SUGGEST_SESSION_TOOL = 'mcp__cloudcli-tasks__suggest_session';
 
 // Sessions started in the Claude desktop app and resumed here still "remember"
 // that app's tools (SendUserFile, Artifact, ...): without this note the model
@@ -210,6 +212,8 @@ const CLOUDCLI_SESSION_PROMPT = [
   'When the work shifts to a meaningfully different phase (exploration done, implementation starts,',
   'verification starts, the user pivots), call mcp__cloudcli-chapters__mark_chapter with a short title:',
   'the user gets a divider and a table of contents. Use it sparingly, 3-8 chapters per session, never for the first message.',
+  'When you notice worthwhile work outside the current task (dead code, stale docs, missing tests, a bug spotted in passing),',
+  'flag it with mcp__cloudcli-tasks__suggest_session instead of doing it: the user can start it as a new session with one tap.',
 ].join('\n');
 
 // Ultracode is a session-scoped setting rather than an SDK effort level: it pairs xhigh
@@ -407,8 +411,9 @@ function mapCliOptionsToSDK(options = {}) {
   // send_user_file only shows the user a file the agent can already read: an
   // approval prompt protects nothing and, missed on a phone, leaves the turn
   // waiting forever.
-  // mark_chapter only draws a divider: same reasoning.
-  for (const tool of [SEND_USER_FILE_TOOL, MARK_CHAPTER_TOOL]) {
+  // mark_chapter only draws a divider, suggest_session only a card the user
+  // decides about: same reasoning.
+  for (const tool of [SEND_USER_FILE_TOOL, MARK_CHAPTER_TOOL, SUGGEST_SESSION_TOOL]) {
     if (!allowedTools.includes(tool)) {
       allowedTools.push(tool);
     }

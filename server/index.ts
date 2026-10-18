@@ -59,6 +59,7 @@ import sentFilesMcpRoutes from './modules/sent-files/sent-files-mcp.routes.js';
 import { sentFilesService } from './modules/sent-files/index.js';
 import { visualizeService } from './modules/visualize/index.js';
 import { chaptersService } from './modules/chapters/index.js';
+import { sessionSuggestionsService } from './modules/session-suggestions/index.js';
 import { initializeDatabase, sessionsDb } from './modules/database/index.js';
 import { configureWebPush, setSessionViewedCheck } from './modules/notifications/index.js';
 
@@ -435,6 +436,9 @@ async function startServer() {
             });
             await chaptersService.registerAgentMcp().catch((error: Error) => {
                 console.warn('[WARN] Could not register the mark_chapter MCP server:', error.message);
+            });
+            await sessionSuggestionsService.registerAgentMcp().catch((error: Error) => {
+                console.warn('[WARN] Could not register the suggest_session MCP server:', error.message);
             });
 
             console.log('');
