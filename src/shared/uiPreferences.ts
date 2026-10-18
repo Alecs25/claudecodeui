@@ -15,6 +15,7 @@ export type UiPreferences = {
   sendByCtrlEnter: boolean;
   sidebarVisible: boolean;
   voiceEnabled: boolean;
+  promptSuggestions: boolean;
 };
 
 export type UiPreferenceKey = keyof UiPreferences;
@@ -29,6 +30,7 @@ const DEFAULTS: UiPreferences = {
   sendByCtrlEnter: false,
   sidebarVisible: true,
   voiceEnabled: false,
+  promptSuggestions: true,
 };
 
 const PREFERENCE_KEYS = Object.keys(DEFAULTS) as UiPreferenceKey[];

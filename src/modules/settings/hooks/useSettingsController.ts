@@ -56,7 +56,9 @@ type ActiveLoginProvider = AgentProvider | '';
 
 const KNOWN_MAIN_TABS: SettingsMainTab[] = ['agents', 'appearance', 'git', 'api', 'tasks', 'browser', 'notifications', 'plugins', 'about'];
 
-const normalizeMainTab = (tab: string): SettingsMainTab => {
+const normalizeMainTab = (target: string): SettingsMainTab => {
+  // "agents:mcp" opens the agents tab at a category; the tab reads the rest.
+  const [tab] = target.split(':');
   // Keep backwards compatibility with older callers that still pass "tools".
   if (tab === 'tools') {
     return 'agents';

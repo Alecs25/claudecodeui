@@ -87,6 +87,14 @@ export function useUiPreferences(): UiPreferences {
   return preferences;
 }
 
+/**
+ * Reads the UI preferences, or null outside a provider. For hooks that also
+ * run in isolation (the composer state in its own tests) and can do without.
+ */
+export function useOptionalUiPreferences(): UiPreferences | null {
+  return useContext(UiPreferencesStateContext);
+}
+
 /** Stable setter, so writers never re-render on a preference change. */
 export function useSetUiPreference(): UiPreferenceActions['setPreference'] {
   const actions = useContext(UiPreferencesActionsContext);

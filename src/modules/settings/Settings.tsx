@@ -245,6 +245,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                   codexPermissionMode={codexPermissionMode}
                   onCodexPermissionModeChange={setCodexPermissionMode}
                   projects={projects}
+                  initialCategory={initialTab.startsWith('agents:') ? initialTab.slice('agents:'.length) : undefined}
                 />
               )}
 

@@ -15,6 +15,11 @@ import {
 
 type EffortOption = NonNullable<ProviderModelOption['effort']>['values'][number];
 
+/** "Sonnet (1M context)" → "Sonnet": the pill keeps the name, the menu keeps the detail. */
+function shortModelLabel(label: string): string {
+  return label.replace(/s*([^)]*)s*$/, '').trim() || label;
+}
+
 type ComposerModelMenuProps = {
   effort: string;
   /** Effort values the active provider/model actually accepts; empty hides the section. */
@@ -59,7 +64,13 @@ function ComposerModelMenu({
     () => (effortOptions.length > 0 ? [{ value: DEFAULT_EFFORT_VALUE }, ...effortOptions] : []),
     [effortOptions],
   );
-  const effortLabel = effort === DEFAULT_EFFORT_VALUE ? defaultEffortLabel : effort;
+  // Effort values are provider ids ("high", "xhigh"); the pill shows them in the user's language.
+  const formatEffort = (value: string) => (
+    value === DEFAULT_EFFORT_VALUE
+      ? defaultEffortLabel
+      : t(`composer.effortLevels.${value}`, { defaultValue: value })
+  );
+  const effortLabel = formatEffort(effort);
 
   const selectedModelOption = useMemo(
     () => modelOptions.find((option) => option.value === model) ?? null,
@@ -73,7 +84,7 @@ function ComposerModelMenu({
     return null;
   }
 
-  const triggerLabel = hasModelSection ? modelLabel : effortLabel;
+  const triggerLabel = hasModelSection ? shortModelLabel(modelLabel) : effortLabel;
   const ariaLabel = t('composer.modelMenu', {
     defaultValue: 'Select model and reasoning effort',
   });
@@ -87,15 +98,15 @@ function ComposerModelMenu({
           updateAnchor();
           setIsOpen((current) => !current);
         }}
-        className="flex h-8 max-w-20 shrink-0 items-center gap-1 rounded-lg border border-border/60 bg-muted/40 px-2 text-xs font-medium text-foreground transition-colors hover:bg-muted sm:max-w-56"
+        className="flex h-8 min-w-0 max-w-24 shrink items-center gap-1 rounded-full border border-border/60 bg-muted/40 px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted sm:max-w-56"
         aria-haspopup="menu"
         aria-expanded={isOpen}
         aria-label={ariaLabel}
-        title={ariaLabel}
+        title={hasModelSection ? modelLabel : ariaLabel}
       >
         <span className="truncate">{triggerLabel}</span>
         {hasModelSection && hasEffortSection && effort !== DEFAULT_EFFORT_VALUE && (
-          <span className="hidden shrink-0 capitalize text-muted-foreground sm:inline">· {effortLabel}</span>
+          <span className="hidden shrink-0 text-muted-foreground sm:inline">· {effortLabel}</span>
         )}
       </button>
 
@@ -109,7 +120,7 @@ function ComposerModelMenu({
               {resolvedEffortOptions.map((option) => (
                 <ComposerMenuItem
                   key={option.value}
-                  label={option.value === DEFAULT_EFFORT_VALUE ? defaultEffortLabel : option.value}
+                  label={formatEffort(option.value)}
                   description={option.description}
                   isSelected={option.value === effort}
                   onSelect={() => {

@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { api } from '@/shared/api';
 import { PROVIDER_PERMISSION_PREFERENCE_KEYS } from '@/shared/constants';
 import { readUserPreference } from '@/shared/userSettings';
+import { useOptionalUiPreferences } from '@/shared/context/UiPreferencesContext';
 import { isOnScreenKeyboardDevice } from '@/shared/utils';
 import type { BackgroundSendChoice, BackgroundSendPrompt, CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
 import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
@@ -208,6 +209,8 @@ export function useChatComposerState({
   supportsSteering = false,
 }: UseChatComposerStateArgs) {
   const { t } = useTranslation('chat');
+  // On unless turned off in Quick settings; the composer's own tests mount no provider.
+  const promptSuggestionsEnabled = useOptionalUiPreferences()?.promptSuggestions ?? true;
   // The composer text together with the chat scope it belongs to. They are one
   // state rather than a value plus a ref because they have to move in lockstep:
   // on a session switch there is one commit where the scope has already changed
@@ -671,11 +674,13 @@ export function useChatComposerState({
       toolsSettings,
       skipPermissions: toolsSettings?.skipPermissions || false,
       sessionSummary: getNotificationSessionSummary(selectedSession, currentInput),
+      promptSuggestions: promptSuggestionsEnabled,
     };
   }, [
     currentProviderEffort,
     currentProviderModel,
     permissionMode,
+    promptSuggestionsEnabled,
     provider,
     resolvePermissionModeForProvider,
     selectedSession,
@@ -1315,9 +1320,65 @@ export function useChatComposerState({
     [handleCommandInputChange, resetCommandMenuState, setCursorPosition],
   );
 
+  // The CLI's prediction of the next prompt, kept with the session it came
+  // from: a suggestion for one chat must not show up in another.
+  const [promptSuggestion, setPromptSuggestion] = useState<{ sessionId: string; text: string } | null>(null);
+  const handlePromptSuggestion = useCallback((sessionId: string, text: string) => {
+    setPromptSuggestion({ sessionId, text });
+  }, []);
+
+  // A new turn makes the prediction stale. Dropped during render rather than
+  // in an effect, so a turn that predicts nothing cannot bring the old one back.
+  if (isLoading && promptSuggestion) {
+    setPromptSuggestion(null);
+  }
+
+  // Shown only in an empty, idle box, the way Claude Code greys it in.
+  const visiblePromptSuggestion = (
+    promptSuggestionsEnabled
+    && promptSuggestion
+    && promptSuggestion.sessionId === sessionKey
+    && !input
+    && attachedFiles.length === 0
+    && !isLoading
+    && !queuedDraft
+  ) ? promptSuggestion.text : null;
+
+  const acceptPromptSuggestion = useCallback((): boolean => {
+    if (!visiblePromptSuggestion) {
+      return false;
+    }
+    setInput(visiblePromptSuggestion);
+    inputValueRef.current = visiblePromptSuggestion;
+    setPromptSuggestion(null);
+    // After the commit, so the caret lands after the text the box now holds.
+    requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      if (!textarea) {
+        return;
+      }
+      textarea.focus();
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+      resizeTextarea(textarea);
+    });
+    return true;
+  }, [resizeTextarea, setInput, visiblePromptSuggestion]);
+
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
       if (handleCommandMenuKeyDown(event)) {
+        return;
+      }
+
+      // Tab or → takes the suggestion; with nothing suggested Tab keeps
+      // cycling the permission mode below.
+      if (
+        (event.key === 'Tab' || event.key === 'ArrowRight')
+        && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey
+        && visiblePromptSuggestion
+        && acceptPromptSuggestion()
+      ) {
+        event.preventDefault();
         return;
       }
 
@@ -1365,6 +1426,7 @@ export function useChatComposerState({
       }
     },
     [
+      acceptPromptSuggestion,
       cyclePermissionMode,
       handleCommandMenuKeyDown,
       handleFileMentionsKeyDown,
@@ -1375,6 +1437,7 @@ export function useChatComposerState({
       sendByCtrlEnter,
       showCommandMenu,
       showFileDropdown,
+      visiblePromptSuggestion,
     ],
   );
 
@@ -1569,6 +1632,9 @@ export function useChatComposerState({
     steerQueuedDraft,
     isSteeringQueuedDraft,
     handleSteerResult,
+    promptSuggestion: visiblePromptSuggestion,
+    handlePromptSuggestion,
+    acceptPromptSuggestion,
     handleVoiceTranscript,
     handleInputChange,
     handleKeyDown,
