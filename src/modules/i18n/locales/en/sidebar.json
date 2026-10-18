@@ -24,6 +24,9 @@
     "subtitle": "AI coding assistant interface"
   },
   "sessions": {
+    "folder": "Folder",
+    "currentFolder": "Current",
+    "chooseFolder": "Choose folder…",
     "title": "Sessions",
     "newSession": "New Session",
     "deleteSession": "Delete Session",

@@ -1,4 +1,4 @@
-import { Archive, ArrowLeft, ChevronDown, FolderPlus, ListTree, MoreHorizontal, PanelLeftClose, Plus, RefreshCw, Search, X } from 'lucide-react';
+import { Archive, ArrowLeft, ChevronDown, FolderOpen, FolderPlus, ListTree, MoreHorizontal, PanelLeftClose, Plus, RefreshCw, Search, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { ActionMenu, Input } from '@/shared/ui';
@@ -7,9 +7,6 @@ import { IS_PLATFORM, cn } from '@/shared/utils';
 import type { Project, SessionStatusFilter } from '@/shared/types';
 
 import { SIDEBAR_VIEW_FILTERS_ENABLED } from '@/modules/sidebar/hooks/useSidebarViewPreferences';
-
-const MOD_KEY =
-  typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
 
 const STATUS_FILTERS: SessionStatusFilter[] = ['all', 'running', 'waiting', 'unread', 'pinned', 'completed'];
 
@@ -39,6 +36,8 @@ type SidebarHeaderProps = {
   onRefresh: () => void;
   isRefreshing: boolean;
   onCreateProject: () => void;
+  /** Picks any folder (it becomes a project) and starts a session there. */
+  onChooseFolderForSession: () => void;
   isArchiveOpen: boolean;
   onOpenArchive: () => void;
   onCloseArchive: () => void;
@@ -138,6 +137,7 @@ export default function SidebarHeader({
   onRefresh,
   isRefreshing,
   onCreateProject,
+  onChooseFolderForSession,
   isArchiveOpen,
   onOpenArchive,
   onCloseArchive,
@@ -154,6 +154,12 @@ export default function SidebarHeader({
   t,
 }: SidebarHeaderProps) {
   const newSessionLabel = t('sessions.newSession');
+  const folderLabel = t('sessions.folder', { defaultValue: 'Folder' });
+  const currentFolderLabel = t('sessions.currentFolder', { defaultValue: 'Current' });
+  const chooseFolderLabel = t('sessions.chooseFolder', { defaultValue: 'Choose folder…' });
+  const orderedSessionProjects = newSessionProject
+    ? [newSessionProject, ...projects.filter((project) => project.projectId !== newSessionProject.projectId)]
+    : projects;
   const statusLabel = t('filters.status', { defaultValue: 'Status' });
   const projectLabel = t('filters.project', { defaultValue: 'Project' });
   const statusOptions = STATUS_FILTERS.map((filter) => ({
@@ -258,15 +264,10 @@ export default function SidebarHeader({
       </div>
 
       <div className="px-3 pb-2">
-        {newSessionProject ? (
-          <button type="button" className={newSessionClassName} onClick={() => onNewSession(newSessionProject)}>
-            {newSessionContent}
-            <kbd aria-hidden className="ml-auto hidden font-mono text-[11px] font-normal text-muted-foreground md:inline">
-              {MOD_KEY} N
-            </kbd>
-          </button>
-        ) : projects.length > 0 ? (
-          // No project in context: the button asks which one.
+        {projects.length > 0 ? (
+          // Asks where, as Claude Code does: the folder in view first, the
+          // other projects, then any folder on the machine. Ctrl/Cmd+N skips
+          // the question and uses the folder in view.
           <ActionMenu
             label={newSessionLabel}
             icon={Plus}
@@ -277,17 +278,27 @@ export default function SidebarHeader({
             menuClassName="max-h-[60vh] w-[260px] overflow-y-auto rounded-xl p-1.5 shadow-xl"
             header={(
               <p className="px-3 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                {projectLabel}
+                {folderLabel}
               </p>
             )}
-            items={projects.map((project) => ({
-              key: project.projectId,
-              label: project.displayName,
-              onSelect: () => onNewSession(project),
-            }))}
+            items={[
+              ...orderedSessionProjects.map((project) => ({
+                key: project.projectId,
+                label: project.displayName,
+                description: project.projectId === newSessionProject?.projectId ? currentFolderLabel : undefined,
+                onSelect: () => onNewSession(project),
+              })),
+              {
+                key: 'choose-folder',
+                label: chooseFolderLabel,
+                icon: FolderOpen,
+                showDividerBefore: true,
+                onSelect: onChooseFolderForSession,
+              },
+            ]}
           />
         ) : (
-          <button type="button" className={newSessionClassName} onClick={onCreateProject}>
+          <button type="button" className={newSessionClassName} onClick={onChooseFolderForSession}>
             {newSessionContent}
           </button>
         )}

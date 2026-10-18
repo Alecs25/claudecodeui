@@ -1,4 +1,4 @@
-import { memo, useCallback, useContext, useEffect } from 'react';
+import { memo, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useDeviceSettings } from '@/shared/hooks/useDeviceSettings';
@@ -198,7 +198,29 @@ function Sidebar({
     document.body.classList.toggle('pwa-mode', isPWA);
   }, [isPWA]);
 
-  const handleProjectCreated = () => {
+  // "Choose folder" under New session: the folder becomes a project, and once
+  // it shows up in the list a session starts in it, as if it had been picked.
+  const startSessionAfterCreateRef = useRef(false);
+  const [pendingSessionProject, setPendingSessionProject] = useState<{ id?: string; path?: string } | null>(null);
+
+  const handleChooseFolderForSession = useCallback(() => {
+    startSessionAfterCreateRef.current = true;
+    setShowNewProject(true);
+  }, [setShowNewProject]);
+
+  const handleCloseNewProject = useCallback(() => {
+    startSessionAfterCreateRef.current = false;
+    setShowNewProject(false);
+  }, [setShowNewProject]);
+
+  const handleProjectCreated = (project?: Record<string, unknown>) => {
+    if (startSessionAfterCreateRef.current && project) {
+      const id = typeof project.projectId === 'string' ? project.projectId : undefined;
+      const fullPath = typeof project.fullPath === 'string' ? project.fullPath : undefined;
+      const path = fullPath ?? (typeof project.path === 'string' ? project.path : undefined);
+      setPendingSessionProject({ id, path });
+    }
+    startSessionAfterCreateRef.current = false;
     void paletteOps.refreshProjects();
   };
 
@@ -231,6 +253,21 @@ function Sidebar({
   // narrowed to; with neither it asks.
   const newSessionProject = selectedProject
     ?? (projectFilter ? sortedProjects.find((project) => project.projectId === projectFilter) ?? null : null);
+
+  useEffect(() => {
+    if (!pendingSessionProject) {
+      return;
+    }
+    const created = sortedProjects.find((project) => (
+      (pendingSessionProject.id && project.projectId === pendingSessionProject.id)
+      || (pendingSessionProject.path && (project.fullPath === pendingSessionProject.path || project.path === pendingSessionProject.path))
+    ));
+    if (!created) {
+      return;
+    }
+    setPendingSessionProject(null);
+    onNewSession(created);
+  }, [onNewSession, pendingSessionProject, sortedProjects]);
 
   // Ctrl/Cmd+N, as in Claude Code. A browser tab keeps the shortcut for a new
   // window; installed (PWA/desktop) windows hand it to the page.
@@ -313,7 +350,7 @@ function Sidebar({
         settingsInitialTab={settingsInitialTab}
         onCloseSettings={onCloseSettings}
         showNewProject={showNewProject}
-        onCloseNewProject={() => setShowNewProject(false)}
+        onCloseNewProject={handleCloseNewProject}
         onProjectCreated={handleProjectCreated}
         pendingDeletion={pendingDeletion}
         onCancelDeletion={() => setPendingDeletion(null)}
@@ -418,6 +455,7 @@ function Sidebar({
             }}
             isRefreshing={isRefreshing}
             onCreateProject={() => setShowNewProject(true)}
+            onChooseFolderForSession={handleChooseFolderForSession}
             onCollapseSidebar={handleCollapseSidebar}
             onCloseSidebar={onCloseSidebar}
             updateAvailable={updateAvailable}

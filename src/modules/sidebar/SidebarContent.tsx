@@ -126,6 +126,7 @@ type SidebarContentProps = {
   onRefresh: () => void;
   isRefreshing: boolean;
   onCreateProject: () => void;
+  onChooseFolderForSession: () => void;
   onCollapseSidebar: () => void;
   onCloseSidebar?: () => void;
   updateAvailable: boolean;
@@ -181,6 +182,7 @@ export default function SidebarContent({
   onRefresh,
   isRefreshing,
   onCreateProject,
+  onChooseFolderForSession,
   onCollapseSidebar,
   onCloseSidebar,
   updateAvailable,
@@ -395,6 +397,7 @@ export default function SidebarContent({
         onRefresh={onRefresh}
         isRefreshing={isRefreshing}
         onCreateProject={onCreateProject}
+        onChooseFolderForSession={onChooseFolderForSession}
         isArchiveOpen={isArchiveOpen}
         onOpenArchive={onOpenArchive}
         onCloseArchive={onCloseArchive}

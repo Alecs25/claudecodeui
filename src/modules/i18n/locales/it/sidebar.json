@@ -24,6 +24,9 @@
     "subtitle": "Interfaccia assistente di programmazione AI"
   },
   "sessions": {
+    "folder": "Cartella",
+    "currentFolder": "Attuale",
+    "chooseFolder": "Scegli cartella…",
     "title": "Sessioni",
     "newSession": "Nuova sessione",
     "deleteSession": "Elimina sessione",
