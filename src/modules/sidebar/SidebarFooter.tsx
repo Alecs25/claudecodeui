@@ -1,10 +1,7 @@
-import { AlertTriangle, ArrowUpCircle, Settings, SlidersHorizontal } from 'lucide-react';
+import { AlertTriangle, ArrowUpCircle, Settings } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import type { ReleaseInfo, SettingsOpenTarget } from '@/shared/types';
-
-// Agents → MCP servers: where connectors and skills are configured; plugins sit next to it.
-const CUSTOMIZE_SETTINGS_TAB: SettingsOpenTarget = 'agents:mcp';
 
 type SidebarFooterProps = {
   updateAvailable: boolean;
@@ -17,7 +14,7 @@ type SidebarFooterProps = {
   t: TFunction;
 };
 
-/** Rendered by SidebarContent at the bottom of the panel: update status, "Customize" and "Settings" with the version. */
+/** Rendered by SidebarContent at the bottom of the panel: update status and "Settings" with the version. */
 export default function SidebarFooter({
   updateAvailable,
   restartRequired,
@@ -65,10 +62,6 @@ export default function SidebarFooter({
         </button>
       )}
 
-      <button type="button" className={rowClassName} onClick={() => onShowSettings(CUSTOMIZE_SETTINGS_TAB)}>
-        <SlidersHorizontal className="h-4 w-4 flex-shrink-0" />
-        <span>{t('actions.customize', { defaultValue: 'Customize' })}</span>
-      </button>
       <button type="button" className={rowClassName} onClick={() => onShowSettings()}>
         <Settings className="h-4 w-4 flex-shrink-0" />
         <span>{t('actions.settings')}</span>
