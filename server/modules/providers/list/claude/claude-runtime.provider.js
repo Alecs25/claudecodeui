@@ -393,6 +393,14 @@ function mapCliOptionsToSDK(options = {}) {
   // checkpoints Claude Code keeps interactively; it does not change what runs.
   sdkOptions.enableFileCheckpointing = true;
 
+  // The composer's grey "next prompt" comes from the CLI itself: it predicts
+  // one after each turn off the turn's prompt cache, so it costs next to
+  // nothing. Opt-in per send, because callers without a composer to show it
+  // (scheduled runs, the agent API) would only pay for a message nobody reads.
+  if (options.promptSuggestions === true) {
+    sdkOptions.promptSuggestions = true;
+  }
+
   if (permissionMode && permissionMode !== 'default') {
     sdkOptions.permissionMode = permissionMode;
   }
@@ -755,6 +763,23 @@ function transformMessage(sdkMessage) {
  */
 export function isSubagentPromptEcho(message) {
   return Boolean(message?.parentToolUseId) && message.role === 'user' && message.kind === 'text';
+}
+
+/** A suggestion is one short prompt; anything longer is not something to offer as a placeholder. */
+const MAX_PROMPT_SUGGESTION_LENGTH = 500;
+
+/**
+ * The predicted next prompt of an SDK `prompt_suggestion` message, or null when
+ * it is empty or too long to offer.
+ * @param {Object} message - Raw SDK message
+ * @returns {string | null}
+ */
+export function readPromptSuggestion(message) {
+  if (message?.type !== 'prompt_suggestion' || typeof message.suggestion !== 'string') {
+    return null;
+  }
+  const suggestion = message.suggestion.trim();
+  return suggestion && suggestion.length <= MAX_PROMPT_SUGGESTION_LENGTH ? suggestion : null;
 }
 
 function readNumber(value) {
@@ -1717,6 +1742,16 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         }
       } else {
         // session_id already captured
+      }
+
+      // Arrives after the turn's `result`. Sent as a status, like the token
+      // budget, so it reaches the composer without becoming a transcript row.
+      if (message.type === 'prompt_suggestion') {
+        const suggestion = readPromptSuggestion(message);
+        if (suggestion) {
+          ws.send(createNormalizedMessage({ kind: 'status', text: 'prompt_suggestion', suggestion, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+        }
+        continue;
       }
 
       // Transform and normalize message via adapter

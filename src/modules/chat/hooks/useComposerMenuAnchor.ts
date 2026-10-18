@@ -7,7 +7,9 @@ const VIEWPORT_MARGIN = 8;
 const MENU_GAP = 8;
 
 /**
- * Positions a composer popover above its trigger and right-aligned to it.
+ * Positions a composer popover above its trigger and right-aligned to it, or
+ * left-aligned for triggers at the start of the bar ("+", the permission pill)
+ * that would otherwise push a right-aligned menu off the left edge.
  *
  * Anchoring with `right`/`bottom` rather than `left`/`top` lets the menu grow
  * upward and leftward without measuring itself first, so it never paints in the
@@ -18,6 +20,7 @@ export function useComposerMenuAnchor(
   isOpen: boolean,
   onClose: () => void,
   preferredWidth = 320,
+  align: 'left' | 'right' = 'right',
 ) {
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -29,14 +32,27 @@ export function useComposerMenuAnchor(
       return;
     }
 
+    const bottom = window.innerHeight - rect.top + MENU_GAP;
+    const maxHeight = Math.max(160, rect.top - MENU_GAP - VIEWPORT_MARGIN);
+    if (align === 'left') {
+      const left = Math.max(VIEWPORT_MARGIN, rect.left);
+      setAnchor({
+        left,
+        bottom,
+        maxHeight,
+        maxWidth: Math.max(200, Math.min(preferredWidth, window.innerWidth - left - VIEWPORT_MARGIN)),
+      });
+      return;
+    }
+
     const right = Math.max(VIEWPORT_MARGIN, window.innerWidth - rect.right);
     setAnchor({
       right,
-      bottom: window.innerHeight - rect.top + MENU_GAP,
-      maxHeight: Math.max(160, rect.top - MENU_GAP - VIEWPORT_MARGIN),
+      bottom,
+      maxHeight,
       maxWidth: Math.max(200, Math.min(preferredWidth, window.innerWidth - right - VIEWPORT_MARGIN)),
     });
-  }, [preferredWidth]);
+  }, [align, preferredWidth]);
 
   useEffect(() => {
     if (!isOpen) {

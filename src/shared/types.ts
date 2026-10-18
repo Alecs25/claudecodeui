@@ -807,9 +807,11 @@ export type BackgroundSendPrompt = {
   work: string[];
 };
 
-/** Viewport-relative placement box (right/bottom offsets plus max height and width) computed for a composer popover so the model and permission menus stay inside the window. */
+/** Viewport-relative placement box (a left or right offset, the bottom offset, max height and width) computed for a composer popover so the composer menus stay inside the window. */
 export type ComposerMenuAnchor = {
-  right: number;
+  /** Set for a menu that opens from a trigger on the left of the bar and grows rightward. */
+  left?: number;
+  right?: number;
   bottom: number;
   maxHeight: number;
   maxWidth: number;
@@ -1391,7 +1393,8 @@ export type PreferenceToggleKey =
   | 'showRawParameters'
   | 'showThinking'
   | 'sendByCtrlEnter'
-  | 'voiceEnabled';
+  | 'voiceEnabled'
+  | 'promptSuggestions';
 
 /** The full set of quick settings booleans keyed by PreferenceToggleKey, held together so the panel can read every toggle from one object. */
 export type QuickSettingsPreferences = Record<PreferenceToggleKey, boolean>;
@@ -1417,6 +1420,9 @@ export type AgentContext = {
 
 /** Identifier of a top-level section in the settings dialog; use it whenever a tab is stored, compared or requested so deep links, the sidebar and the command palette all agree on the same set of names. */
 export type SettingsMainTab = 'agents' | 'appearance' | 'git' | 'api' | 'voice' | 'tasks' | 'browser' | 'notifications' | 'plugins' | 'about';
+
+/** Where opening Settings lands: a main tab, or the agents tab at a category ("agents:mcp", the composer's MCP connectors entry). */
+export type SettingsOpenTarget = SettingsMainTab | `agents:${AgentCategory}`;
 
 /** The coding-agent CLI a settings screen is configuring, aliasing LLMProvider so agent-scoped settings read as being about an agent rather than a chat model. */
 export type AgentProvider = LLMProvider;

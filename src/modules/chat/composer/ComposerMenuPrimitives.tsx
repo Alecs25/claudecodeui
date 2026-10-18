@@ -28,6 +28,7 @@ export function ComposerMenuSurface({
       aria-label={ariaLabel}
       className="fixed z-[100] min-w-48 overflow-y-auto overscroll-contain rounded-xl border border-border bg-popover p-1 text-popover-foreground shadow-xl"
       style={{
+        left: anchor.left,
         right: anchor.right,
         bottom: anchor.bottom,
         maxHeight: anchor.maxHeight,
@@ -60,6 +61,7 @@ export function ComposerMenuItem({
   onSelect,
   role = 'menuitemradio',
   trailing,
+  disabled = false,
   className,
 }: {
   label: ReactNode;
@@ -69,6 +71,7 @@ export function ComposerMenuItem({
   onSelect: () => void;
   role?: 'menuitemradio' | 'menuitem';
   trailing?: ReactNode;
+  disabled?: boolean;
   className?: string;
 }) {
   return (
@@ -77,9 +80,11 @@ export function ComposerMenuItem({
       role={role}
       aria-checked={role === 'menuitemradio' ? isSelected : undefined}
       onClick={onSelect}
+      disabled={disabled}
       className={cn(
         'flex w-full items-start gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors',
         'hover:bg-accent focus-visible:bg-accent focus-visible:outline-none',
+        'disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent',
         isSelected ? 'text-foreground' : 'text-foreground/90',
         className,
       )}

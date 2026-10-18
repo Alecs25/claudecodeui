@@ -69,6 +69,18 @@ const UNKNOWN_MODE: ModeAppearance = {
 const getAppearance = (mode: PermissionMode | string): ModeAppearance =>
   MODE_APPEARANCE[mode as PermissionMode] ?? UNKNOWN_MODE;
 
+/**
+ * The pill's own words, shorter than the menu's: the full one on wider
+ * screens, the short one on a phone, where the whole bar has to fit 360px.
+ */
+const PILL_LABELS: Record<PermissionMode, { short: string; full: string }> = {
+  default: { short: 'Ask', full: 'Ask permissions' },
+  auto: { short: 'Auto', full: 'Auto mode' },
+  acceptEdits: { short: 'Edits', full: 'Accept edits' },
+  bypassPermissions: { short: 'Bypass', full: 'Bypass permissions' },
+  plan: { short: 'Plan', full: 'Plan mode' },
+};
+
 type ComposerPermissionMenuProps = {
   permissionMode: PermissionMode;
   /** Modes the active provider supports, in the order the backend reports them. */
@@ -90,7 +102,8 @@ function ComposerPermissionMenu({
   const { t } = useTranslation('chat');
   const [isOpen, setIsOpen] = useState(false);
   const close = useCallback(() => setIsOpen(false), []);
-  const { triggerRef, menuRef, anchor, updateAnchor } = useComposerMenuAnchor(isOpen, close, 22 * 16);
+  // Left-aligned: the pill sits near the start of the bar.
+  const { triggerRef, menuRef, anchor, updateAnchor } = useComposerMenuAnchor(isOpen, close, 22 * 16, 'left');
 
   if (permissionModes.length === 0) {
     return null;
@@ -102,6 +115,9 @@ function ComposerPermissionMenu({
     provider: providerLabel,
     defaultValue: 'How should {{provider}} actions be approved?',
   });
+  const pillDefaults = PILL_LABELS[permissionMode] ?? { short: permissionMode, full: permissionMode };
+  const shortLabel = t(`composer.permissionPill.short.${permissionMode}`, { defaultValue: pillDefaults.short });
+  const fullLabel = t(`composer.permissionPill.full.${permissionMode}`, { defaultValue: pillDefaults.full });
 
   return (
     <>
@@ -112,13 +128,15 @@ function ComposerPermissionMenu({
           updateAnchor();
           setIsOpen((current) => !current);
         }}
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors ${activeAppearance.trigger}`}
+        className={`flex h-8 min-w-0 max-w-[7.5rem] shrink items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors sm:max-w-52 ${activeAppearance.trigger}`}
         aria-haspopup="menu"
         aria-expanded={isOpen}
         aria-label={heading}
         title={t('input.clickToChangeMode')}
       >
-        <ActiveIcon className="h-4 w-4" />
+        <ActiveIcon className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate sm:hidden">{shortLabel}</span>
+        <span className="hidden truncate sm:inline">{fullLabel}</span>
       </button>
 
       {isOpen && anchor && createPortal(

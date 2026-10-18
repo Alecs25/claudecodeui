@@ -8,7 +8,7 @@ import { PluginTabContent } from '@/modules/plugins';
 import { BrowserUsePanel, useBrowserUseEnabled } from '@/modules/browser-use';
 import { usePaletteOpsRegister } from '@/modules/command-palette';
 import { TaskMasterPanel, useTaskMasterProjectSync, useTasksSettings } from '@/modules/task-master';
-import type { AppTab, DirectoryRevealRequest, Project, ProjectSession, SessionEstablishedContext, SessionNavigationOptions, SettingsMainTab } from '@/shared/types';
+import type { AppTab, DirectoryRevealRequest, Project, ProjectSession, SessionEstablishedContext, SessionNavigationOptions, SettingsOpenTarget } from '@/shared/types';
 import { useSetUiPreferences, useUiPreferences } from '@/shared/context/UiPreferencesContext';
 import {
   getTranscriptViewMode,
@@ -34,7 +34,7 @@ type WorkspaceMainProps = {
   isLoading: boolean;
   onNavigateToSession: (targetSessionId: string, options?: SessionNavigationOptions) => void;
   onSessionEstablished: (sessionId: string, context: SessionEstablishedContext) => void;
-  onShowSettings: (tab?: SettingsMainTab) => void;
+  onShowSettings: (tab?: SettingsOpenTarget) => void;
   externalMessageUpdate: number;
   newSessionTrigger: number;
   /** Switches the app to another project — used by the git panel's Worktrees view. */
