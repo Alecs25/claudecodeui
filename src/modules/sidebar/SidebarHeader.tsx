@@ -1,32 +1,57 @@
-import { FolderPlus, Plus, RefreshCw, Search, X, PanelLeftClose } from 'lucide-react';
+import { Archive, ArrowLeft, ChevronDown, FolderPlus, ListTree, MoreHorizontal, PanelLeftClose, Plus, RefreshCw, Search, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
-import { Button, Input } from '@/shared/ui';
+import { ActionMenu, Input } from '@/shared/ui';
 import { CLOUDCLI_WORDMARK_FONT_FAMILY } from '@/shared/constants';
-import { IS_PLATFORM } from '@/shared/utils';
-import type { SidebarSearchMode } from '@/shared/types';
-import SidebarModeTabs from '@/modules/sidebar/SidebarModeTabs';
+import { IS_PLATFORM, cn } from '@/shared/utils';
+import type { Project, SessionStatusFilter } from '@/shared/types';
 
 const MOD_KEY =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
 
+const STATUS_FILTERS: SessionStatusFilter[] = ['all', 'running', 'waiting', 'unread', 'pinned', 'completed'];
+
+const STATUS_FILTER_DEFAULT_LABELS: Record<SessionStatusFilter, string> = {
+  all: 'All',
+  running: 'Running',
+  waiting: 'Waiting for permission',
+  unread: 'Unread',
+  pinned: 'Pinned',
+  completed: 'Completed',
+};
+
+// Holds the `select` value for "every project"; no projectId is empty.
+const ALL_PROJECTS_VALUE = '';
+
 type SidebarHeaderProps = {
   isPWA: boolean;
   isMobile: boolean;
-  isLoading: boolean;
-  projectsCount: number;
-  runningSessionsCount: number;
-  archivedSessionsCount: number;
-  isArchivedSessionsLoading: boolean;
+  /** Hides the docked panel (tablet and up). */
+  onCollapseSidebar: () => void;
+  /** Closes the drawer (phone); absent where there is no drawer. */
+  onCloseSidebar?: () => void;
+  isSearchOpen: boolean;
+  onToggleSearch: () => void;
   searchFilter: string;
   onSearchFilterChange: (value: string) => void;
-  onClearSearchFilter: () => void;
-  searchMode: SidebarSearchMode;
-  onSearchModeChange: (mode: SidebarSearchMode) => void;
   onRefresh: () => void;
   isRefreshing: boolean;
   onCreateProject: () => void;
-  onCollapseSidebar: () => void;
+  isArchiveOpen: boolean;
+  onOpenArchive: () => void;
+  onCloseArchive: () => void;
+  archivedCount: number;
+  /** The projects in sidebar order, for the project filter and the new-session picker. */
+  projects: Project[];
+  /** Where "New session" starts one; null makes the button ask. */
+  newSessionProject: Project | null;
+  onNewSession: (project: Project) => void;
+  statusFilter: SessionStatusFilter;
+  onStatusFilterChange: (filter: SessionStatusFilter) => void;
+  projectFilter: string | null;
+  onProjectFilterChange: (projectId: string | null) => void;
+  groupByProject: boolean;
+  onGroupByProjectChange: (grouped: boolean) => void;
   t: TFunction;
 };
 
@@ -49,43 +74,119 @@ function LogoBlock({ t }: { t: TFunction }) {
   );
 }
 
-/** Rendered by SidebarContent at the top of the panel for the search box, search-mode tabs, refresh and new-project actions. */
+/**
+ * A filter pill that is a native select underneath: the label shows the
+ * choice, and the transparent select on top opens the platform's own picker,
+ * which is what a finger expects on a phone.
+ */
+function FilterSelect({
+  label,
+  valueLabel,
+  value,
+  options,
+  onChange,
+  testId,
+}: {
+  label: string;
+  valueLabel: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+  testId: string;
+}) {
+  return (
+    <label className="relative flex h-8 min-w-0 flex-1 cursor-pointer items-center gap-1 rounded-lg border border-border/70 px-2 text-xs text-muted-foreground focus-within:ring-1 focus-within:ring-primary hover:text-foreground">
+      <span className="min-w-0 flex-1 truncate">
+        {label}: <span className="text-foreground">{valueLabel}</span>
+      </span>
+      <ChevronDown className="h-3 w-3 flex-shrink-0" />
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        aria-label={label}
+        data-testid={testId}
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+const iconButtonClassName =
+  'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground';
+
+/**
+ * Rendered by SidebarContent at the top of the panel: logo, search, the
+ * overflow menu (new project, refresh, archive), collapse or close, the
+ * "New session" button and the filter row. One layout at every width; only
+ * the collapse/close button changes.
+ */
 export default function SidebarHeader({
   isPWA,
   isMobile,
-  isLoading,
-  projectsCount,
-  runningSessionsCount,
-  archivedSessionsCount,
-  isArchivedSessionsLoading,
+  onCollapseSidebar,
+  onCloseSidebar,
+  isSearchOpen,
+  onToggleSearch,
   searchFilter,
   onSearchFilterChange,
-  onClearSearchFilter,
-  searchMode,
-  onSearchModeChange,
   onRefresh,
   isRefreshing,
   onCreateProject,
-  onCollapseSidebar,
+  isArchiveOpen,
+  onOpenArchive,
+  onCloseArchive,
+  archivedCount,
+  projects,
+  newSessionProject,
+  onNewSession,
+  statusFilter,
+  onStatusFilterChange,
+  projectFilter,
+  onProjectFilterChange,
+  groupByProject,
+  onGroupByProjectChange,
   t,
 }: SidebarHeaderProps) {
-  const showSearchTools = (projectsCount > 0 || runningSessionsCount > 0 || archivedSessionsCount > 0 || isArchivedSessionsLoading) && !isLoading;
-  const searchPlaceholder = searchMode === 'conversations'
-    ? t('search.conversationsPlaceholder')
-    : searchMode === 'archived'
-      ? t('search.archivedPlaceholder', 'Search archived sessions...')
-      : searchMode === 'running'
-        ? t('search.runningPlaceholder', 'Search running sessions...')
-        : t('projects.searchPlaceholder');
+  const newSessionLabel = t('sessions.newSession');
+  const statusLabel = t('filters.status', { defaultValue: 'Status' });
+  const projectLabel = t('filters.project', { defaultValue: 'Project' });
+  const statusOptions = STATUS_FILTERS.map((filter) => ({
+    value: filter,
+    label: t(`recent.status.${filter}`, { defaultValue: STATUS_FILTER_DEFAULT_LABELS[filter] }),
+  }));
+  const allProjectsLabel = t('filters.allProjects', { defaultValue: 'All' });
+  const projectOptions = [
+    { value: ALL_PROJECTS_VALUE, label: allProjectsLabel },
+    ...projects.map((project) => ({ value: project.projectId, label: project.displayName })),
+  ];
+  const selectedProjectOption = projectOptions.find((option) => option.value === (projectFilter ?? ALL_PROJECTS_VALUE));
+  const groupLabel = t('filters.groupByProject', { defaultValue: 'Group by project' });
+  const searchLabel = t('search.open', { defaultValue: 'Search' });
+  const moreLabel = t('actions.more', { defaultValue: 'More' });
+  const closeLabel = isMobile
+    ? t('actions.close', { defaultValue: 'Close' })
+    : t('tooltips.hideSidebar');
+
+  const newSessionContent = (
+    <>
+      <Plus className="h-4 w-4 flex-shrink-0" />
+      <span className="truncate">{newSessionLabel}</span>
+    </>
+  );
+  const newSessionClassName =
+    'flex h-10 w-full items-center gap-2 rounded-xl border border-border/70 bg-card px-3 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-accent';
 
   return (
     <div className="flex-shrink-0">
-      {/* Desktop header */}
       <div
-        className="hidden px-3 pb-2 pt-3 md:block"
-        style={{}}
+        className="flex items-center gap-1 px-3 pb-2 pt-3"
+        style={isPWA && isMobile ? { paddingTop: '16px' } : undefined}
       >
-        <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0 flex-1">
           {IS_PLATFORM ? (
             <a
               href="https://cloudcli.ai/dashboard"
@@ -97,157 +198,176 @@ export default function SidebarHeader({
           ) : (
             <LogoBlock t={t} />
           )}
-
-          <div className="flex flex-shrink-0 items-center gap-0.5">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 rounded-lg p-0 text-muted-foreground hover:bg-accent/80 hover:text-foreground"
-              onClick={onRefresh}
-              disabled={isRefreshing}
-              title={t('tooltips.refresh')}
-            >
-              <RefreshCw
-                className={`h-3.5 w-3.5 ${
-                  isRefreshing ? 'animate-spin' : ''
-                }`}
-              />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 rounded-lg p-0 text-muted-foreground hover:bg-accent/80 hover:text-foreground"
-              onClick={onCreateProject}
-              title={t('tooltips.createProject')}
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 rounded-lg p-0 text-muted-foreground hover:bg-accent/80 hover:text-foreground"
-              onClick={onCollapseSidebar}
-              title={t('tooltips.hideSidebar')}
-            >
-              <PanelLeftClose className="h-3.5 w-3.5" />
-            </Button>
-          </div>
         </div>
 
-        {/* Search bar */}
-        {showSearchTools && (
-          <div className="mt-2.5 space-y-2">
-            {/* Search mode toggle */}
-            <SidebarModeTabs
-              searchMode={searchMode}
-              onSearchModeChange={onSearchModeChange}
-              runningSessionsCount={runningSessionsCount}
-              t={t}
-            />
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50" />
-              <Input
-                type="text"
-                placeholder={searchPlaceholder}
-                value={searchFilter}
-                onChange={(event) => onSearchFilterChange(event.target.value)}
-                className="nav-search-input h-9 rounded-xl border-0 pl-9 pr-14 text-sm transition-all duration-200 placeholder:text-muted-foreground/40 focus-visible:ring-0 focus-visible:ring-offset-0"
-              />
-              {searchFilter ? (
-                <button
-                  onClick={onClearSearchFilter}
-                  aria-label={t('tooltips.clearSearch')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-0.5 hover:bg-accent"
-                >
-                  <X className="h-3 w-3 text-muted-foreground" />
-                </button>
-              ) : (
-                <kbd
-                  aria-hidden
-                  title={t('tooltips.openCommandPalette')}
-                  className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded border border-border/60 bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground md:inline-flex"
-                >
-                  {MOD_KEY}
-                  <span>K</span>
-                </kbd>
-              )}
-            </div>
-          </div>
+        <button
+          type="button"
+          className={cn(iconButtonClassName, isSearchOpen && 'bg-accent text-foreground')}
+          onClick={onToggleSearch}
+          aria-pressed={isSearchOpen}
+          aria-label={searchLabel}
+          title={searchLabel}
+        >
+          <Search className="h-4 w-4" />
+        </button>
+        <ActionMenu
+          label={moreLabel}
+          ariaLabel={moreLabel}
+          icon={MoreHorizontal}
+          iconOnly
+          portal
+          variant="ghost"
+          size="icon"
+          triggerClassName="h-8 w-8 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground"
+          menuClassName="w-[240px] rounded-xl p-1.5 shadow-xl"
+          items={[
+            {
+              key: 'new-project',
+              label: t('tooltips.createProject'),
+              icon: FolderPlus,
+              onSelect: onCreateProject,
+            },
+            {
+              key: 'refresh',
+              label: t('actions.refresh'),
+              icon: RefreshCw,
+              loading: isRefreshing,
+              onSelect: onRefresh,
+            },
+            {
+              key: 'archive',
+              label: archivedCount > 0
+                ? `${t('archived.title', 'Archive')} (${archivedCount})`
+                : t('archived.title', 'Archive'),
+              icon: Archive,
+              onSelect: onOpenArchive,
+            },
+          ]}
+        />
+        {isMobile && onCloseSidebar ? (
+          <button type="button" className={iconButtonClassName} onClick={onCloseSidebar} aria-label={closeLabel} title={closeLabel}>
+            <X className="h-4 w-4" />
+          </button>
+        ) : (
+          <button type="button" className={iconButtonClassName} onClick={onCollapseSidebar} aria-label={closeLabel} title={closeLabel}>
+            <PanelLeftClose className="h-4 w-4" />
+          </button>
         )}
       </div>
 
-      {/* Desktop divider */}
-      <div className="nav-divider hidden md:block" />
-
-      {/* Mobile header */}
-      <div
-        className="p-3 pb-2 md:hidden"
-        style={isPWA && isMobile ? { paddingTop: '16px' } : {}}
-      >
-        <div className="flex items-center justify-between">
-          {IS_PLATFORM ? (
-            <a
-              href="https://cloudcli.ai/dashboard"
-              className="flex min-w-0 items-center gap-2.5 transition-opacity active:opacity-70"
-              title={t('tooltips.viewEnvironments')}
-            >
-              <LogoBlock t={t} />
-            </a>
-          ) : (
-            <LogoBlock t={t} />
-          )}
-
-          <div className="flex flex-shrink-0 gap-1.5">
-            <button
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted/50 transition-all active:scale-95"
-              onClick={onRefresh}
-              disabled={isRefreshing}
-            >
-              <RefreshCw className={`h-4 w-4 text-muted-foreground ${isRefreshing ? 'animate-spin' : ''}`} />
-            </button>
-            <button
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/90 text-primary-foreground transition-all active:scale-95"
-              onClick={onCreateProject}
-            >
-              <FolderPlus className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Mobile search */}
-        {showSearchTools && (
-          <div className="mt-2.5 space-y-2">
-            <SidebarModeTabs
-              searchMode={searchMode}
-              onSearchModeChange={onSearchModeChange}
-              runningSessionsCount={runningSessionsCount}
-              t={t}
-            />
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
-              <Input
-                type="text"
-                placeholder={searchPlaceholder}
-                value={searchFilter}
-                onChange={(event) => onSearchFilterChange(event.target.value)}
-                className="nav-search-input h-10 rounded-xl border-0 pl-10 pr-9 text-sm transition-all duration-200 placeholder:text-muted-foreground/40 focus-visible:ring-0 focus-visible:ring-offset-0"
-              />
-              {searchFilter && (
-                <button
-                  onClick={onClearSearchFilter}
-                  aria-label={t('tooltips.clearSearch')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 hover:bg-accent"
-                >
-                  <X className="h-3.5 w-3.5 text-muted-foreground" />
-                </button>
-              )}
-            </div>
-          </div>
+      <div className="px-3 pb-2">
+        {newSessionProject ? (
+          <button type="button" className={newSessionClassName} onClick={() => onNewSession(newSessionProject)}>
+            {newSessionContent}
+            <kbd aria-hidden className="ml-auto hidden font-mono text-[11px] font-normal text-muted-foreground md:inline">
+              {MOD_KEY} N
+            </kbd>
+          </button>
+        ) : projects.length > 0 ? (
+          // No project in context: the button asks which one.
+          <ActionMenu
+            label={newSessionLabel}
+            icon={Plus}
+            portal
+            variant="ghost"
+            className="flex w-full"
+            triggerClassName={cn(newSessionClassName, 'justify-start [&>span]:flex-1 [&>span]:text-left')}
+            menuClassName="max-h-[60vh] w-[260px] overflow-y-auto rounded-xl p-1.5 shadow-xl"
+            header={(
+              <p className="px-3 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                {projectLabel}
+              </p>
+            )}
+            items={projects.map((project) => ({
+              key: project.projectId,
+              label: project.displayName,
+              onSelect: () => onNewSession(project),
+            }))}
+          />
+        ) : (
+          <button type="button" className={newSessionClassName} onClick={onCreateProject}>
+            {newSessionContent}
+          </button>
         )}
       </div>
 
-      {/* Mobile divider */}
-      <div className="nav-divider md:hidden" />
+      {isSearchOpen && (
+        <div className="px-3 pb-2"><div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
+          <Input
+            type="text"
+            placeholder={t('search.conversationsPlaceholder')}
+            value={searchFilter}
+            onChange={(event) => onSearchFilterChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.stopPropagation();
+                onToggleSearch();
+              }
+            }}
+            autoFocus
+            aria-label={searchLabel}
+            className="nav-search-input h-9 rounded-xl border-0 pl-9 pr-9 text-sm placeholder:text-muted-foreground/50 focus-visible:ring-0 focus-visible:ring-offset-0"
+            style={isMobile ? { fontSize: '16px' } : undefined}
+          />
+          <button
+            type="button"
+            onClick={onToggleSearch}
+            aria-label={t('tooltips.clearSearch')}
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 hover:bg-accent"
+          >
+            <X className="h-3.5 w-3.5 text-muted-foreground" />
+          </button>
+        </div></div>
+      )}
+
+      {isArchiveOpen ? (
+        <div className="flex items-center gap-1 px-2 pb-2">
+          <button
+            type="button"
+            className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-sm font-medium text-foreground hover:bg-accent"
+            onClick={onCloseArchive}
+          >
+            <ArrowLeft className="h-4 w-4" />
+            {t('archived.title', 'Archive')}
+          </button>
+          <span className="ml-auto pr-2 text-xs tabular-nums text-muted-foreground">{archivedCount}</span>
+        </div>
+      ) : (
+        <div className="flex items-center gap-1.5 px-3 pb-2">
+          <FilterSelect
+            label={statusLabel}
+            valueLabel={statusOptions.find((option) => option.value === statusFilter)?.label ?? ''}
+            value={statusFilter}
+            options={statusOptions}
+            onChange={(value) => onStatusFilterChange(value as SessionStatusFilter)}
+            testId="sidebar-status-filter"
+          />
+          <FilterSelect
+            label={projectLabel}
+            valueLabel={selectedProjectOption?.label ?? allProjectsLabel}
+            value={selectedProjectOption?.value ?? ALL_PROJECTS_VALUE}
+            options={projectOptions}
+            onChange={(value) => onProjectFilterChange(value === ALL_PROJECTS_VALUE ? null : value)}
+            testId="sidebar-project-filter"
+          />
+          <button
+            type="button"
+            className={cn(
+              'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-border/70 text-muted-foreground transition-colors hover:text-foreground',
+              groupByProject && 'bg-accent text-foreground',
+            )}
+            onClick={() => onGroupByProjectChange(!groupByProject)}
+            aria-pressed={groupByProject}
+            aria-label={groupLabel}
+            title={groupLabel}
+          >
+            <ListTree className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      <div className="nav-divider" />
     </div>
   );
 }

@@ -9,7 +9,7 @@ import { useTaskMaster, useTasksSettings } from '@/modules/task-master';
 import { usePaletteOps } from '@/modules/command-palette';
 import { useBackgroundSessionIdSet, useBusySessionIdSet } from '@/shared/context/SessionProtectionContext';
 import WebSocketContext from '@/shared/context/WebSocketContext';
-import type { LLMProvider, LoadingProgress, MCPServerStatus, Project, ProjectSession, SessionStatusPatch, SessionWithProvider, SidebarProjectListProps } from '@/shared/types';
+import type { LLMProvider, LoadingProgress, MCPServerStatus, Project, ProjectSession, SessionStatusPatch, SettingsOpenTarget, SessionWithProvider, SidebarProjectListProps } from '@/shared/types';
 import SidebarCollapsed from '@/modules/sidebar/SidebarCollapsed';
 import SidebarContent from '@/modules/sidebar/SidebarContent';
 import SidebarModals from '@/modules/sidebar/SidebarModals';
@@ -32,11 +32,14 @@ type SidebarProps = {
   isLoading: boolean;
   loadingProgress: LoadingProgress | null;
   onRefresh: () => Promise<void> | void;
-  onShowSettings: () => void;
+  /** Opens Settings, at `tab` when given ("agents:mcp" opens the agents tab on its MCP section). */
+  onShowSettings: (tab?: SettingsOpenTarget) => void;
   showSettings: boolean;
   settingsInitialTab: string;
   onCloseSettings: () => void;
   isMobile: boolean;
+  /** Closes the phone drawer; absent where the sidebar is docked. */
+  onCloseSidebar?: () => void;
 };
 
 type TaskMasterSidebarContext = {
@@ -65,6 +68,7 @@ function Sidebar({
   settingsInitialTab,
   onCloseSettings,
   isMobile,
+  onCloseSidebar,
 }: SidebarProps) {
   const { t } = useTranslation(['sidebar', 'common']);
   const { isPWA } = useDeviceSettings({ trackMobile: false });
@@ -93,23 +97,20 @@ function Sidebar({
     currentTime,
     isRefreshing,
     searchFilter,
-    searchMode,
-    setSearchMode,
     conversationResults,
     isSearching,
     searchProgress,
-    clearConversationResults,
-    runningSessionsCount,
     deletingProjects,
     pendingDeletion,
     showVersionModal,
     filteredProjects,
+    sortedProjects,
+    waitingSessionIds,
     archivedProjects,
     archivedSessions,
     archivedSessionsCount,
     isArchivedSessionsLoading,
     recentConversations,
-    recentConversationsTotal,
     recentConversationsHasMore,
     isRecentConversationsLoading,
     isLoadingMoreRecentConversations,
@@ -130,6 +131,7 @@ function Sidebar({
     saveProjectName,
     showDeleteSessionConfirmation,
     confirmDeleteSession,
+    archiveSession,
     sessionSelection,
     setProjectSessionSelection,
     toggleSessionSelected,
@@ -146,8 +148,19 @@ function Sidebar({
     updateSessionSummary,
     forkSession,
     setSessionStatus,
-    recentStatusFilter,
-    setRecentStatusFilter,
+    statusFilter,
+    setStatusFilter,
+    projectFilter,
+    setProjectFilter,
+    groupByProject,
+    setGroupByProject,
+    usesServerRecents,
+    localFlatConversations,
+    isArchiveOpen,
+    openArchive,
+    closeArchive,
+    isSearchOpen,
+    toggleSearch,
     collapseSidebar: handleCollapseSidebar,
     expandSidebar: handleExpandSidebar,
     setShowNewProject,
@@ -160,6 +173,7 @@ function Sidebar({
     selectedSession,
     activeSessions,
     backgroundSessionIds,
+    attentionSessionIds,
     isLoading,
     isMobile,
     t,
@@ -205,6 +219,38 @@ function Sidebar({
     void setSessionStatus(sessionId, patch);
   }, [setSessionStatus]);
 
+  // On a phone the drawer covers the session, so picking one closes it.
+  const handleRowSessionSelect = useCallback((session: SessionWithProvider, projectId: string) => {
+    handleSessionClick(session, projectId);
+    if (isMobile) {
+      onCloseSidebar?.();
+    }
+  }, [handleSessionClick, isMobile, onCloseSidebar]);
+
+  // "New session" starts in the project in view, else in the one the list is
+  // narrowed to; with neither it asks.
+  const newSessionProject = selectedProject
+    ?? (projectFilter ? sortedProjects.find((project) => project.projectId === projectFilter) ?? null : null);
+
+  // Ctrl/Cmd+N, as in Claude Code. A browser tab keeps the shortcut for a new
+  // window; installed (PWA/desktop) windows hand it to the page.
+  useEffect(() => {
+    if (!newSessionProject) {
+      return undefined;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const isNewSessionShortcut = (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey
+        && event.key.toLowerCase() === 'n';
+      if (!isNewSessionShortcut) {
+        return;
+      }
+      event.preventDefault();
+      onNewSession(newSessionProject);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [newSessionProject, onNewSession]);
+
   // Stable for the memoized rows; undefined hides the menu entry entirely.
   const handleOpenInSplitView = useCallback((session: SessionWithProvider) => {
     onOpenInSplitView?.(session);
@@ -213,6 +259,7 @@ function Sidebar({
   const projectListProps: SidebarProjectListProps = {
     projects,
     filteredProjects,
+    statusFilter,
     selectedProject,
     selectedSession,
     isLoading,
@@ -229,6 +276,7 @@ function Sidebar({
     activeSessions,
     backgroundSessionIds,
     attentionSessionIds,
+    waitingSessionIds,
     isProjectStarred,
     onRenameDraftChange: updateRenameDraft,
     onToggleProject: toggleProject,
@@ -238,8 +286,9 @@ function Sidebar({
     onCancelEditingProject: cancelRename,
     onSaveProjectName: handleSaveProjectName,
     onDeleteProject: requestProjectDelete,
-    onSessionSelect: handleSessionClick,
+    onSessionSelect: handleRowSessionSelect,
     onDeleteSession: showDeleteSessionConfirmation,
+    onArchiveSession: archiveSession,
     onForkSession: forkSession,
     onSetSessionStatus: handleSetSessionStatus,
     onOpenInSplitView: onOpenInSplitView ? handleOpenInSplitView : undefined,
@@ -294,35 +343,30 @@ function Sidebar({
         <SidebarContent
             isPWA={isPWA}
             isMobile={isMobile}
-            isLoading={isLoading}
-            projects={projects}
-            runningSessionsCount={runningSessionsCount}
+            sortedProjects={sortedProjects}
+            newSessionProject={newSessionProject}
+            onNewSession={onNewSession}
+            statusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
+            projectFilter={projectFilter}
+            onProjectFilterChange={setProjectFilter}
+            groupByProject={groupByProject}
+            onGroupByProjectChange={setGroupByProject}
+            isSearchOpen={isSearchOpen}
+            onToggleSearch={toggleSearch}
+            searchFilter={searchFilter}
+            onSearchFilterChange={setSearchFilter}
+            conversationResults={conversationResults}
+            isSearching={isSearching}
+            searchProgress={searchProgress}
+            isArchiveOpen={isArchiveOpen}
+            onOpenArchive={openArchive}
+            onCloseArchive={closeArchive}
             archivedProjects={archivedProjects}
             archivedSessions={archivedSessions}
             archivedSessionsCount={archivedSessionsCount}
             isArchivedSessionsLoading={isArchivedSessionsLoading}
-            recentConversations={recentConversations}
-            recentConversationsTotal={recentConversationsTotal}
-            recentConversationsHasMore={recentConversationsHasMore}
-            isRecentConversationsLoading={isRecentConversationsLoading}
-            isLoadingMoreRecentConversations={isLoadingMoreRecentConversations}
-            recentConversationsError={recentConversationsError}
-            recentStatusFilter={recentStatusFilter}
-            onRecentStatusFilterChange={setRecentStatusFilter}
-            searchFilter={searchFilter}
-            onSearchFilterChange={setSearchFilter}
-            onClearSearchFilter={() => setSearchFilter('')}
-            searchMode={searchMode}
-            onSearchModeChange={(mode) => {
-              setSearchMode(mode);
-              if (mode !== 'projects' && mode !== 'conversations') clearConversationResults();
-            }}
-            conversationResults={conversationResults}
-            isSearching={isSearching}
-            searchProgress={searchProgress}
             onRestoreArchivedProject={restoreArchivedProject}
-            onLoadMoreRecentConversations={loadMoreRecentConversations}
-            onRetryRecentConversations={reloadRecentConversations}
             onArchivedSessionClick={openArchivedSession}
             onRestoreArchivedSession={restoreArchivedSession}
             onDeleteArchivedSession={(session) => {
@@ -332,6 +376,13 @@ function Sidebar({
                 { isArchived: true },
               );
             }}
+            flatConversations={usesServerRecents ? recentConversations : localFlatConversations}
+            flatHasMore={usesServerRecents && recentConversationsHasMore}
+            isFlatLoading={usesServerRecents && isRecentConversationsLoading}
+            isLoadingMoreFlat={isLoadingMoreRecentConversations}
+            flatError={usesServerRecents && recentConversationsError}
+            onLoadMoreFlat={loadMoreRecentConversations}
+            onRetryFlat={reloadRecentConversations}
             onConversationResultClick={(projectId: string | null, sessionId: string, provider: string, messageTimestamp?: string | null, messageSnippet?: string | null) => {
               // `projectId` (DB key) is the canonical identifier post-migration.
               // The server emits null when it can't resolve a project row for
@@ -358,6 +409,9 @@ function Sidebar({
               } else {
                 handleSessionClick(sessionObj, projectId ?? '');
               }
+              if (isMobile) {
+                onCloseSidebar?.();
+              }
             }}
             onRefresh={() => {
               void refreshProjects();
@@ -365,6 +419,7 @@ function Sidebar({
             isRefreshing={isRefreshing}
             onCreateProject={() => setShowNewProject(true)}
             onCollapseSidebar={handleCollapseSidebar}
+            onCloseSidebar={onCloseSidebar}
             updateAvailable={updateAvailable}
             restartRequired={restartRequired}
             releaseInfo={releaseInfo}

@@ -35,7 +35,7 @@ export default function SidebarCollapsed({
 
       {/* Settings */}
       <button
-        onClick={onShowSettings}
+        onClick={() => onShowSettings()}
         className="group flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-accent/80"
         aria-label={t('actions.settings')}
         title={t('actions.settings')}

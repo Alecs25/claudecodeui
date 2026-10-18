@@ -1,26 +1,30 @@
-import { memo, useState } from 'react';
-import type { KeyboardEvent } from 'react';
-import { Check, CheckSquare, Edit2, GitBranch, Loader2, MoreHorizontal, Pin, Square, Trash2, X } from 'lucide-react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import type { KeyboardEvent, MouseEvent } from 'react';
+import { Archive, Check, CheckSquare, CircleCheck, Hand, Loader2, Square, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
-import { Badge, Dialog, DialogContent, DialogTitle, LLMProviderLogo, Tooltip, buttonVariants } from '@/shared/ui';
+import { LLMProviderLogo } from '@/shared/ui';
 import { cn } from '@/shared/utils';
-import type { LLMProvider, Project, ProjectSession, SessionStatusPatch, SessionWithProvider } from '@/shared/types';
-import { useSessionForkingProviders } from '@/shared/hooks/useProviderCapabilities';
-import { PROVIDER_LABELS, createSessionViewModel, formatCompactAge } from '@/modules/sidebar/utils/sidebarProjectFormatting';
-import { useCompactSidebar } from '@/modules/sidebar/hooks/useCompactSidebar';
-import { useProviderSessionIdCopy } from '@/modules/sidebar/hooks/useProviderSessionIdCopy';
+import type { LLMProvider, ProjectSession, SessionStatusPatch, SessionWithProvider } from '@/shared/types';
+import { createSessionViewModel, formatCompactAge } from '@/modules/sidebar/utils/sidebarProjectFormatting';
+import { useLongPress } from '@/modules/sidebar/hooks/useLongPress';
+import SessionActionsSheet from '@/modules/sidebar/SessionActionsSheet';
 import SessionOptions from '@/modules/sidebar/SessionOptions';
-import { buildSessionStatusItems } from '@/modules/sidebar/utils/sessionStatusMenuItems';
 
 type SidebarSessionItemProps = {
-  project: Project;
+  /** The owning project, or null for a recents row whose project the server could not resolve. */
+  projectId: string | null;
+  /** The project's name for the menu header; the grouped list leaves it out, the group says it. */
+  projectLabel?: string;
   session: SessionWithProvider;
   selectedSession: ProjectSession | null;
   isProcessing: boolean;
   /** The session's turn has ended but the agents, workflows or commands it launched still run. */
   hasBackgroundWork: boolean;
+  /** Activity arrived while the user was looking elsewhere; drawn like an unread session. */
   needsAttention: boolean;
+  /** A permission or question prompt is open in the session. */
+  isWaiting: boolean;
   currentTime: Date;
   /** Resolved for this row, so a keystroke elsewhere does not invalidate it. */
   isEditing: boolean;
@@ -28,32 +32,78 @@ type SidebarSessionItemProps = {
   onRenameDraftChange: (draft: string) => void;
   onStartEditingSession: (projectId: string, sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
-  onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => void;
-  onProjectSelect: (project: Project) => void;
-  onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
+  onSaveEditingSession: (projectId: string, sessionId: string, summary: string, provider: LLMProvider) => void;
+  /** Takes the projectId (empty when unknown) so this memoized row binds itself without a per-row closure. */
+  onSessionSelect: (session: SessionWithProvider, projectId: string) => void;
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
+  onArchiveSession?: (sessionId: string) => void;
   /** Branches this session into an independent one; absent when its provider cannot. */
   onForkSession?: (session: SessionWithProvider) => void;
   onSetSessionStatus: (sessionId: string, patch: SessionStatusPatch) => void;
   /** Opens this session in the second pane; absent where split view is unavailable. */
   onOpenInSplitView?: (session: SessionWithProvider) => void;
-  /** This project's list is in bulk-selection mode: the row acts as a checkbox and hides its options. */
-  isSelecting: boolean;
+  /** This project's list is in bulk-selection mode: the row acts as a checkbox and hides its actions. */
+  isSelecting?: boolean;
   /** Ticked for the pending bulk delete. Resolved by the list, which never ticks a running row. */
-  isChecked: boolean;
-  /** Takes the owning projectId so this memoized row binds itself without the list making a closure per row. */
-  onToggleSessionSelected: (projectId: string, sessionId: string) => void;
+  isChecked?: boolean;
+  onToggleSessionSelected?: (projectId: string, sessionId: string) => void;
   t: TFunction;
 };
 
-/** Rendered by SidebarProjectSessions for one session row, including its rename, copy, fork and delete controls. */
+type RowStatus = 'waiting' | 'processing' | 'background' | 'unread' | 'completed' | 'none';
+
+/**
+ * The one icon slot at the row's left edge. Same meaning in every list:
+ * spinner = responding, amber hand = a prompt is open, purple dot = only
+ * background work left, blue dot = not read yet, grey check = completed.
+ */
+function SessionStatusIcon({ status, t }: { status: RowStatus; t: TFunction }) {
+  if (status === 'waiting') {
+    const label = t('tooltips.waitingSessionIndicator', { defaultValue: 'Waiting for permission' });
+    return <Hand role="status" aria-label={label} className="h-3.5 w-3.5 text-amber-500" />;
+  }
+  if (status === 'processing') {
+    return (
+      <Loader2
+        aria-label={t('tooltips.processingSessionIndicator', { defaultValue: 'Processing session' })}
+        className="h-3.5 w-3.5 animate-spin text-muted-foreground"
+      />
+    );
+  }
+  if (status === 'background') {
+    const label = t('tooltips.backgroundWorkIndicator', { defaultValue: 'Background work running' });
+    return <span role="status" aria-label={label} title={label} className="h-2 w-2 animate-pulse rounded-full bg-purple-500 dark:bg-purple-400" />;
+  }
+  if (status === 'unread') {
+    const label = t('tooltips.unreadSessionIndicator', { defaultValue: 'Unread' });
+    return <span role="status" aria-label={label} title={label} className="h-2 w-2 rounded-full bg-blue-500" />;
+  }
+  if (status === 'completed') {
+    return (
+      <CircleCheck
+        aria-label={t('sessionStatus.completed', { defaultValue: 'Completed' })}
+        className="h-3.5 w-3.5 text-muted-foreground/70"
+      />
+    );
+  }
+  return null;
+}
+
+/**
+ * The session row of every sidebar list — project groups, pinned section and
+ * the flat recents list — on phone and tablet alike: status icon, title,
+ * age. Its actions live in the "…" menu (hover or right-click with a mouse) and
+ * in a bottom sheet (long press on touch), never in always-visible buttons.
+ */
 function SidebarSessionItem({
-  project,
+  projectId,
+  projectLabel,
   session,
   selectedSession,
   isProcessing,
   hasBackgroundWork,
   needsAttention,
+  isWaiting,
   currentTime,
   isEditing,
   renameDraft,
@@ -61,82 +111,105 @@ function SidebarSessionItem({
   onStartEditingSession,
   onCancelEditingSession,
   onSaveEditingSession,
-  onProjectSelect,
   onSessionSelect,
   onDeleteSession,
+  onArchiveSession,
   onForkSession,
   onSetSessionStatus,
   onOpenInSplitView,
-  isSelecting,
-  isChecked,
+  isSelecting = false,
+  isChecked = false,
   onToggleSessionSelected,
   t,
 }: SidebarSessionItemProps) {
-  const isCompact = useCompactSidebar();
   const sessionView = createSessionViewModel(session, currentTime, t);
   const isSelected = selectedSession?.id === session.id;
-  const compactSessionAge = formatCompactAge(sessionView.sessionTime, currentTime);
-  const [isMobileOptionsOpen, setIsMobileOptionsOpen] = useState(false);
-  const showAttentionIndicator = needsAttention && !isSelected;
-  // Background work takes the recent-activity dot's place: the session is
-  // still doing something, which says more than that it was touched lately.
-  const showBackgroundIndicator = !showAttentionIndicator && hasBackgroundWork;
-  // A finished run nobody has looked at yet. Steady, not pulsing: nothing is
-  // happening any more, the session is just waiting to be read.
-  const showUnreadIndicator = !showAttentionIndicator && !showBackgroundIndicator && Boolean(session.isUnread) && !isSelected;
-  const showRecentIndicator = !showAttentionIndicator && !showBackgroundIndicator && !showUnreadIndicator && !isProcessing && sessionView.isActive;
-  const indicatorLabel = showAttentionIndicator
-    ? t('tooltips.attentionRequiredIndicator', { defaultValue: 'Session needs attention' })
-    : showBackgroundIndicator
-      ? t('tooltips.backgroundWorkIndicator', { defaultValue: 'Background work running' })
-      : showUnreadIndicator
-        ? t('tooltips.unreadSessionIndicator', { defaultValue: 'Unread' })
-        : t('tooltips.activeSessionIndicator');
-  const isPinned = Boolean(session.isPinned);
-  const isCompleted = Boolean(session.isCompleted);
-  const statusItems = buildSessionStatusItems(session.id, session, onSetSessionStatus, t);
-  const pinIcon = isPinned ? (
-    <Pin
-      className="h-3 w-3 flex-shrink-0 text-muted-foreground"
-      aria-label={t('sessionStatus.pinned', { defaultValue: 'Pinned' })}
-    />
-  ) : null;
-  const providerLabel = PROVIDER_LABELS[session.__provider];
+  const age = formatCompactAge(sessionView.sessionTime, currentTime);
+  // The long-press sheet; mounted only while open.
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const optionsRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
 
-  // The desktop controls live in SessionOptions, which owns the rename panel and
-  // its outside-click dismissal. The mobile rename sits inside the bottom sheet,
-  // which owns its own.
-  const { copyState, copyLabel, setOptionsOpen, handleCopyAction, isCopyPending, CopyStateIcon } =
-    useProviderSessionIdCopy(session.id, providerLabel);
-
-  // The mobile sheet follows the same capability and running-session rules as
-  // the desktop SessionOptions menu. The capability request is shared by rows.
-  const forkableProviders = useSessionForkingProviders();
-  const canFork = Boolean(onForkSession) && forkableProviders.has(session.__provider) && !isProcessing;
-
-  // Sessions are owned by a project identified by `projectId` (DB primary key)
-  // after the projectName → projectId migration.
-  const selectMobileSession = () => {
-    onProjectSelect(project);
-    onSessionSelect(session, project.projectId);
-  };
-
-  const saveEditedSession = () => {
-    onSaveEditingSession(project.projectId, session.id, renameDraft, session.__provider);
-  };
-
-  const requestDeleteSession = () => {
-    onDeleteSession(session.id, sessionView.sessionName);
-  };
+  const status: RowStatus = isWaiting
+    ? 'waiting'
+    : isProcessing
+      ? 'processing'
+      : hasBackgroundWork
+        ? 'background'
+        : (session.isUnread || needsAttention) && !isSelected
+          ? 'unread'
+          : session.isCompleted
+            ? 'completed'
+            : 'none';
 
   // A running session cannot be deleted, so it cannot be ticked either; the row
   // still renders, locked, instead of disappearing from the list mid-selection.
   const isSelectable = isSelecting && !isProcessing;
   const toggleSelected = () => {
-    onToggleSessionSelected(project.projectId, session.id);
+    if (projectId !== null) {
+      onToggleSessionSelected?.(projectId, session.id);
+    }
   };
-  // Space activates neither the desktop anchor nor the compact div, and Enter
-  // only the anchor, so both keys are handled here and tick either row alike.
+
+  const openActions = useCallback((source: 'touch' | 'pointer') => {
+    if (source === 'touch') {
+      setIsSheetOpen(true);
+      return;
+    }
+    // A right-click opens the same menu the "…" button does, anchored to it.
+    optionsRef.current?.querySelector<HTMLButtonElement>('button')?.click();
+  }, []);
+  const { handlers: pressHandlers, consumeClickAfterLongPress } = useLongPress(openActions, !isSelecting && !isEditing);
+
+  // While renaming, a click outside the editor cancels, as Escape does.
+  useEffect(() => {
+    if (!isEditing) {
+      return;
+    }
+    const handlePointerDown = (event: globalThis.MouseEvent) => {
+      if (editorRef.current && !editorRef.current.contains(event.target as Node)) {
+        onCancelEditingSession();
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [isEditing, onCancelEditingSession]);
+
+  const saveRename = () => {
+    if (projectId === null) {
+      onCancelEditingSession();
+      return;
+    }
+    onSaveEditingSession(projectId, session.id, renameDraft, session.__provider);
+  };
+
+  // Left-click keeps in-app navigation. Ctrl/Cmd-click opens the session in
+  // split view where that is available; otherwise, like Shift and middle-click
+  // and the native menu, it uses the href to open a new tab/window. While
+  // selecting, every click ticks the row.
+  const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (consumeClickAfterLongPress(event)) {
+      return;
+    }
+    if (isSelecting) {
+      event.preventDefault();
+      if (isSelectable) {
+        toggleSelected();
+      }
+      return;
+    }
+    if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && onOpenInSplitView) {
+      event.preventDefault();
+      onOpenInSplitView(session);
+      return;
+    }
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    event.preventDefault();
+    onSessionSelect(session, projectId ?? '');
+  };
+
+  // Space activates no anchor and Enter only an anchor, so both keys are
+  // handled here and tick the row alike.
   const handleSelectionKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (!isSelectable || (event.key !== ' ' && event.key !== 'Enter')) {
       return;
@@ -144,423 +217,173 @@ function SidebarSessionItem({
     event.preventDefault();
     toggleSelected();
   };
+
   const SelectionIcon = isChecked ? CheckSquare : Square;
-  const selectionIcon = isSelecting ? (
-    <SelectionIcon
-      className={cn(
-        'h-4 w-4 flex-shrink-0',
-        isChecked ? 'text-primary' : 'text-muted-foreground',
-        !isSelectable && 'opacity-40',
-      )}
-      aria-hidden="true"
-    />
-  ) : null;
+  const canArchive = Boolean(onArchiveSession) && !isProcessing;
+  const archiveLabel = t('sessionMenu.archive', { defaultValue: 'Archive' });
 
-  const setMobileOptionsOpen = (open: boolean) => {
-    setIsMobileOptionsOpen(open);
-    setOptionsOpen(open);
-    if (!open && isEditing) {
-      onCancelEditingSession();
-    }
-  };
-
-  const startMobileRename = () => {
-    onStartEditingSession(project.projectId, session.id, sessionView.sessionName);
-  };
-
-  const saveMobileRename = () => {
-    saveEditedSession();
-    setMobileOptionsOpen(false);
-  };
+  if (isEditing) {
+    return (
+      <div ref={editorRef} className="flex min-h-10 items-center gap-1.5 rounded-lg bg-accent/60 px-2">
+        <input
+          type="text"
+          value={renameDraft}
+          onChange={(event) => onRenameDraftChange(event.target.value)}
+          onKeyDown={(event) => {
+            event.stopPropagation();
+            if (event.key === 'Enter') {
+              saveRename();
+            } else if (event.key === 'Escape') {
+              onCancelEditingSession();
+            }
+          }}
+          aria-label={t('sessionMenu.rename', { defaultValue: 'Rename' })}
+          className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+          autoFocus
+          autoComplete="off"
+          // 16px on touch keeps iOS Safari from zooming the viewport on focus.
+          style={{ fontSize: 'max(16px, 0.875rem)' }}
+        />
+        <button
+          type="button"
+          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+          onClick={saveRename}
+          title={t('tooltips.save')}
+          aria-label={t('tooltips.save')}
+        >
+          <Check className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+          onClick={onCancelEditingSession}
+          title={t('tooltips.cancel')}
+          aria-label={t('tooltips.cancel')}
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="group relative">
-      {(showAttentionIndicator || showBackgroundIndicator || showUnreadIndicator || showRecentIndicator) && (
-        <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 transform">
-          <Tooltip content={indicatorLabel} position="right">
-            <div
-              role="status"
-              aria-label={indicatorLabel}
-              className={cn(
-                'h-2 w-2 rounded-full',
-                !showUnreadIndicator && 'animate-pulse',
-                showAttentionIndicator
-                  ? 'bg-amber-500'
-                  : showBackgroundIndicator
-                    ? 'bg-purple-500 dark:bg-purple-400'
-                    : showUnreadIndicator
-                      ? 'bg-blue-500'
-                      : 'bg-green-500',
-              )}
-            />
-          </Tooltip>
-        </div>
-      )}
-
-      {isCompact && (
-      <div>
-        <div
-          role={isSelecting ? 'checkbox' : undefined}
-          aria-checked={isSelecting ? isChecked : undefined}
-          aria-disabled={isSelecting && !isSelectable ? true : undefined}
-          tabIndex={isSelecting ? 0 : undefined}
+    <div className="group/row relative" {...pressHandlers}>
+      <a
+        href={`/session/${session.id}`}
+        role={isSelecting ? 'checkbox' : undefined}
+        aria-checked={isSelecting ? isChecked : undefined}
+        aria-disabled={isSelecting && !isSelectable ? true : undefined}
+        aria-current={isSelected ? 'page' : undefined}
+        data-testid="session-row"
+        className={cn(
+          'flex min-h-10 w-full min-w-0 select-none items-center gap-2.5 rounded-lg px-2 text-left text-sm transition-colors [-webkit-touch-callout:none]',
+          isSelected
+            ? 'bg-accent text-accent-foreground ring-1 ring-inset ring-border'
+            : 'text-foreground hover:bg-accent/50',
+          isChecked && 'bg-primary/10',
+        )}
+        onClick={handleClick}
+        onKeyDown={isSelecting ? handleSelectionKeyDown : undefined}
+      >
+        {isSelecting && (
+          <SelectionIcon
+            className={cn('h-4 w-4 flex-shrink-0', isChecked ? 'text-primary' : 'text-muted-foreground', !isSelectable && 'opacity-40')}
+            aria-hidden="true"
+          />
+        )}
+        <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center">
+          <SessionStatusIcon status={status} t={t} />
+        </span>
+        <span
           className={cn(
-            'p-2 mx-3 my-0.5 rounded-md bg-card border active:scale-[0.98] transition-all duration-150 relative',
-            isSelected ? 'bg-primary/5 border-primary/20' : '',
-            !isSelected && isProcessing
-              ? 'border-border/60 bg-muted/20'
-              : !isSelected && sessionView.isActive
-              ? 'border-green-500/30 bg-green-50/5 dark:bg-green-900/5'
-              : 'border-border/30',
-            isChecked && 'border-primary/40 bg-primary/10',
-            isCompleted && !isSelected && 'opacity-60',
+            'min-w-0 flex-1 truncate',
+            status === 'unread' && 'font-medium',
+            session.isCompleted && !isSelected && 'text-muted-foreground',
           )}
-          onClick={isSelecting ? (isSelectable ? toggleSelected : undefined) : selectMobileSession}
-          onKeyDown={isSelecting ? handleSelectionKeyDown : undefined}
+          title={sessionView.sessionName}
         >
-          <div className="flex items-center gap-2">
-            {selectionIcon}
-            <div
-              className={cn(
-                'w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0',
-                isSelected ? 'bg-primary/10' : 'bg-muted/50',
-              )}
-            >
-              <LLMProviderLogo provider={session.__provider} className="h-3 w-3" />
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                {pinIcon}
-                <div
-                  className={cn('min-w-0 flex-1 truncate text-sm text-foreground', showUnreadIndicator ? 'font-medium' : 'font-normal')}
-                  title={sessionView.sessionName}
-                >
-                  {sessionView.sessionName}
-                </div>
-                {isProcessing ? (
-                  <span className="ml-auto flex-shrink-0">
-                    <Tooltip content={t('tooltips.processingSessionIndicator', 'Processing session')} position="top">
-                      <span className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground">
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      </span>
-                    </Tooltip>
-                  </span>
-                ) : compactSessionAge && (
-                  <span className="ml-auto flex-shrink-0 text-[11px] text-muted-foreground">{compactSessionAge}</span>
-                )}
-              </div>
-              <div className="mt-0.5 flex items-center">
-                {sessionView.messageCount > 0 && (
-                  <Badge variant="secondary" className="px-1 py-0 text-xs">
-                    {sessionView.messageCount}
-                  </Badge>
-                )}
-              </div>
-            </div>
-
-            {!isSelecting && (
-              <button
-                type="button"
-                aria-label={`Session options for ${sessionView.sessionName}`}
-                aria-haspopup="dialog"
-                aria-expanded={isMobileOptionsOpen}
-                className="ml-1 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted active:scale-95"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setMobileOptionsOpen(true);
-                }}
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </button>
+          {sessionView.sessionName}
+        </span>
+        {session.__provider !== 'claude' && (
+          <LLMProviderLogo provider={session.__provider} className="h-3 w-3 flex-shrink-0 opacity-70" />
+        )}
+        {age && (
+          <time
+            className={cn(
+              'flex-shrink-0 text-[11px] tabular-nums text-muted-foreground',
+              // The actions take this spot on hover; touch never hovers.
+              !isSelecting && '[@media(hover:hover)]:group-focus-within/row:invisible [@media(hover:hover)]:group-hover/row:invisible',
             )}
-          </div>
-        </div>
-
-        <Dialog open={isMobileOptionsOpen} onOpenChange={setMobileOptionsOpen}>
-          <DialogContent
-            aria-describedby="mobile-session-options-description"
-            animationClassName="animate-bottom-sheet-content-show motion-reduce:animate-none"
-            className="bottom-0 left-0 top-auto max-w-none translate-x-0 translate-y-0 rounded-b-none rounded-t-2xl border-x-0 border-b-0 px-4 pb-safe-area-inset-bottom pt-3"
+            dateTime={sessionView.sessionTime}
           >
-            <DialogTitle>Session options</DialogTitle>
-            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" aria-hidden="true" />
+            {age}
+          </time>
+        )}
+      </a>
 
-            <div className="mb-4 flex items-center gap-3 px-1">
-              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-muted">
-                <LLMProviderLogo provider={session.__provider} className="h-5 w-5" />
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-foreground" title={sessionView.sessionName}>
-                  {sessionView.sessionName}
-                </p>
-                <p id="mobile-session-options-description" className="text-xs text-muted-foreground">
-                  {providerLabel} session
-                </p>
-              </div>
-            </div>
-
-            {isEditing ? (
-              <div className="mb-3 space-y-2">
-                <label htmlFor={`mobile-session-rename-${session.id}`} className="block px-1 text-xs font-medium text-muted-foreground">
-                  Session name
-                </label>
-                <input
-                  id={`mobile-session-rename-${session.id}`}
-                  type="text"
-                  value={renameDraft}
-                  onChange={(event) => onRenameDraftChange(event.target.value)}
-                  onKeyDown={(event) => {
-                    event.stopPropagation();
-                    if (event.key === 'Enter') {
-                      saveMobileRename();
-                    }
-                  }}
-                  className="w-full rounded-xl border-2 border-primary/40 bg-background px-3 py-3 text-foreground shadow-sm focus:border-primary focus:outline-none"
-                  autoFocus
-                  autoComplete="off"
-                  // 16px keeps iOS Safari from zooming the viewport on focus.
-                  style={{ fontSize: '16px' }}
-                />
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={saveMobileRename}
-                    className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition-transform active:scale-95"
-                  >
-                    <Check className="h-5 w-5 flex-shrink-0" />
-                    Save
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onCancelEditingSession}
-                    className="flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-border bg-muted/35 px-4 py-3 text-sm font-medium text-foreground transition-colors active:bg-muted"
-                  >
-                    <X className="h-5 w-5 flex-shrink-0" />
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={startMobileRename}
-                  className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-border bg-muted/35 px-4 py-3 text-left text-foreground transition-colors active:bg-muted"
-                >
-                  <Edit2 className="h-5 w-5 flex-shrink-0" />
-                  <span className="text-sm font-medium">Rename session</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleCopyAction}
-                  disabled={isCopyPending}
-                  className={cn(
-                    'flex min-h-12 w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-colors',
-                    copyState === 'copied'
-                      ? 'border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-300'
-                      : copyState === 'error'
-                        ? 'border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300'
-                        : 'border-border bg-muted/35 text-foreground active:bg-muted',
-                  )}
-                >
-                  {isCopyPending ? (
-                    <Loader2 className="h-5 w-5 flex-shrink-0 animate-spin" />
-                  ) : (
-                    <CopyStateIcon className="h-5 w-5 flex-shrink-0" />
-                  )}
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium">{copyLabel}</span>
-                    {copyState === 'error' && (
-                      <span className="mt-0.5 block text-xs">Tap to try again.</span>
-                    )}
-                  </span>
-                </button>
-
-                {canFork && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMobileOptionsOpen(false);
-                      onForkSession?.(session);
-                    }}
-                    className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-border bg-muted/35 px-4 py-3 text-left text-foreground transition-colors active:bg-muted"
-                  >
-                    <GitBranch className="h-5 w-5 flex-shrink-0" />
-                    <span>
-                      <span className="block text-sm font-medium">Fork session</span>
-                      <span className="mt-0.5 block text-xs text-muted-foreground">
-                        Continue from a copy, leaving this one untouched.
-                      </span>
-                    </span>
-                  </button>
-                )}
-
-                {statusItems.map((item) => {
-                  const ItemIcon = item.icon;
-                  return (
-                    <button
-                      key={item.key}
-                      type="button"
-                      onClick={() => {
-                        setMobileOptionsOpen(false);
-                        item.onSelect();
-                      }}
-                      className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-border bg-muted/35 px-4 py-3 text-left text-foreground transition-colors active:bg-muted"
-                    >
-                      {ItemIcon && <ItemIcon className="h-5 w-5 flex-shrink-0" />}
-                      <span className="text-sm font-medium">{item.label}</span>
-                    </button>
-                  );
-                })}
-
-                {!isProcessing && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMobileOptionsOpen(false);
-                      requestDeleteSession();
-                    }}
-                    className="flex min-h-12 w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-red-600 transition-colors active:bg-red-500/10 dark:text-red-400"
-                  >
-                    <Trash2 className="h-5 w-5 flex-shrink-0" />
-                    <span className="text-sm font-medium">Archive or delete session</span>
-                  </button>
-                )}
-              </div>
-            )}
-
-            {!isEditing && (
-              <button
-                type="button"
-                onClick={() => setMobileOptionsOpen(false)}
-                className="mb-3 mt-2 min-h-11 w-full rounded-xl text-sm font-medium text-muted-foreground transition-colors active:bg-muted"
-              >
-                Cancel
-              </button>
-            )}
-          </DialogContent>
-        </Dialog>
-      </div>
-      )}
-
-      {!isCompact && (
-      <div>
-        <a
-          href={`/session/${session.id}`}
-          role={isSelecting ? 'checkbox' : undefined}
-          aria-checked={isSelecting ? isChecked : undefined}
-          aria-disabled={isSelecting && !isSelectable ? true : undefined}
+      {!isSelecting && (
+        <div
+          ref={optionsRef}
           className={cn(
-            buttonVariants({ variant: 'ghost' }),
-            'h-auto w-full justify-start rounded-md border bg-card p-2 text-left font-normal transition-all duration-150',
-            isSelecting ? 'pr-2' : 'pr-11',
-            isSelected ? 'border-primary/20 bg-primary/5' : 'border-border/30',
-            !isSelected && isProcessing
-              ? 'border-border/60 bg-muted/20 hover:bg-muted/25'
-              : !isSelected && sessionView.isActive
-                ? 'border-green-500/30 bg-green-50/5 hover:bg-green-50/10 dark:bg-green-900/5 dark:hover:bg-green-900/10'
-                : 'hover:bg-accent/50',
-            isChecked && 'border-primary/40 bg-primary/10',
-            isCompleted && !isSelected && 'opacity-60',
+            // Hidden and click-through until hovered, so a tap near the row's
+            // right edge on touch opens the session rather than an unseen button.
+            'pointer-events-none absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5 rounded-md opacity-0',
+            '[@media(hover:hover)]:group-focus-within/row:pointer-events-auto [@media(hover:hover)]:group-focus-within/row:opacity-100',
+            '[@media(hover:hover)]:group-hover/row:pointer-events-auto [@media(hover:hover)]:group-hover/row:opacity-100',
+            'has-[[aria-expanded=true]]:pointer-events-auto has-[[aria-expanded=true]]:opacity-100',
+            isSelected ? 'bg-accent' : 'bg-background/90',
           )}
-          // Left-click keeps in-app navigation. Ctrl/Cmd-click opens the session
-          // in split view where that is available; otherwise, like Shift and
-          // middle-click and the native right-click menu, it uses the href to
-          // open a new tab/window. While selecting, every click ticks the row.
-          onClick={(event) => {
-            if (isSelecting) {
-              event.preventDefault();
-              if (isSelectable) {
-                toggleSelected();
-              }
-              return;
-            }
-            if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey && onOpenInSplitView) {
-              event.preventDefault();
-              onOpenInSplitView(session);
-              return;
-            }
-            if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-            event.preventDefault();
-            onSessionSelect(session, project.projectId);
-          }}
-          onKeyDown={isSelecting ? handleSelectionKeyDown : undefined}
         >
-          <div className="flex w-full min-w-0 items-center gap-2">
-            {selectionIcon}
-            <div
-              className={cn(
-                'flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md',
-                isSelected ? 'bg-primary/10' : 'bg-muted/50',
-              )}
+          {canArchive && (
+            <button
+              type="button"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={() => onArchiveSession?.(session.id)}
+              title={archiveLabel}
+              aria-label={`${archiveLabel}: ${sessionView.sessionName}`}
+              tabIndex={-1}
             >
-              <LLMProviderLogo provider={session.__provider} className="h-3 w-3" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                {pinIcon}
-                <div
-                  className={cn('min-w-0 flex-1 truncate text-sm text-foreground', showUnreadIndicator ? 'font-medium' : 'font-normal')}
-                  title={sessionView.sessionName}
-                >
-                  {sessionView.sessionName}
-                </div>
-                {isProcessing ? (
-                  <span
-                    className={cn(
-                      'ml-auto flex-shrink-0 transition-opacity duration-200',
-                      isEditing ? 'opacity-0' : !isSelecting && 'group-hover:opacity-0',
-                    )}
-                  >
-                    <Tooltip content={t('tooltips.processingSessionIndicator', 'Processing session')} position="top">
-                      <span className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground">
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      </span>
-                    </Tooltip>
-                  </span>
-                ) : compactSessionAge && (
-                  <span
-                    className={cn(
-                      'ml-auto flex-shrink-0 text-[11px] text-muted-foreground transition-opacity duration-200',
-                      isEditing ? 'opacity-0' : !isSelecting && 'group-hover:opacity-0',
-                    )}
-                  >
-                    {compactSessionAge}
-                  </span>
-                )}
-              </div>
-              <div className="mt-0.5 flex items-center">
-                {sessionView.messageCount > 0 && <Badge variant="secondary" className="px-1 py-0 text-xs">{sessionView.messageCount}</Badge>}
-              </div>
-            </div>
-          </div>
-        </a>
-
-        {!isSelecting && (
+              <Archive className="h-3.5 w-3.5" />
+            </button>
+          )}
           <SessionOptions
-            className="absolute right-2 top-1/2 -translate-y-1/2 transform transition-all duration-200"
             sessionId={session.id}
             sessionName={sessionView.sessionName}
             provider={session.__provider}
-            projectId={project.projectId}
+            projectId={projectId}
+            projectLabel={projectLabel}
             isProcessing={isProcessing}
-            isEditing={isEditing}
-            renameDraft={renameDraft}
-            onRenameDraftChange={onRenameDraftChange}
             onStartEditingSession={onStartEditingSession}
-            onCancelEditingSession={onCancelEditingSession}
-            onSaveEditingSession={onSaveEditingSession}
             onDeleteSession={onDeleteSession}
+            onArchiveSession={onArchiveSession}
             onFork={onForkSession ? () => onForkSession(session) : undefined}
             status={session}
             onSetSessionStatus={onSetSessionStatus}
             onOpenInSplitView={onOpenInSplitView ? () => onOpenInSplitView(session) : undefined}
             t={t}
           />
-        )}
-      </div>
+        </div>
+      )}
+
+      {isSheetOpen && (
+        <SessionActionsSheet
+          open
+          onOpenChange={setIsSheetOpen}
+          sessionId={session.id}
+          sessionName={sessionView.sessionName}
+          provider={session.__provider}
+          projectId={projectId}
+          projectLabel={projectLabel}
+          isProcessing={isProcessing}
+          onStartEditingSession={onStartEditingSession}
+          onDeleteSession={onDeleteSession}
+          onArchiveSession={onArchiveSession}
+          onFork={onForkSession ? () => onForkSession(session) : undefined}
+          status={session}
+          onSetSessionStatus={onSetSessionStatus}
+          onOpenInSplitView={onOpenInSplitView ? () => onOpenInSplitView(session) : undefined}
+          t={t}
+        />
       )}
     </div>
   );
@@ -570,8 +393,8 @@ function SidebarSessionItem({
  * Memoized: a websocket session delta re-renders the sidebar roughly every
  * 0.5-2s during a run, and a rename keystroke re-renders it per character.
  *
- * SidebarProjectSessions hands every row but the one being renamed a constant
- * draft, and the session objects come from a per-project cache, so the compare
- * succeeds for the rest. See sidebarRowProps.test.tsx.
+ * The lists hand every row but the one being renamed a constant draft, and the
+ * session objects come from a per-project cache, so the compare succeeds for
+ * the rest. See sidebarRowProps.test.tsx.
  */
 export default memo(SidebarSessionItem);

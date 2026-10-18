@@ -66,6 +66,7 @@ const listProps = (
 ): SidebarProjectListProps => ({
   projects: [PROJECT_A, PROJECT_B],
   filteredProjects: [PROJECT_A, PROJECT_B],
+  statusFilter: 'all',
   selectedProject: null,
   selectedSession: null,
   isLoading: false,
@@ -83,6 +84,7 @@ const listProps = (
   activeSessions: NO_SESSION_IDS,
   backgroundSessionIds: NO_SESSION_IDS,
   attentionSessionIds: NO_SESSION_IDS,
+  waitingSessionIds: NO_SESSION_IDS,
   isProjectStarred: () => false,
   onRenameDraftChange: noop,
   onToggleProject: noop,
@@ -94,6 +96,7 @@ const listProps = (
   onDeleteProject: noop,
   onSessionSelect: noop,
   onDeleteSession: noop,
+  onArchiveSession: noop,
   onSetSessionStatus: noop,
   onNewSession: noop,
   onStartEditingSession: noop,
@@ -224,6 +227,48 @@ test('ticking a session changes props on the owning project row only', () => {
   );
 });
 
+test('pinned sessions move to the pinned section and out of their group', () => {
+  const pinnedProject = {
+    ...PROJECT_A,
+    sessions: [
+      { id: 'a1', summary: 'a1', lastActivity: '2026-08-21T10:00:00.000Z', isPinned: true },
+      { id: 'a2', summary: 'a2', lastActivity: '2026-08-21T09:00:00.000Z' },
+    ],
+  } as unknown as Project;
+  render(React.createElement(SidebarProjectList, {
+    ...listProps(null),
+    projects: [pinnedProject, PROJECT_B],
+    filteredProjects: [pinnedProject, PROJECT_B],
+  }));
+
+  assert.deepEqual(recordedSessionRowProps.map((props) => (props.session as { id: string }).id), ['a1']);
+  assert.equal(recordedSessionRowProps[0].projectId, 'a');
+  assert.deepEqual(
+    (recordedProjectRowProps[0].sessions as { id: string }[]).map((session) => session.id),
+    ['a2'],
+  );
+});
+
+test('a status filter hides the groups with nothing matching, and a flag filter keeps the arrays stable', () => {
+  const doneProject = {
+    ...PROJECT_B,
+    sessions: [{ id: 'b1', summary: 'b1', lastActivity: '2026-08-21T10:00:00.000Z', isCompleted: true }],
+  } as unknown as Project;
+  const props = {
+    ...listProps(null),
+    statusFilter: 'completed' as const,
+    projects: [PROJECT_A, doneProject],
+    filteredProjects: [PROJECT_A, doneProject],
+  };
+  const { rerender } = render(React.createElement(SidebarProjectList, props));
+
+  assert.deepEqual(recordedProjectRowProps.map((row) => (row.project as Project).projectId), ['b']);
+  assert.equal(recordedProjectRowProps[0].showCompletedInline, true);
+
+  rerender(React.createElement(SidebarProjectList, { ...props }));
+  assert.deepEqual(changedProps(recordedProjectRowProps[0], recordedProjectRowProps[1]), []);
+});
+
 const sessionsProps = (
   sessionRenameId: string | null,
   sessionRenameDraft: string,
@@ -232,6 +277,7 @@ const sessionsProps = (
   project: PROJECT_A,
   isExpanded: true,
   sessions: getAllSessions(PROJECT_A),
+  showCompletedInline: false,
   selectedSession: null,
   initialSessionsLoaded: true,
   hasMoreSessions: false,
@@ -239,6 +285,7 @@ const sessionsProps = (
   activeSessions: NO_SESSION_IDS,
   backgroundSessionIds: NO_SESSION_IDS,
   attentionSessionIds: NO_SESSION_IDS,
+  waitingSessionIds: NO_SESSION_IDS,
   currentTime: NOW,
   sessionRenameId,
   sessionRenameDraft,
@@ -246,12 +293,11 @@ const sessionsProps = (
   onStartEditingSession: noop,
   onCancelEditingSession: noop,
   onSaveEditingSession: noop,
-  onProjectSelect: noop,
   onSessionSelect: noop,
   onDeleteSession: noop,
+  onArchiveSession: noop,
   onSetSessionStatus: noop,
   onLoadMoreSessions: noop,
-  onNewSession: noop,
   selectedSessionIds,
   onSetSessionSelection: noop,
   onToggleSessionSelected: noop,

@@ -4,12 +4,14 @@ import type { TFunction } from 'i18next';
 import { api } from '@/shared/api';
 import { subscribeToUserPreferences } from '@/shared/userSettings';
 import { usePaletteOps } from '@/modules/command-palette';
-import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationProjectResult, ConversationSearchResults, LLMProvider, Project, ProjectSession, ProjectSortOrder, RecentConversationListItem, SearchProgress, ActiveSidebarRename, PendingSidebarDeletion, SessionStatusFilter, SessionStatusFlags, SessionStatusPatch, SessionTitleSearchResult, SessionWithProvider, ServerEvent, SidebarSearchMode, SidebarSessionSelection } from '@/shared/types';
+import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationProjectResult, ConversationSearchResults, LLMProvider, Project, ProjectSession, ProjectSortOrder, RecentConversationListItem, SearchProgress, ActiveSidebarRename, PendingSidebarDeletion, SessionStatusFilter, SessionStatusFlags, SessionStatusPatch, SessionTitleSearchResult, SessionWithProvider, ServerEvent, SidebarSessionSelection } from '@/shared/types';
 import {
   filterProjects,
   getAllSessions,
   sortProjects,
 } from '@/modules/sidebar/utils/sidebarProjectFormatting';
+import { useSidebarViewPreferences } from '@/modules/sidebar/hooks/useSidebarViewPreferences';
+import { useWaitingSessionIds } from '@/modules/sidebar/hooks/useWaitingSessionIds';
 import {
   clearLegacyStarredProjectIds,
   readLegacyStarredProjectIds,
@@ -47,6 +49,8 @@ type UseSidebarControllerArgs = {
   activeSessions: ReadonlySet<string>;
   /** The busy sessions only running background work; unlike the rest of `activeSessions` they can be deleted. */
   backgroundSessionIds: ReadonlySet<string>;
+  /** Sessions with activity the user has not looked at; counted as unread by the status filter. */
+  attentionSessionIds?: ReadonlySet<string>;
   isLoading: boolean;
   isMobile: boolean;
   t: TFunction;
@@ -65,6 +69,14 @@ type UseSidebarControllerArgs = {
 };
 
 const subscribeToNothing = () => () => {};
+const NO_SESSION_IDS: ReadonlySet<string> = new Set();
+const NO_CONVERSATIONS: RecentConversationListItem[] = [];
+
+// The statuses the recents endpoint can narrow by; `waiting` is only known here.
+const SERVER_STATUS_FILTERS = new Set<SessionStatusFilter>(['running', 'unread', 'pinned', 'completed']);
+
+const sessionTimestamp = (session: SessionWithProvider): string =>
+  String(session.lastActivity || session.createdAt || session.created_at || '');
 
 export function useSidebarController({
   projects,
@@ -72,6 +84,7 @@ export function useSidebarController({
   selectedSession: _selectedSession,
   activeSessions,
   backgroundSessionIds,
+  attentionSessionIds = NO_SESSION_IDS,
   isLoading,
   isMobile,
   t,
@@ -87,9 +100,6 @@ export function useSidebarController({
   subscribe = subscribeToNothing,
 }: UseSidebarControllerArgs) {
   const paletteOps = usePaletteOps();
-  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
-  // Running groups start expanded and remember manual collapses independently of Projects.
-  const [collapsedRunningProjects, setCollapsedRunningProjects] = useState<Set<string>>(new Set());
   // The one rename the sidebar has open, as a single value so a project and a
   // session cannot both be mid-rename. See ActiveSidebarRename.
   const [activeRename, setActiveRename] = useState<ActiveSidebarRename | null>(null);
@@ -114,9 +124,20 @@ export function useSidebarController({
   // same rows (still on screen until the first settles) from sending them again.
   const sessionIdsBeingDeletedRef = useRef<Set<string>>(new Set());
   const [showVersionModal, setShowVersionModal] = useState(false);
-  const [searchMode, setSearchMode] = useState<SidebarSearchMode>('projects');
-  const searchModeRef = useRef<SidebarSearchMode>('projects');
-  searchModeRef.current = searchMode;
+  const {
+    statusFilter,
+    setStatusFilter: storeStatusFilter,
+    projectFilter: storedProjectFilter,
+    setProjectFilter: storeProjectFilter,
+    groupByProject,
+    setGroupByProject: storeGroupByProject,
+    collapsedProjectIds,
+    updateCollapsedProjects,
+  } = useSidebarViewPreferences();
+  // The archive replaces the session list until it is closed again.
+  const [isArchiveOpen, setIsArchiveOpen] = useState(false);
+  // The search field under the header; while open, two or more characters search every conversation.
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [conversationResults, setConversationResults] = useState<ConversationSearchResults | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [searchProgress, setSearchProgress] = useState<SearchProgress | null>(null);
@@ -129,11 +150,21 @@ export function useSidebarController({
   const [isRecentConversationsLoading, setIsRecentConversationsLoading] = useState(false);
   const [isLoadingMoreRecentConversations, setIsLoadingMoreRecentConversations] = useState(false);
   const [recentConversationsError, setRecentConversationsError] = useState(false);
-  const [recentStatusFilter, setRecentStatusFilter] = useState<SessionStatusFilter>('all');
   // Read by the page fetcher, which is memoized once and must see the filter
   // the latest request was made for.
-  const recentStatusFilterRef = useRef<SessionStatusFilter>('all');
-  recentStatusFilterRef.current = recentStatusFilter;
+  // A stale project id (the project was removed) shows every project rather than an empty list.
+  const projectFilter = storedProjectFilter && projects.some((project) => project.projectId === storedProjectFilter)
+    ? storedProjectFilter
+    : null;
+  // The flat view over every project pages through the server's recents feed;
+  // a single project, or a status only this tab knows, is listed from the
+  // sessions already loaded.
+  const usesServerRecents = !groupByProject && projectFilter === null && statusFilter !== 'waiting';
+  const statusFilterRef = useRef<SessionStatusFilter>(statusFilter);
+  statusFilterRef.current = statusFilter;
+  const usesServerRecentsRef = useRef(usesServerRecents);
+  usesServerRecentsRef.current = usesServerRecents;
+  const waitingSessionIds = useWaitingSessionIds(subscribe, activeSessions);
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [optimisticStarByProjectId, setOptimisticStarByProjectId] = useState<Map<string, boolean>>(new Map());
   const [loadingMoreProjects, setLoadingMoreProjects] = useState<Set<string>>(new Set());
@@ -146,7 +177,6 @@ export function useSidebarController({
 
   const isSidebarCollapsed = !isMobile && !sidebarVisible;
   const activeSessionIds = activeSessions;
-  const runningSessionsCount = activeSessionIds.size;
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -169,15 +199,15 @@ export function useSidebarController({
       return;
     }
 
-    setExpandedProjects((prev) => {
-      if (prev.has(selectedProjectId)) {
-        return prev;
+    updateCollapsedProjects((previous) => {
+      if (!previous.has(selectedProjectId)) {
+        return previous;
       }
-      const next = new Set(prev);
-      next.add(selectedProjectId);
+      const next = new Set(previous);
+      next.delete(selectedProjectId);
       return next;
     });
-  }, [selectedProject?.projectId]);
+  }, [selectedProject?.projectId, updateCollapsedProjects]);
 
   useEffect(() => {
     if (projects.length > 0 && !isLoading) {
@@ -251,11 +281,11 @@ export function useSidebarController({
     setRecentConversationsError(false);
 
     try {
-      const statusFilter = recentStatusFilterRef.current;
+      const currentStatusFilter = statusFilterRef.current;
       const response = await api.recentConversations({
         limit: 40,
         offset,
-        status: statusFilter === 'all' ? undefined : statusFilter,
+        status: SERVER_STATUS_FILTERS.has(currentStatusFilter) ? currentStatusFilter : undefined,
       });
       if (!response.ok) {
         throw new Error(`Failed to load recent conversations: ${response.status}`);
@@ -344,12 +374,12 @@ export function useSidebarController({
   }, [fetchArchivedSessions]);
 
   useEffect(() => {
-    if (searchMode !== 'conversations' || debouncedSearchQuery.length >= 2) {
+    if (!usesServerRecents || isArchiveOpen) {
       return;
     }
 
     reloadRecentConversations();
-  }, [debouncedSearchQuery, recentStatusFilter, reloadRecentConversations, searchMode]);
+  }, [isArchiveOpen, reloadRecentConversations, statusFilter, usesServerRecents]);
 
   // Status changes reach every tab as `session_status` frames. The loaded rows
   // are patched in place; under a filter a change can move a row in or out of
@@ -372,7 +402,7 @@ export function useSidebarController({
         conversation.sessionId === sessionIdToUpdate ? { ...conversation, ...flags } : conversation
       ));
     });
-    if (recentStatusFilterRef.current !== 'all' && searchModeRef.current === 'conversations') {
+    if (statusFilterRef.current !== 'all' && usesServerRecentsRef.current) {
       void fetchRecentConversationsPage(0, false);
     }
   }), [fetchRecentConversationsPage, subscribe]);
@@ -413,14 +443,14 @@ export function useSidebarController({
   }, [projects, recentConversations]);
 
   useEffect(() => {
-    if (searchMode !== 'archived') {
+    if (!isArchiveOpen) {
       return;
     }
 
     // Refresh archive contents when the archived tab opens so restore actions
     // and background synchronizer updates are reflected without a full reload.
     void fetchArchivedSessions();
-  }, [fetchArchivedSessions, searchMode]);
+  }, [fetchArchivedSessions, isArchiveOpen]);
 
   useEffect(() => {
     setOptimisticStarByProjectId((previous) => {
@@ -469,9 +499,9 @@ export function useSidebarController({
     }
 
     const query = debouncedSearchQuery;
-    // The Projects tab runs the same transcript search so a query that matches
-    // no project or session title still finds the chats that mention it.
-    if ((searchMode !== 'conversations' && searchMode !== 'projects') || query.length < 2) {
+    // Open search runs the transcript search too, so a query that matches no
+    // project or session title still finds the chats that mention it.
+    if (!isSearchOpen || isArchiveOpen || query.length < 2) {
       searchSeqRef.current += 1;
       setConversationResults(null);
       setSearchProgress(null);
@@ -580,7 +610,7 @@ export function useSidebarController({
         eventSourceRef.current = null;
       }
     };
-  }, [debouncedSearchQuery, searchMode]);
+  }, [debouncedSearchQuery, isArchiveOpen, isSearchOpen]);
 
   // All sidebar state keys (expanded, starred, loading, etc.) use the DB
   // `projectId` as their identifier after the migration.
@@ -589,27 +619,15 @@ export function useSidebarController({
       // Collapsing or expanding takes the ticked rows off screen, so the
       // selection they belong to is dropped with them.
       setSessionSelection(null);
-
-      if (searchMode === 'running') {
-        setCollapsedRunningProjects((prev) => {
-          const next = new Set(prev);
-          if (!next.delete(projectId)) {
-            next.add(projectId);
-          }
-          return next;
-        });
-        return;
-      }
-
-      setExpandedProjects((prev) => {
-        const next = new Set<string>();
-        if (!prev.has(projectId)) {
+      updateCollapsedProjects((previous) => {
+        const next = new Set(previous);
+        if (!next.delete(projectId)) {
           next.add(projectId);
         }
         return next;
       });
     },
-    [searchMode],
+    [updateCollapsedProjects],
   );
 
   const handleSessionClick = useCallback(
@@ -759,38 +777,56 @@ export function useSidebarController({
     [projectSortOrder, projectsWithResolvedStarState],
   );
 
-  const runningProjects = useMemo(() => {
-    if (activeSessionIds.size === 0) {
-      return [];
+  // The project filter first, then the search: names, paths and loaded session
+  // titles (a project kept for its sessions shows only those). The archive has
+  // its own search over archived items.
+  const filteredProjects = useMemo(() => {
+    const scoped = projectFilter === null
+      ? sortedProjects
+      : sortedProjects.filter((project) => project.projectId === projectFilter);
+    return isArchiveOpen ? scoped : filterProjects(scoped, debouncedSearchQuery);
+  }, [debouncedSearchQuery, isArchiveOpen, projectFilter, sortedProjects]);
+
+  // The flat view of one project, or of a status the server cannot filter by,
+  // built from the sessions already loaded and shaped like recents rows.
+  const localFlatConversations = useMemo<RecentConversationListItem[]>(() => {
+    if (groupByProject || usesServerRecents) {
+      return NO_CONVERSATIONS;
     }
-
-    return sortedProjects.reduce<Project[]>((acc, project) => {
-      const sessions = (project.sessions ?? []).filter((session) => activeSessionIds.has(String(session.id)));
-      const runningCount = sessions.length;
-
-      if (runningCount === 0) {
-        return acc;
+    const matches = (session: SessionWithProvider): boolean => {
+      switch (statusFilter) {
+        case 'running':
+          return activeSessionIds.has(session.id);
+        case 'waiting':
+          return waitingSessionIds.has(session.id);
+        case 'unread':
+          return Boolean(session.isUnread) || attentionSessionIds.has(session.id);
+        case 'pinned':
+          return Boolean(session.isPinned);
+        case 'completed':
+          return Boolean(session.isCompleted);
+        default:
+          return true;
       }
+    };
+    return filteredProjects
+      .flatMap((project) => getAllSessions(project)
+        .filter(matches)
+        .map((session) => ({
+          sessionId: session.id,
+          provider: session.__provider,
+          projectId: project.projectId,
+          projectDisplayName: project.displayName,
+          sessionTitle: session.summary || session.name || session.id,
+          lastActivity: sessionTimestamp(session) || null,
+          isPinned: Boolean(session.isPinned),
+          isUnread: Boolean(session.isUnread),
+          isCompleted: Boolean(session.isCompleted),
+        })))
+      .sort((a, b) => (b.lastActivity ?? '').localeCompare(a.lastActivity ?? ''));
+  }, [activeSessionIds, attentionSessionIds, filteredProjects, groupByProject, statusFilter, usesServerRecents, waitingSessionIds]);
 
-      acc.push({
-        ...project,
-        sessions,
-        sessionMeta: {
-          ...project.sessionMeta,
-          total: runningCount,
-          hasMore: false,
-        },
-      });
-      return acc;
-    }, []);
-  }, [activeSessionIds, sortedProjects]);
-
-  const filteredProjects = useMemo(
-    () => filterProjects(searchMode === 'running' ? runningProjects : sortedProjects, debouncedSearchQuery),
-    [debouncedSearchQuery, runningProjects, searchMode, sortedProjects],
-  );
-
-  // Projects kept only because a session title matched the filter.
+  // Projects kept only because a session title matched the search.
   const sessionMatchedProjectIds = useMemo(
     () => new Set(
       filteredProjects
@@ -800,12 +836,10 @@ export function useSidebarController({
     [filteredProjects],
   );
 
+  // Groups are open unless folded; a search hit opens its group so it is seen.
   const isProjectExpanded = useCallback(
-    (projectId: string) =>
-      searchMode === 'running'
-        ? !collapsedRunningProjects.has(projectId)
-        : expandedProjects.has(projectId) || sessionMatchedProjectIds.has(projectId),
-    [collapsedRunningProjects, expandedProjects, searchMode, sessionMatchedProjectIds],
+    (projectId: string) => !collapsedProjectIds.has(projectId) || sessionMatchedProjectIds.has(projectId),
+    [collapsedProjectIds, sessionMatchedProjectIds],
   );
 
   const filteredArchivedSessions = useMemo(() => {
@@ -915,14 +949,8 @@ export function useSidebarController({
     [],
   );
 
-  const confirmDeleteSession = useCallback(async (hardDelete = false) => {
-    if (pendingDeletion?.kind !== 'session') {
-      return;
-    }
-
-    const { sessionId } = pendingDeletion;
-    setPendingDeletion(null);
-
+  // Archive (soft) or permanent delete of one session, and the list updates that follow.
+  const removeSession = useCallback(async (sessionId: string, hardDelete: boolean) => {
     try {
       const response = await api.deleteSession(sessionId, hardDelete);
 
@@ -951,7 +979,22 @@ export function useSidebarController({
       console.error('[Sidebar] Error deleting session:', error);
       alert(t('messages.deleteSessionError'));
     }
-  }, [fetchArchivedSessions, onSessionDelete, pendingDeletion, t]);
+  }, [fetchArchivedSessions, onSessionDelete, t]);
+
+  const confirmDeleteSession = useCallback(async (hardDelete = false) => {
+    if (pendingDeletion?.kind !== 'session') {
+      return;
+    }
+
+    const { sessionId } = pendingDeletion;
+    setPendingDeletion(null);
+    await removeSession(sessionId, hardDelete);
+  }, [pendingDeletion, removeSession]);
+
+  // Archiving is undone from the archive, so the row's archive action asks nothing.
+  const archiveSession = useCallback((sessionId: string) => {
+    void removeSession(sessionId, false);
+  }, [removeSession]);
 
   const setProjectSessionSelection = useCallback((selection: SidebarSessionSelection) => {
     setSessionSelection(selection);
@@ -1208,14 +1251,14 @@ export function useSidebarController({
       await Promise.all([
         Promise.resolve(onRefresh()),
         fetchArchivedSessions(),
-        searchMode === 'conversations'
+        usesServerRecents
           ? fetchRecentConversationsPage(0, false)
           : Promise.resolve(),
       ]);
     } finally {
       setIsRefreshing(false);
     }
-  }, [fetchArchivedSessions, fetchRecentConversationsPage, onRefresh, searchMode]);
+  }, [fetchArchivedSessions, fetchRecentConversationsPage, onRefresh, usesServerRecents]);
 
   const updateSessionSummary = useCallback(
     // `_projectId` and `_provider` are preserved for compatibility with
@@ -1308,11 +1351,39 @@ export function useSidebarController({
     setSidebarVisible(true);
   }, [setSidebarVisible]);
 
-  // Wrapped rather than reset from an effect: leaving the Projects tab hides the
-  // ticked rows, and a selection left behind would come back with the tab.
-  const changeSearchMode = useCallback((mode: SidebarSearchMode) => {
+  // Wrapped rather than reset from an effect: changing what the list shows
+  // hides the ticked rows, and a selection left behind would come back with them.
+  const setStatusFilter = useCallback((filter: SessionStatusFilter) => {
     setSessionSelection(null);
-    setSearchMode(mode);
+    storeStatusFilter(filter);
+  }, [storeStatusFilter]);
+
+  const setProjectFilter = useCallback((projectId: string | null) => {
+    setSessionSelection(null);
+    storeProjectFilter(projectId);
+  }, [storeProjectFilter]);
+
+  const setGroupByProject = useCallback((grouped: boolean) => {
+    setSessionSelection(null);
+    storeGroupByProject(grouped);
+  }, [storeGroupByProject]);
+
+  const openArchive = useCallback(() => {
+    setSessionSelection(null);
+    setIsArchiveOpen(true);
+  }, []);
+
+  const closeArchive = useCallback(() => {
+    setIsArchiveOpen(false);
+  }, []);
+
+  const toggleSearch = useCallback(() => {
+    setIsSearchOpen((previous) => {
+      if (previous) {
+        setSearchFilter('');
+      }
+      return !previous;
+    });
   }, []);
 
   return {
@@ -1329,7 +1400,8 @@ export function useSidebarController({
     pendingDeletion,
     showVersionModal,
     filteredProjects,
-    runningSessionsCount,
+    sortedProjects,
+    waitingSessionIds,
     archivedProjects: filteredArchivedProjects,
     archivedSessions: filteredArchivedSessions,
     archivedSessionsCount: archivedProjects.length + archivedSessions.length,
@@ -1346,8 +1418,19 @@ export function useSidebarController({
     handleSessionClick,
     forkSession,
     setSessionStatus,
-    recentStatusFilter,
-    setRecentStatusFilter,
+    statusFilter,
+    setStatusFilter,
+    projectFilter,
+    setProjectFilter,
+    groupByProject,
+    setGroupByProject,
+    usesServerRecents,
+    localFlatConversations,
+    isArchiveOpen,
+    openArchive,
+    closeArchive,
+    isSearchOpen,
+    toggleSearch,
     toggleStarProject,
     isProjectStarred,
     getProjectSessions,
@@ -1359,6 +1442,7 @@ export function useSidebarController({
     saveProjectName,
     showDeleteSessionConfirmation,
     confirmDeleteSession,
+    archiveSession,
     sessionSelection,
     setProjectSessionSelection,
     toggleSessionSelected,
@@ -1376,8 +1460,6 @@ export function useSidebarController({
     collapseSidebar,
     expandSidebar,
     setShowNewProject,
-    searchMode,
-    setSearchMode: changeSearchMode,
     conversationResults,
     isSearching,
     searchProgress,

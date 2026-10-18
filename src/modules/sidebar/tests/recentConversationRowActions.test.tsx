@@ -7,10 +7,10 @@ import { beforeEach, test, vi } from 'vitest';
 import type { ActiveSidebarRename, RecentConversationListItem, SessionRowActions, SidebarProjectListProps } from '@/shared/types';
 
 /**
- * The Conversations list renders the same controls as the Projects list, from
- * the same component. These tests assert what the row resolves for it — which
- * session, which project, and the two states that change the row's appearance —
- * by capturing the props of a stubbed SessionOptions, the way
+ * The flat list renders the same row, with the same controls, as the project
+ * groups. These tests assert what the row resolves for it — which session,
+ * which project, and the states that change the row's appearance — by
+ * capturing the props of a stubbed SessionOptions, the way
  * sidebarRowProps.test.tsx captures the row props.
  */
 
@@ -47,11 +47,13 @@ const makeActions = (overrides: Partial<SessionRowActions> = {}): SessionRowActi
   activeSessions: new Set<string>(),
   backgroundSessionIds: new Set<string>(),
   attentionSessionIds: new Set<string>(),
+  waitingSessionIds: new Set<string>(),
   onRenameDraftChange: noop,
   onStartEditingSession: noop,
   onCancelEditingSession: noop,
   onSaveEditingSession: noop,
   onDeleteSession: noop,
+  onArchiveSession: noop,
   onSetSessionStatus: noop,
   ...overrides,
 });
@@ -62,13 +64,11 @@ const renderList = (
 ) => render(
   <SidebarRecentConversations
     conversations={conversations}
-    total={conversations.length}
     hasMore={false}
     isLoading={false}
     isLoadingMore={false}
     hasError={false}
-    statusFilter="all"
-    onStatusFilterChange={noop}
+    isFiltered={false}
     selectedSession={null}
     currentTime={NOW}
     sessionActions={sessionActions}
@@ -108,22 +108,24 @@ test('the rename open elsewhere does not put this row into editing', () => {
     projectId: 'project-1',
     draft: 'a new name',
   };
-  renderList([conversation('s1'), conversation('s2')], makeActions({ activeRename }));
+  const { container } = renderList([conversation('s1'), conversation('s2')], makeActions({ activeRename }));
 
-  assert.equal(recordedOptionsProps[0].isEditing, false);
-  assert.equal(recordedOptionsProps[0].renameDraft, '');
-  assert.equal(recordedOptionsProps[1].isEditing, true);
-  assert.equal(recordedOptionsProps[1].renameDraft, 'a new name');
+  // The row being renamed swaps its title and controls for the field.
+  assert.deepEqual(recordedOptionsProps.map((props) => props.sessionId), ['s1']);
+  const inputs = container.querySelectorAll('input');
+  assert.equal(inputs.length, 1);
+  assert.equal(inputs[0].value, 'a new name');
 });
 
 test('a project rename never puts a session row into editing', () => {
   const activeRename: ActiveSidebarRename = { target: 'project', id: 's1', draft: 'x' };
-  renderList([conversation('s1')], makeActions({ activeRename }));
+  const { container } = renderList([conversation('s1')], makeActions({ activeRename }));
 
-  assert.equal(recordedOptionsProps[0].isEditing, false);
+  assert.equal(recordedOptionsProps.length, 1);
+  assert.equal(container.querySelector('input'), null);
 });
 
-test('a running session is marked processing and shows a spinner instead of its age', () => {
+test('a running session is marked processing and shows the spinner in its status slot', () => {
   const { container } = renderList(
     [conversation('s1'), conversation('s2')],
     makeActions({ activeSessions: new Set(['s1']) }),
@@ -132,7 +134,6 @@ test('a running session is marked processing and shows a spinner instead of its 
   assert.equal(recordedOptionsProps[0].isProcessing, true);
   assert.equal(recordedOptionsProps[1].isProcessing, false);
   assert.equal(container.querySelectorAll('.animate-spin').length, 1);
-  assert.equal(container.querySelectorAll('time').length, 1);
 });
 
 test('a session with only background work running gets the purple dot, not the spinner, and is not processing', () => {
@@ -148,17 +149,32 @@ test('a session with only background work running gets the purple dot, not the s
   const dots = container.querySelectorAll('[role="status"].bg-purple-500');
   assert.equal(dots.length, 1);
   assert.equal(dots[0].getAttribute('aria-label'), 'tooltips.backgroundWorkIndicator');
-  assert.equal(container.querySelectorAll('time').length, 1, 'the other row shows its age');
 });
 
-test('a session needing attention gets the amber dot', () => {
+test('a session with unseen activity gets the unread dot, one waiting on a prompt the hand', () => {
   const { container } = renderList(
-    [conversation('s1'), conversation('s2')],
-    makeActions({ attentionSessionIds: new Set(['s2']) }),
+    [conversation('s1'), conversation('s2'), conversation('s3')],
+    makeActions({
+      attentionSessionIds: new Set(['s2']),
+      activeSessions: new Set(['s3']),
+      waitingSessionIds: new Set(['s3']),
+    }),
   );
 
-  const dots = container.querySelectorAll('[role="status"].bg-amber-500');
-  assert.equal(dots.length, 1);
-  const rows = container.querySelectorAll('[data-testid="recent-conversation-row"]');
-  assert.equal(rows.length, 2);
+  assert.equal(container.querySelectorAll('[role="status"].bg-blue-500').length, 1);
+  const hand = container.querySelector('[aria-label="tooltips.waitingSessionIndicator"]');
+  assert.ok(hand);
+  assert.equal(container.querySelectorAll('[data-testid="session-row"]').length, 3);
+});
+
+test('pinned conversations are listed first, under their own heading', () => {
+  const { container } = renderList(
+    [conversation('s1'), conversation('s2', { isPinned: true })],
+    makeActions(),
+  );
+
+  const sections = container.querySelectorAll('section');
+  assert.equal(sections.length, 2);
+  assert.equal(sections[0].getAttribute('aria-label'), 'sessionStatus.pinnedSection');
+  assert.deepEqual(recordedOptionsProps.map((props) => props.sessionId), ['s2', 's1']);
 });

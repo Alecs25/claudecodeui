@@ -1,17 +1,23 @@
 import { useState } from 'react';
-import { CheckCircle2, CheckSquare, ChevronRight, Plus, Trash2 } from 'lucide-react';
+import { ChevronRight, Trash2 } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { Button } from '@/shared/ui';
 import { cn } from '@/shared/utils';
 import type { LLMProvider, Project, ProjectSession, SessionStatusPatch, SessionWithProvider, SidebarSessionSelection } from '@/shared/types';
 import SidebarSessionItem from '@/modules/sidebar/SidebarSessionItem';
-import { useCompactSidebar } from '@/modules/sidebar/hooks/useCompactSidebar';
+
+// Open rows a group shows before "Show more": enough to reach the recent work,
+// few enough that several projects fit on one screen.
+const VISIBLE_OPEN_SESSIONS = 6;
 
 type SidebarProjectSessionsProps = {
   project: Project;
   isExpanded: boolean;
+  /** The project's loaded sessions that pass the status filter, pinned ones excluded (they sit in the pinned section). */
   sessions: SessionWithProvider[];
+  /** With the "completed" filter the completed rows are the list, not a folded extra. */
+  showCompletedInline: boolean;
   selectedSession: ProjectSession | null;
   initialSessionsLoaded: boolean;
   hasMoreSessions: boolean;
@@ -19,6 +25,7 @@ type SidebarProjectSessionsProps = {
   activeSessions: ReadonlySet<string>;
   backgroundSessionIds: ReadonlySet<string>;
   attentionSessionIds: ReadonlySet<string>;
+  waitingSessionIds: ReadonlySet<string>;
   currentTime: Date;
   /** The session being renamed, when it belongs to this project. */
   sessionRenameId: string | null;
@@ -27,14 +34,13 @@ type SidebarProjectSessionsProps = {
   onStartEditingSession: (projectId: string, sessionId: string, initialName: string) => void;
   onCancelEditingSession: () => void;
   onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => void;
-  onProjectSelect: (project: Project) => void;
   onSessionSelect: (session: SessionWithProvider, projectName: string) => void;
   onDeleteSession: (sessionId: string, sessionTitle: string) => void;
+  onArchiveSession: (sessionId: string) => void;
   onForkSession?: (session: SessionWithProvider) => void;
   onSetSessionStatus: (sessionId: string, patch: SessionStatusPatch) => void;
   onOpenInSplitView?: (session: SessionWithProvider) => void;
   onLoadMoreSessions: (projectId: string) => void;
-  onNewSession: (project: Project) => void;
   /** The sessions ticked here, or null when this project's list is not in selection mode. */
   selectedSessionIds: ReadonlySet<string> | null;
   onSetSessionSelection: (selection: SidebarSessionSelection) => void;
@@ -67,25 +73,21 @@ function SessionListSkeleton() {
   return (
     <>
       {Array.from({ length: 3 }).map((_, index) => (
-        <div key={index} className="rounded-md p-2">
-          <div className="flex items-start gap-2">
-            <div className="mt-0.5 h-3 w-3 animate-pulse rounded-full bg-muted" />
-            <div className="flex-1 space-y-1">
-              <div className="h-3 animate-pulse rounded bg-muted" style={{ width: `${60 + index * 15}%` }} />
-              <div className="h-2 w-1/2 animate-pulse rounded bg-muted" />
-            </div>
-          </div>
+        <div key={index} className="flex min-h-10 items-center gap-2.5 px-2">
+          <div className="h-3 w-3 animate-pulse rounded-full bg-muted" />
+          <div className="h-3 animate-pulse rounded bg-muted" style={{ width: `${55 + index * 12}%` }} />
         </div>
       ))}
     </>
   );
 }
 
-/** Rendered by SidebarProjectItem to show an expanded project's sessions, delegating each row to SidebarSessionItem. */
+/** Rendered by SidebarProjectItem for the rows of an open project group: open sessions, the folded "Completed" section, "Load more" and bulk selection. */
 export default function SidebarProjectSessions({
   project,
   isExpanded,
   sessions,
+  showCompletedInline,
   selectedSession,
   initialSessionsLoaded,
   hasMoreSessions,
@@ -93,6 +95,7 @@ export default function SidebarProjectSessions({
   activeSessions,
   backgroundSessionIds,
   attentionSessionIds,
+  waitingSessionIds,
   currentTime,
   sessionRenameId,
   sessionRenameDraft,
@@ -100,14 +103,13 @@ export default function SidebarProjectSessions({
   onStartEditingSession,
   onCancelEditingSession,
   onSaveEditingSession,
-  onProjectSelect,
   onSessionSelect,
   onDeleteSession,
+  onArchiveSession,
   onForkSession,
   onSetSessionStatus,
   onOpenInSplitView,
   onLoadMoreSessions,
-  onNewSession,
   selectedSessionIds,
   onSetSessionSelection,
   onToggleSessionSelected,
@@ -115,8 +117,10 @@ export default function SidebarProjectSessions({
   onDeleteSelectedSessions,
   t,
 }: SidebarProjectSessionsProps) {
-  const isCompact = useCompactSidebar();
+  // The folded "Completed" rows of this group, opened on demand.
   const [showCompleted, setShowCompleted] = useState(false);
+  // Past the first few open rows the group stays short until asked.
+  const [showAllOpen, setShowAllOpen] = useState(false);
 
   if (!isExpanded) {
     return null;
@@ -147,89 +151,89 @@ export default function SidebarProjectSessions({
       ? t('sessions.selectAllLoaded')
       : t('sessions.selectAll');
 
-  return (
-    <div className="ml-3 space-y-1 border-l border-border pl-3">
-      {isCompact ? (
-        <div className="px-3 pb-1 pt-1">
-          <button
-            className="flex h-8 w-full items-center justify-center gap-2 rounded-md bg-primary text-xs font-medium text-primary-foreground transition-all duration-150 hover:bg-primary/90 active:scale-[0.98]"
-            onClick={() => {
-              onProjectSelect(project);
-              onNewSession(project);
-            }}
-          >
-            <Plus className="h-3 w-3" />
-            {t('sessions.newSession')}
-          </button>
-        </div>
-      ) : (
-        <Button
-          variant="default"
-          size="sm"
-          className="flex h-8 w-full justify-start gap-2 bg-primary text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          onClick={() => onNewSession(project)}
-        >
-          <Plus className="h-3 w-3" />
-          {t('sessions.newSession')}
-        </Button>
-      )}
+  const renderRow = (session: SessionWithProvider) => (
+    <SidebarSessionItem
+      key={session.id}
+      projectId={project.projectId}
+      session={session}
+      selectedSession={selectedSession}
+      isProcessing={isSessionRunning(session)}
+      hasBackgroundWork={backgroundSessionIds.has(session.id)}
+      needsAttention={attentionSessionIds.has(session.id)}
+      isWaiting={waitingSessionIds.has(session.id)}
+      currentTime={currentTime}
+      onRenameDraftChange={onRenameDraftChange}
+      isEditing={session.id === sessionRenameId}
+      renameDraft={session.id === sessionRenameId ? sessionRenameDraft : ''}
+      onStartEditingSession={onStartEditingSession}
+      onCancelEditingSession={onCancelEditingSession}
+      onSaveEditingSession={onSaveEditingSession}
+      onSessionSelect={onSessionSelect}
+      onDeleteSession={onDeleteSession}
+      onArchiveSession={onArchiveSession}
+      onForkSession={onForkSession}
+      onSetSessionStatus={onSetSessionStatus}
+      onOpenInSplitView={onOpenInSplitView}
+      isSelecting={isSelecting}
+      isChecked={checkedSessionIds.has(session.id)}
+      onToggleSessionSelected={onToggleSessionSelected}
+      t={t}
+    />
+  );
 
-      {(isSelecting || (initialSessionsLoaded && selectableSessionIds.length > 0)) && (
-        <div className={cn('space-y-1', isCompact && 'px-3')}>
-          {isSelecting ? (
-            <>
-              {/* Wraps rather than clips: at the narrowest sidebar width a long
-                  translated "Select all loaded" leaves no room for Cancel. */}
-              <div className="flex flex-wrap items-center justify-between gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                  onClick={() =>
-                    onSetSessionSelection({
-                      projectId: project.projectId,
-                      sessionIds: new Set(allLoadedSelected ? [] : selectableSessionIds),
-                    })
-                  }
-                  disabled={selectableSessionIds.length === 0}
-                >
-                  {selectAllLabel}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                  onClick={onCancelSessionSelection}
-                >
-                  {t('actions.cancel')}
-                </Button>
-              </div>
-              <Button
-                variant="destructive"
-                size="sm"
-                className="h-8 w-full justify-center gap-2 bg-red-600 text-xs font-medium text-white hover:bg-red-700"
-                onClick={() => onDeleteSelectedSessions(effectiveSelectedIds)}
-                disabled={effectiveSelectedIds.length === 0}
-              >
-                <Trash2 className="h-3 w-3" />
-                {t('sessions.deleteSelected', { count: effectiveSelectedIds.length })}
-              </Button>
-            </>
-          ) : (
-            <div className="flex justify-end">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
-                onClick={() =>
-                  onSetSessionSelection({ projectId: project.projectId, sessionIds: new Set() })
-                }
-              >
-                <CheckSquare className="h-3 w-3" />
-                {t('sessions.select')}
-              </Button>
-            </div>
-          )}
+  const { openSessions, completedSessions } = showCompletedInline
+    ? { openSessions: sessions, completedSessions: [] }
+    : partitionSessionsByStatus(sessions);
+  // The selected session stays visible even past the fold or when completed,
+  // or the highlighted row would vanish.
+  const selectedOpenIndex = openSessions.findIndex((session) => session.id === selectedSession?.id);
+  const openExpanded = showAllOpen || isSelecting || selectedOpenIndex >= VISIBLE_OPEN_SESSIONS;
+  const visibleOpenSessions = openExpanded ? openSessions : openSessions.slice(0, VISIBLE_OPEN_SESSIONS);
+  const hiddenOpenCount = openSessions.length - visibleOpenSessions.length;
+  const completedExpanded = showCompleted
+    || isSelecting
+    || completedSessions.some((session) => session.id === selectedSession?.id);
+
+  return (
+    <div className="space-y-px pb-1">
+      {isSelecting && (
+        // Wraps rather than clips: at the narrowest sidebar width a long
+        // translated "Select all loaded" leaves no room for Cancel.
+        <div className="space-y-1 px-1 pb-1">
+          <div className="flex flex-wrap items-center justify-between gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() =>
+                onSetSessionSelection({
+                  projectId: project.projectId,
+                  sessionIds: new Set(allLoadedSelected ? [] : selectableSessionIds),
+                })
+              }
+              disabled={selectableSessionIds.length === 0}
+            >
+              {selectAllLabel}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+              onClick={onCancelSessionSelection}
+            >
+              {t('actions.cancel')}
+            </Button>
+          </div>
+          <Button
+            variant="destructive"
+            size="sm"
+            className="h-9 w-full justify-center gap-2 text-xs font-medium"
+            onClick={() => onDeleteSelectedSessions(effectiveSelectedIds)}
+            disabled={effectiveSelectedIds.length === 0}
+          >
+            <Trash2 className="h-3 w-3" />
+            {t('sessions.deleteSelected', { count: effectiveSelectedIds.length })}
+          </Button>
         </div>
       )}
 
@@ -238,80 +242,46 @@ export default function SidebarProjectSessions({
       {!initialSessionsLoaded ? (
         <SessionListSkeleton />
       ) : !hasSessions && !hasMoreSessions ? (
-        <div className="px-3 py-2 text-left">
-          <p className="text-xs text-muted-foreground">{t('sessions.noSessions')}</p>
-        </div>
+        <p className="px-2 py-2 text-xs text-muted-foreground">{t('sessions.noSessions')}</p>
       ) : (
         <>
-          {(() => {
-            const { openSessions, completedSessions } = partitionSessionsByStatus(sessions);
-            const renderRow = (session: SessionWithProvider) => (
-            <SidebarSessionItem
-              key={session.id}
-              project={project}
-              session={session}
-              selectedSession={selectedSession}
-              isProcessing={isSessionRunning(session)}
-              hasBackgroundWork={backgroundSessionIds.has(session.id)}
-              needsAttention={attentionSessionIds.has(session.id)}
-              currentTime={currentTime}
-              onRenameDraftChange={onRenameDraftChange}
-              isEditing={session.id === sessionRenameId}
-              renameDraft={session.id === sessionRenameId ? sessionRenameDraft : ''}
-              onStartEditingSession={onStartEditingSession}
-              onCancelEditingSession={onCancelEditingSession}
-              onSaveEditingSession={onSaveEditingSession}
-              onProjectSelect={onProjectSelect}
-              onSessionSelect={onSessionSelect}
-              onDeleteSession={onDeleteSession}
-              onForkSession={onForkSession}
-              onSetSessionStatus={onSetSessionStatus}
-              onOpenInSplitView={onOpenInSplitView}
-              isSelecting={isSelecting}
-              isChecked={checkedSessionIds.has(session.id)}
-              onToggleSessionSelected={onToggleSessionSelected}
-              t={t}
-            />
-            );
-            // The selected session stays visible even when completed, or the
-            // highlighted row would vanish into a folded section.
-            const completedExpanded = showCompleted
-              || completedSessions.some((session) => session.id === selectedSession?.id);
-            return (
-              <>
-                {openSessions.map(renderRow)}
-                {completedSessions.length > 0 && (
-                  <>
-                    <button
-                      type="button"
-                      className={cn(
-                        'flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-[11px] text-muted-foreground hover:text-foreground',
-                        isCompact && 'mx-3 w-auto',
-                      )}
-                      aria-expanded={completedExpanded}
-                      onClick={() => setShowCompleted((previous) => !previous)}
-                    >
-                      <ChevronRight className={cn('h-3 w-3 transition-transform', completedExpanded && 'rotate-90')} />
-                      <CheckCircle2 className="h-3 w-3" />
-                      <span className="flex-1">{t('sessions.completedSection', { defaultValue: 'Completed' })}</span>
-                      <span className="tabular-nums">{completedSessions.length}</span>
-                    </button>
-                    {completedExpanded && completedSessions.map(renderRow)}
-                  </>
-                )}
-              </>
-            );
-          })()}
+          {visibleOpenSessions.map(renderRow)}
+          {hiddenOpenCount > 0 && (
+            <button
+              type="button"
+              className="flex min-h-9 w-full items-center px-2 pl-[34px] text-left text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setShowAllOpen(true)}
+            >
+              {t('sessions.showMoreCount', { count: hiddenOpenCount, defaultValue: 'Show {{count}} more' })}
+            </button>
+          )}
+          {completedSessions.length > 0 && (
+            <>
+              <button
+                type="button"
+                className="flex min-h-9 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs text-muted-foreground hover:text-foreground"
+                aria-expanded={completedExpanded}
+                onClick={() => setShowCompleted((previous) => !previous)}
+              >
+                <ChevronRight className={cn('h-3 w-3 transition-transform', completedExpanded && 'rotate-90')} />
+                <span className="flex-1">{t('sessions.completedSection', { defaultValue: 'Completed' })}</span>
+                <span className="tabular-nums">{completedSessions.length}</span>
+              </button>
+              {completedExpanded && completedSessions.map(renderRow)}
+            </>
+          )}
 
-          {hasMoreSessions && (
+          {hasMoreSessions && (openExpanded || hiddenOpenCount === 0) && (
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 w-full justify-center text-xs text-muted-foreground hover:text-foreground"
+              className="h-9 w-full justify-start pl-[34px] text-xs text-muted-foreground hover:text-foreground"
               onClick={() => onLoadMoreSessions(project.projectId)}
               disabled={isLoadingMoreSessions}
             >
-              {isLoadingMoreSessions ? t('sessions.loadingSessions') : 'Load more sessions'}
+              {isLoadingMoreSessions
+                ? t('sessions.loadingSessions')
+                : t('sessions.loadMore', { defaultValue: 'Load more sessions' })}
             </Button>
           )}
         </>

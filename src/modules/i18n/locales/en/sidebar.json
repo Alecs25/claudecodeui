@@ -39,7 +39,10 @@
     "clearSelection": "Clear",
     "deleteSelected_one": "Delete {{count}} session",
     "deleteSelected_other": "Delete {{count}} sessions",
-    "completedSection": "Completed"
+    "completedSection": "Completed",
+    "newSessionIn": "New session in {{project}}",
+    "showMoreCount": "Show {{count}} more",
+    "loadMore": "Load more sessions"
   },
   "tooltips": {
     "viewEnvironments": "View Environments",
@@ -59,7 +62,9 @@
     "openCommandPalette": "Open command palette",
     "attentionRequiredIndicator": "Session needs attention",
     "backgroundWorkIndicator": "Background work running",
-    "unreadSessionIndicator": "Unread"
+    "unreadSessionIndicator": "Unread",
+    "waitingSessionIndicator": "Waiting for permission",
+    "processingSessionIndicator": "Processing session"
   },
   "navigation": {
     "chat": "Chat",
@@ -79,7 +84,10 @@
     "rename": "Rename",
     "joinCommunity": "Join Community",
     "reportIssue": "Report Issue",
-    "starOnGithub": "Star on GitHub"
+    "starOnGithub": "Star on GitHub",
+    "more": "More",
+    "close": "Close",
+    "customize": "Customize"
   },
   "branding": {
     "openSource": "Open Source"
@@ -145,7 +153,8 @@
     "matches_one": "{{count}} match",
     "matches_other": "{{count}} matches",
     "projectsScanned_one": "{{count}} project scanned",
-    "projectsScanned_other": "{{count}} projects scanned"
+    "projectsScanned_other": "{{count}} projects scanned",
+    "open": "Search"
   },
   "recent": {
     "title": "Recent conversations",
@@ -161,8 +170,10 @@
       "running": "Running",
       "unread": "Unread",
       "pinned": "Pinned",
-      "completed": "Completed"
-    }
+      "completed": "Completed",
+      "waiting": "Waiting for permission"
+    },
+    "sectionTitle": "Recent"
   },
   "deleteConfirmation": {
     "deleteProject": "Remove Project",
@@ -198,12 +209,37 @@
     "markRead": "Mark as read",
     "markUnread": "Mark as unread",
     "markCompleted": "Mark completed",
-    "reopen": "Reopen"
+    "reopen": "Reopen",
+    "completed": "Completed",
+    "pinnedSection": "Pinned"
   },
   "sessionFinished": {
     "untitled": "Session",
     "message": "Finished",
     "open": "Open",
     "dismiss": "Dismiss"
+  },
+  "sessionMenu": {
+    "options": "Session options",
+    "rename": "Rename",
+    "fork": "Fork",
+    "archive": "Archive",
+    "delete": "Delete…",
+    "retry": "Try again"
+  },
+  "projectMenu": {
+    "options": "Project options",
+    "rename": "Rename project",
+    "remove": "Remove from sidebar…",
+    "starred": "Favorite"
+  },
+  "filters": {
+    "status": "Status",
+    "project": "Project",
+    "allProjects": "All",
+    "groupByProject": "Group by project"
+  },
+  "archived": {
+    "title": "Archive"
   }
 }

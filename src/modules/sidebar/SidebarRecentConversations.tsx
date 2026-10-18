@@ -1,27 +1,23 @@
-import { Loader2, MessageSquare, Pin } from 'lucide-react';
-import type { MouseEvent } from 'react';
+import { useCallback, useMemo } from 'react';
+import { MessageSquare, Pin } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
-import { Button, LLMProviderLogo, Tooltip } from '@/shared/ui';
-import { cn } from '@/shared/utils';
-import type { ProjectSession, RecentConversationListItem, SessionRowActions, SessionStatusFilter } from '@/shared/types';
-import { formatCompactAge } from '@/modules/sidebar/utils/sidebarProjectFormatting';
-import SessionOptions from '@/modules/sidebar/SessionOptions';
+import { Button } from '@/shared/ui';
+import type { ProjectSession, RecentConversationListItem, SessionRowActions, SessionWithProvider } from '@/shared/types';
+import SidebarSessionItem from '@/modules/sidebar/SidebarSessionItem';
 
 type SidebarRecentConversationsProps = {
   conversations: RecentConversationListItem[];
-  total: number;
   hasMore: boolean;
   isLoading: boolean;
   isLoadingMore: boolean;
   hasError: boolean;
-  /** The status the list is narrowed to; the server does the narrowing. */
-  statusFilter: SessionStatusFilter;
-  onStatusFilterChange: (filter: SessionStatusFilter) => void;
+  /** Whether a status filter narrows the list, which changes what an empty list means. */
+  isFiltered: boolean;
   selectedSession: ProjectSession | null;
   currentTime: Date;
   /**
-   * The same row state and callbacks the Projects list hands its rows, so a
+   * The same row state and callbacks the grouped list hands its rows, so a
    * conversation can be renamed, copied, forked or archived from here too.
    */
   sessionActions: SessionRowActions;
@@ -35,68 +31,29 @@ type SidebarRecentConversationsProps = {
   t: TFunction;
 };
 
-const STATUS_FILTERS: SessionStatusFilter[] = ['all', 'running', 'unread', 'pinned', 'completed'];
-
-const STATUS_FILTER_DEFAULT_LABELS: Record<SessionStatusFilter, string> = {
-  all: 'All',
-  running: 'Running',
-  unread: 'Unread',
-  pinned: 'Pinned',
-  completed: 'Completed',
-};
-
-function StatusFilterSelect({
-  value,
-  onChange,
-  t,
-}: {
-  value: SessionStatusFilter;
-  onChange: (filter: SessionStatusFilter) => void;
-  t: TFunction;
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(event) => onChange(event.target.value as SessionStatusFilter)}
-      aria-label={t('recent.statusFilter', { defaultValue: 'Filter by status' })}
-      data-testid="recent-status-filter"
-      className="h-6 rounded-md border border-border/60 bg-background px-1.5 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-    >
-      {STATUS_FILTERS.map((filter) => (
-        <option key={filter} value={filter}>
-          {t(`recent.status.${filter}`, { defaultValue: STATUS_FILTER_DEFAULT_LABELS[filter] })}
-        </option>
-      ))}
-    </select>
-  );
-}
+type FlatRow = { session: SessionWithProvider; projectId: string | null; projectLabel: string };
 
 function RecentConversationSkeleton() {
   return (
-    <div className="space-y-1 px-1" aria-label="Loading recent conversations">
+    <div className="space-y-px px-1" aria-label="Loading recent conversations">
       {Array.from({ length: 8 }).map((_, index) => (
-        <div key={index} className="flex items-center gap-2 rounded-lg px-2 py-2.5">
-          <div className="h-7 w-7 animate-pulse rounded-md bg-muted" />
-          <div className="min-w-0 flex-1 space-y-1.5">
-            <div className="h-3 animate-pulse rounded bg-muted" style={{ width: `${72 - index * 3}%` }} />
-            <div className="h-2.5 w-1/2 animate-pulse rounded bg-muted/70" />
-          </div>
+        <div key={index} className="flex min-h-10 items-center gap-2.5 px-2">
+          <div className="h-3 w-3 animate-pulse rounded-full bg-muted" />
+          <div className="h-3 animate-pulse rounded bg-muted" style={{ width: `${72 - index * 3}%` }} />
         </div>
       ))}
     </div>
   );
 }
 
-/** Rendered by SidebarContent in the recents search mode to list recently active sessions across all projects. */
+/** Rendered by SidebarContent for the flat view: pinned sessions first, then every other session by recency, without project groups. */
 export default function SidebarRecentConversations({
   conversations,
-  total,
   hasMore,
   isLoading,
   isLoadingMore,
   hasError,
-  statusFilter,
-  onStatusFilterChange,
+  isFiltered,
   selectedSession,
   currentTime,
   sessionActions,
@@ -105,6 +62,27 @@ export default function SidebarRecentConversations({
   onRetry,
   t,
 }: SidebarRecentConversationsProps) {
+  // Built once per page of conversations so each row receives the same session
+  // object between renders and its memo boundary holds.
+  const rows = useMemo<FlatRow[]>(() => conversations.map((conversation) => ({
+    projectId: conversation.projectId,
+    projectLabel: conversation.projectDisplayName,
+    session: {
+      id: conversation.sessionId,
+      summary: conversation.sessionTitle,
+      lastActivity: conversation.lastActivity ?? undefined,
+      __provider: conversation.provider,
+      __projectId: conversation.projectId ?? undefined,
+      isPinned: conversation.isPinned,
+      isUnread: conversation.isUnread,
+      isCompleted: conversation.isCompleted,
+    },
+  })), [conversations]);
+
+  const selectRow = useCallback((session: SessionWithProvider, projectId: string) => {
+    onConversationSelect(projectId || null, session.id, session.__provider);
+  }, [onConversationSelect]);
+
   if (isLoading && conversations.length === 0) {
     return <RecentConversationSkeleton />;
   }
@@ -123,228 +101,81 @@ export default function SidebarRecentConversations({
     );
   }
 
-  if (conversations.length === 0 && statusFilter !== 'all') {
-    return (
-      <div className="px-1">
-        <div className="flex items-center justify-between px-2 pb-1.5 pt-0.5">
-          <span className="text-[11px] font-medium text-muted-foreground">
-            {t('recent.title', 'Recent conversations')}
-          </span>
-          <StatusFilterSelect value={statusFilter} onChange={onStatusFilterChange} t={t} />
-        </div>
-        <p className="px-4 py-8 text-center text-xs text-muted-foreground">
-          {t('recent.noMatchingStatus', { defaultValue: 'No conversations' })}
-        </p>
-      </div>
-    );
-  }
-
   if (conversations.length === 0) {
     return (
-      <div className="px-4 py-10 text-center">
-        <MessageSquare className="mx-auto mb-3 h-6 w-6 text-muted-foreground" />
-        <p className="text-sm font-medium text-foreground">
-          {t('recent.emptyTitle', 'No conversations yet')}
-        </p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {t('recent.emptyDescription', 'Your most recently updated conversations will appear here.')}
-        </p>
-      </div>
+      <p className="px-4 py-8 text-center text-xs text-muted-foreground">
+        {isFiltered
+          ? t('recent.noMatchingStatus', { defaultValue: 'No conversations' })
+          : t('recent.emptyTitle', 'No conversations yet')}
+      </p>
     );
   }
 
+  const pinnedRows = rows.filter((row) => row.session.isPinned);
+  const otherRows = rows.filter((row) => !row.session.isPinned);
+  const rename = sessionActions.activeRename;
+
+  const renderRow = ({ session, projectId, projectLabel }: FlatRow) => {
+    const hasBackgroundWork = sessionActions.backgroundSessionIds.has(session.id);
+    // Resolved per row so a keystroke in one rename does not redraw the rest.
+    const isEditing = rename?.target === 'session' && rename.id === session.id;
+    return (
+      <SidebarSessionItem
+        key={session.id}
+        projectId={projectId}
+        projectLabel={projectLabel}
+        session={session}
+        selectedSession={selectedSession}
+        isProcessing={sessionActions.activeSessions.has(session.id) && !hasBackgroundWork}
+        hasBackgroundWork={hasBackgroundWork}
+        needsAttention={sessionActions.attentionSessionIds.has(session.id)}
+        isWaiting={sessionActions.waitingSessionIds.has(session.id)}
+        currentTime={currentTime}
+        isEditing={isEditing}
+        renameDraft={isEditing ? rename.draft : ''}
+        onRenameDraftChange={sessionActions.onRenameDraftChange}
+        onStartEditingSession={sessionActions.onStartEditingSession}
+        onCancelEditingSession={sessionActions.onCancelEditingSession}
+        onSaveEditingSession={sessionActions.onSaveEditingSession}
+        onSessionSelect={selectRow}
+        onDeleteSession={sessionActions.onDeleteSession}
+        onArchiveSession={sessionActions.onArchiveSession}
+        onForkSession={sessionActions.onForkSession}
+        onSetSessionStatus={sessionActions.onSetSessionStatus}
+        onOpenInSplitView={sessionActions.onOpenInSplitView}
+        t={t}
+      />
+    );
+  };
+
   return (
-    <div className="px-1" data-testid="recent-conversations-list">
-      <div className="flex items-center justify-between px-2 pb-1.5 pt-0.5">
-        <span className="text-[11px] font-medium text-muted-foreground">
-          {t('recent.title', 'Recent conversations')}
-        </span>
-        <span className="flex items-center gap-2">
-          <StatusFilterSelect value={statusFilter} onChange={onStatusFilterChange} t={t} />
-          <span className="text-[10px] tabular-nums text-muted-foreground/70">{total}</span>
-        </span>
-      </div>
+    <div data-testid="recent-conversations-list">
+      {pinnedRows.length > 0 && (
+        <section aria-label={t('sessionStatus.pinnedSection', { defaultValue: 'Pinned' })} className="pb-1">
+          <h3 className="flex min-h-8 items-center gap-1.5 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            <Pin className="h-3 w-3" />
+            {t('sessionStatus.pinnedSection', { defaultValue: 'Pinned' })}
+          </h3>
+          <div className="space-y-px">{pinnedRows.map(renderRow)}</div>
+        </section>
+      )}
 
-      <div className="space-y-0.5">
-        {conversations.map((conversation) => {
-          const isSelected = String(selectedSession?.id ?? '') === conversation.sessionId;
-          const age = formatCompactAge(conversation.lastActivity, currentTime);
-          const hasBackgroundWork = sessionActions.backgroundSessionIds.has(conversation.sessionId);
-          const isProcessing = sessionActions.activeSessions.has(conversation.sessionId) && !hasBackgroundWork;
-          const showAttentionIndicator =
-            sessionActions.attentionSessionIds.has(conversation.sessionId) && !isSelected;
-          const showUnreadIndicator = !showAttentionIndicator && Boolean(conversation.isUnread) && !isSelected;
-          // The fork, split and status actions read only the id, provider and
-          // owning project, which is all a recents row knows about the session.
-          const rowSession = {
-            id: conversation.sessionId,
-            summary: conversation.sessionTitle,
-            __provider: conversation.provider,
-            __projectId: conversation.projectId ?? undefined,
-          };
-          // Resolved per row so a keystroke in one rename does not redraw the rest.
-          const rename = sessionActions.activeRename;
-          const sessionRename =
-            rename?.target === 'session' && rename.id === conversation.sessionId ? rename : null;
-
-          const handleClick = (event: MouseEvent<HTMLAnchorElement>) => {
-            if (
-              event.button === 0
-              && (event.metaKey || event.ctrlKey)
-              && !event.shiftKey
-              && !event.altKey
-              && sessionActions.onOpenInSplitView
-            ) {
-              event.preventDefault();
-              sessionActions.onOpenInSplitView(rowSession);
-              return;
-            }
-            if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-              return;
-            }
-            event.preventDefault();
-            onConversationSelect(
-              conversation.projectId,
-              conversation.sessionId,
-              conversation.provider,
-            );
-          };
-
-          return (
-            <div key={conversation.sessionId} className="group relative">
-              {/*
-                * Only the amber "needs attention" dot, and the spinner below. The
-                * Projects row also has a green dot for a session touched recently,
-                * which carries no information in a list ordered by recency.
-                */}
-              {showUnreadIndicator && (
-                <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 transform">
-                  <Tooltip content={t('tooltips.unreadSessionIndicator', { defaultValue: 'Unread' })} position="right">
-                    <div
-                      role="status"
-                      aria-label={t('tooltips.unreadSessionIndicator', { defaultValue: 'Unread' })}
-                      className="h-2 w-2 rounded-full bg-blue-500"
-                    />
-                  </Tooltip>
-                </div>
-              )}
-              {showAttentionIndicator && (
-                <div className="absolute left-0 top-1/2 -translate-x-1 -translate-y-1/2 transform">
-                  <Tooltip
-                    content={t('tooltips.attentionRequiredIndicator', { defaultValue: 'Session needs attention' })}
-                    position="right"
-                  >
-                    <div
-                      role="status"
-                      aria-label={t('tooltips.attentionRequiredIndicator', { defaultValue: 'Session needs attention' })}
-                      className="h-2 w-2 animate-pulse rounded-full bg-amber-500"
-                    />
-                  </Tooltip>
-                </div>
-              )}
-
-              <a
-                href={`/session/${conversation.sessionId}`}
-                onClick={handleClick}
-                data-testid="recent-conversation-row"
-                className={cn(
-                  'flex min-w-0 items-center gap-2 rounded-lg px-2 py-2 pr-11 text-left transition-colors',
-                  isSelected
-                    ? 'bg-primary/10 text-foreground'
-                    : 'text-foreground hover:bg-accent/60',
-                  conversation.isCompleted && !isSelected && 'opacity-60',
-                )}
-              >
-                <span className={cn(
-                  'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md',
-                  isSelected ? 'bg-primary/10' : 'bg-muted/60',
-                )}>
-                  <LLMProviderLogo provider={conversation.provider} className="h-3.5 w-3.5" />
-                </span>
-
-                <span className="min-w-0 flex-1">
-                  <span className={cn(
-                    'flex min-w-0 items-center gap-1 text-[13px] leading-4',
-                    showUnreadIndicator ? 'font-medium' : 'font-normal',
-                  )}>
-                    {conversation.isPinned && (
-                      <Pin
-                        className="h-3 w-3 flex-shrink-0 text-muted-foreground"
-                        aria-label={t('sessionStatus.pinned', { defaultValue: 'Pinned' })}
-                      />
-                    )}
-                    <span className="truncate">{conversation.sessionTitle}</span>
-                  </span>
-                  <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[10px] leading-3 text-muted-foreground">
-                    <span className="truncate">{conversation.projectDisplayName}</span>
-                    {isProcessing ? (
-                      <>
-                        <span className="flex-shrink-0 text-muted-foreground/40">·</span>
-                        <Tooltip content={t('tooltips.processingSessionIndicator', 'Processing session')} position="top">
-                          <Loader2 className="h-3 w-3 flex-shrink-0 animate-spin" />
-                        </Tooltip>
-                      </>
-                    ) : hasBackgroundWork ? (
-                      // No spinner: nothing is responding. The purple of the
-                      // workflow and agent cards says what is still running.
-                      <>
-                        <span className="flex-shrink-0 text-muted-foreground/40">·</span>
-                        <Tooltip content={t('tooltips.backgroundWorkIndicator', 'Background work running')} position="top">
-                          <span
-                            role="status"
-                            aria-label={t('tooltips.backgroundWorkIndicator', 'Background work running')}
-                            className="h-2 w-2 flex-shrink-0 animate-pulse rounded-full bg-purple-500 dark:bg-purple-400"
-                          />
-                        </Tooltip>
-                      </>
-                    ) : age && (
-                      <>
-                        <span className="flex-shrink-0 text-muted-foreground/40">·</span>
-                        <time className="flex-shrink-0 tabular-nums" dateTime={conversation.lastActivity ?? undefined}>
-                          {age}
-                        </time>
-                      </>
-                    )}
-                  </span>
-                </span>
-              </a>
-
-              <SessionOptions
-                className="absolute right-2 top-1/2 -translate-y-1/2 transform"
-                sessionId={conversation.sessionId}
-                sessionName={conversation.sessionTitle}
-                provider={conversation.provider}
-                projectId={conversation.projectId}
-                isProcessing={isProcessing}
-                isEditing={sessionRename !== null}
-                renameDraft={sessionRename?.draft ?? ''}
-                onRenameDraftChange={sessionActions.onRenameDraftChange}
-                onStartEditingSession={sessionActions.onStartEditingSession}
-                onCancelEditingSession={sessionActions.onCancelEditingSession}
-                onSaveEditingSession={sessionActions.onSaveEditingSession}
-                onDeleteSession={sessionActions.onDeleteSession}
-                // The fork path reads only the id, provider and owning project,
-                // which is all a recents row knows about the session.
-                onFork={sessionActions.onForkSession
-                  ? () => sessionActions.onForkSession?.(rowSession)
-                  : undefined}
-                status={conversation}
-                onSetSessionStatus={sessionActions.onSetSessionStatus}
-                onOpenInSplitView={sessionActions.onOpenInSplitView
-                  ? () => sessionActions.onOpenInSplitView?.(rowSession)
-                  : undefined}
-                t={t}
-              />
-            </div>
-          );
-        })}
-      </div>
+      {otherRows.length > 0 && (
+        <section aria-label={t('recent.title', 'Recent conversations')}>
+          {pinnedRows.length > 0 && (
+            <h3 className="flex min-h-8 items-center px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              {t('recent.sectionTitle', { defaultValue: 'Recent' })}
+            </h3>
+          )}
+          <div className="space-y-px">{otherRows.map(renderRow)}</div>
+        </section>
+      )}
 
       {hasMore && (
         <Button
           variant="ghost"
           size="sm"
-          className="mt-1 h-8 w-full text-xs text-muted-foreground"
+          className="mt-1 h-9 w-full text-xs text-muted-foreground"
           onClick={onLoadMore}
           disabled={isLoadingMore}
         >

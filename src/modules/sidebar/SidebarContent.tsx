@@ -1,9 +1,9 @@
 import { type ReactNode } from 'react';
-import { Activity, Archive, Folder, MessageSquare, RotateCcw, Search, Trash2 } from 'lucide-react';
+import { Archive, Folder, MessageSquare, RotateCcw, Search, Trash2 } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { LLMProviderLogo, ScrollArea } from '@/shared/ui';
-import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationSearchResults, Project, RecentConversationListItem, ReleaseInfo, SearchProgress, SessionStatusFilter, SidebarProjectListProps, SidebarSearchMode } from '@/shared/types';
+import type { ArchivedProjectListItem, ArchivedSessionListItem, ConversationSearchResults, Project, RecentConversationListItem, ReleaseInfo, SearchProgress, SessionStatusFilter, SettingsOpenTarget, SidebarProjectListProps } from '@/shared/types';
 import { formatCompactAge, getAllSessions } from '@/modules/sidebar/utils/sidebarProjectFormatting';
 import SidebarFooter from '@/modules/sidebar/SidebarFooter';
 import SidebarHeader from '@/modules/sidebar/SidebarHeader';
@@ -84,35 +84,42 @@ function groupArchivedSessionsByProject(sessions: ArchivedSessionListItem[]): Ar
 type SidebarContentProps = {
   isPWA: boolean;
   isMobile: boolean;
-  isLoading: boolean;
-  projects: Project[];
-  runningSessionsCount: number;
+  /** Every project in sidebar order, for the project filter and the new-session picker. */
+  sortedProjects: Project[];
+  newSessionProject: Project | null;
+  onNewSession: (project: Project) => void;
+  statusFilter: SessionStatusFilter;
+  onStatusFilterChange: (filter: SessionStatusFilter) => void;
+  projectFilter: string | null;
+  onProjectFilterChange: (projectId: string | null) => void;
+  groupByProject: boolean;
+  onGroupByProjectChange: (grouped: boolean) => void;
+  isSearchOpen: boolean;
+  onToggleSearch: () => void;
+  searchFilter: string;
+  onSearchFilterChange: (value: string) => void;
+  conversationResults: ConversationSearchResults | null;
+  isSearching: boolean;
+  searchProgress: SearchProgress | null;
+  isArchiveOpen: boolean;
+  onOpenArchive: () => void;
+  onCloseArchive: () => void;
   archivedProjects: ArchivedProjectListItem[];
   archivedSessions: ArchivedSessionListItem[];
   archivedSessionsCount: number;
   isArchivedSessionsLoading: boolean;
-  recentConversations: RecentConversationListItem[];
-  recentConversationsTotal: number;
-  recentConversationsHasMore: boolean;
-  isRecentConversationsLoading: boolean;
-  isLoadingMoreRecentConversations: boolean;
-  recentConversationsError: boolean;
-  recentStatusFilter: SessionStatusFilter;
-  onRecentStatusFilterChange: (filter: SessionStatusFilter) => void;
-  searchFilter: string;
-  onSearchFilterChange: (value: string) => void;
-  onClearSearchFilter: () => void;
-  searchMode: SidebarSearchMode;
-  onSearchModeChange: (mode: SidebarSearchMode) => void;
-  conversationResults: ConversationSearchResults | null;
-  isSearching: boolean;
-  searchProgress: SearchProgress | null;
   onRestoreArchivedProject: (projectId: string) => void;
-  onLoadMoreRecentConversations: () => void;
-  onRetryRecentConversations: () => void;
   onArchivedSessionClick: (session: ArchivedSessionListItem) => void;
   onRestoreArchivedSession: (sessionId: string) => void;
   onDeleteArchivedSession: (session: ArchivedSessionListItem) => void;
+  /** The rows of the flat view, from the server's recents feed or the loaded project sessions. */
+  flatConversations: RecentConversationListItem[];
+  flatHasMore: boolean;
+  isFlatLoading: boolean;
+  isLoadingMoreFlat: boolean;
+  flatError: boolean;
+  onLoadMoreFlat: () => void;
+  onRetryFlat: () => void;
   // Conversation result clicks pass back the DB projectId (or null when the
   // server couldn't resolve it). Consumers must handle the null case.
   onConversationResultClick: (projectId: string | null, sessionId: string, provider: string, messageTimestamp?: string | null, messageSnippet?: string | null) => void;
@@ -120,55 +127,62 @@ type SidebarContentProps = {
   isRefreshing: boolean;
   onCreateProject: () => void;
   onCollapseSidebar: () => void;
+  onCloseSidebar?: () => void;
   updateAvailable: boolean;
   restartRequired: boolean;
   releaseInfo: ReleaseInfo | null;
   latestVersion: string | null;
   currentVersion: string;
   onShowVersionModal: () => void;
-  onShowSettings: () => void;
+  onShowSettings: (tab?: SettingsOpenTarget) => void;
   projectListProps: SidebarProjectListProps;
   t: TFunction;
 };
 
-/** Rendered by Sidebar as the expanded panel body: header, project list, conversation/archive search results, recent conversations and footer. */
+/** Rendered by Sidebar as the expanded panel: header with filters, then the archive, search results, grouped or flat session list, then the footer. */
 export default function SidebarContent({
   isPWA,
   isMobile,
-  isLoading,
-  projects,
-  runningSessionsCount,
+  sortedProjects,
+  newSessionProject,
+  onNewSession,
+  statusFilter,
+  onStatusFilterChange,
+  projectFilter,
+  onProjectFilterChange,
+  groupByProject,
+  onGroupByProjectChange,
+  isSearchOpen,
+  onToggleSearch,
+  searchFilter,
+  onSearchFilterChange,
+  conversationResults,
+  isSearching,
+  searchProgress,
+  isArchiveOpen,
+  onOpenArchive,
+  onCloseArchive,
   archivedProjects,
   archivedSessions,
   archivedSessionsCount,
   isArchivedSessionsLoading,
-  recentConversations,
-  recentConversationsTotal,
-  recentConversationsHasMore,
-  isRecentConversationsLoading,
-  isLoadingMoreRecentConversations,
-  recentConversationsError,
-  recentStatusFilter,
-  onRecentStatusFilterChange,
-  searchFilter,
-  onSearchFilterChange,
-  onClearSearchFilter,
-  searchMode,
-  onSearchModeChange,
-  conversationResults,
-  isSearching,
-  searchProgress,
   onRestoreArchivedProject,
-  onLoadMoreRecentConversations,
-  onRetryRecentConversations,
   onArchivedSessionClick,
   onRestoreArchivedSession,
   onDeleteArchivedSession,
+  flatConversations,
+  flatHasMore,
+  isFlatLoading,
+  isLoadingMoreFlat,
+  flatError,
+  onLoadMoreFlat,
+  onRetryFlat,
   onConversationResultClick,
   onRefresh,
   isRefreshing,
   onCreateProject,
   onCollapseSidebar,
+  onCloseSidebar,
   updateAvailable,
   restartRequired,
   releaseInfo,
@@ -179,17 +193,17 @@ export default function SidebarContent({
   projectListProps,
   t,
 }: SidebarContentProps) {
-  const searchActive = searchFilter.trim().length >= 2;
-  const showConversationSearch = searchMode === 'conversations' && searchActive;
-  const projectsSearchActive = searchMode === 'projects' && searchActive;
+  const searchActive = isSearchOpen && searchFilter.trim().length >= 2;
   const hasSearchResults = Boolean(
     conversationResults
     && (conversationResults.titleResults.length > 0 || conversationResults.results.length > 0),
   );
-  // In the Projects tab the list already shows the sessions whose titles
-  // matched, so the title section only lists the ones it does not.
+  // While searching, the grouped list keeps the projects and sessions whose
+  // names matched and the transcript hits follow it; the title section then
+  // lists only the sessions the list does not already show.
+  const showProjectMatches = searchActive && groupByProject && projectListProps.filteredProjects.length > 0;
   const visibleSessionIds = new Set(
-    projectsSearchActive
+    showProjectMatches
       ? projectListProps.filteredProjects.flatMap((project) => (project.sessions ?? []).map((session) => String(session.id)))
       : [],
   );
@@ -197,8 +211,8 @@ export default function SidebarContent({
     (session) => !visibleSessionIds.has(String(session.sessionId)),
   );
   const groupedArchivedSessions = groupArchivedSessionsByProject(archivedSessions);
-  const visibleArchivedItemsCount = archivedProjects.length + archivedSessions.length;
   const isRenamingOnMobile = isMobile && projectListProps.activeRename !== null;
+
 
   const conversationResultsList = conversationResults && (hasSearchResults || isSearching) ? (
             <div className="space-y-4 px-2" aria-live="polite">
@@ -368,99 +382,46 @@ export default function SidebarContent({
   ) : conversationResultsList;
 
   return (
-    <div
-      className="flex h-full flex-col bg-background/80 backdrop-blur-sm md:w-full md:select-none"
-      style={{}}
-    >
+    <div className="flex h-full flex-col bg-background/80 backdrop-blur-sm md:w-full md:select-none">
       <SidebarHeader
         isPWA={isPWA}
         isMobile={isMobile}
-        isLoading={isLoading}
-        projectsCount={projects.length}
-        runningSessionsCount={runningSessionsCount}
-        archivedSessionsCount={archivedSessionsCount}
-        isArchivedSessionsLoading={isArchivedSessionsLoading}
+        onCollapseSidebar={onCollapseSidebar}
+        onCloseSidebar={onCloseSidebar}
+        isSearchOpen={isSearchOpen}
+        onToggleSearch={onToggleSearch}
         searchFilter={searchFilter}
         onSearchFilterChange={onSearchFilterChange}
-        onClearSearchFilter={onClearSearchFilter}
-        searchMode={searchMode}
-        onSearchModeChange={onSearchModeChange}
         onRefresh={onRefresh}
         isRefreshing={isRefreshing}
         onCreateProject={onCreateProject}
-        onCollapseSidebar={onCollapseSidebar}
+        isArchiveOpen={isArchiveOpen}
+        onOpenArchive={onOpenArchive}
+        onCloseArchive={onCloseArchive}
+        archivedCount={archivedSessionsCount}
+        projects={sortedProjects}
+        newSessionProject={newSessionProject}
+        onNewSession={onNewSession}
+        statusFilter={statusFilter}
+        onStatusFilterChange={onStatusFilterChange}
+        projectFilter={projectFilter}
+        onProjectFilterChange={onProjectFilterChange}
+        groupByProject={groupByProject}
+        onGroupByProjectChange={onGroupByProjectChange}
         t={t}
       />
 
-      <ScrollArea className="flex-1 overflow-y-auto overscroll-contain md:px-1.5 md:py-2">
-        {showConversationSearch ? (
-          conversationSearchBody
-        ) : searchMode === 'conversations' ? (
-          <SidebarRecentConversations
-            conversations={recentConversations}
-            total={recentConversationsTotal}
-            hasMore={recentConversationsHasMore}
-            isLoading={isRecentConversationsLoading}
-            isLoadingMore={isLoadingMoreRecentConversations}
-            hasError={recentConversationsError}
-            statusFilter={recentStatusFilter}
-            onStatusFilterChange={onRecentStatusFilterChange}
-            selectedSession={projectListProps.selectedSession}
-            currentTime={projectListProps.currentTime}
-            sessionActions={projectListProps}
-            onConversationSelect={onConversationResultClick}
-            onLoadMore={onLoadMoreRecentConversations}
-            onRetry={onRetryRecentConversations}
-            t={t}
-          />
-        ) : searchMode === 'running' ? (
-          projectListProps.filteredProjects.length === 0 ? (
-            <div className="px-4 py-12 text-center md:py-8">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg border border-border/70 bg-muted/50 md:mb-3">
-                <Activity className="h-6 w-6 text-muted-foreground" />
-              </div>
-              <h3 className="mb-2 text-base font-medium text-foreground md:mb-1">
-                {t('running.emptyTitle', 'No sessions running')}
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                {runningSessionsCount > 0
-                  ? t('running.noMatchingSessions', 'No running sessions match this search.')
-                  : t('running.emptyDescription', 'Active work will appear here while a provider is processing.')}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <div className="mx-2 flex items-center justify-between rounded-lg border border-border/60 bg-card/50 px-3 py-2 shadow-sm">
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                    <Activity className="h-3.5 w-3.5" />
-                  </span>
-                  <span className="truncate text-xs font-normal text-foreground">
-                    {t('running.title', 'Running now')}
-                  </span>
-                </div>
-                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-normal text-emerald-700 dark:text-emerald-300">
-                  {runningSessionsCount}
-                </span>
-              </div>
-              <SidebarProjectList {...projectListProps} />
-            </div>
-          )
-        ) : searchMode === 'archived' ? (
+      <ScrollArea className="flex-1 overflow-y-auto overscroll-contain px-1.5 py-1.5">
+        {isArchiveOpen ? (
           isArchivedSessionsLoading ? (
             <div className="space-y-2 px-2 py-1" aria-live="polite" aria-busy="true">
               <div className="flex items-center gap-2 px-1 py-2">
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-muted/70">
                   <div className="h-3.5 w-3.5 animate-spin rounded-full border-[1.5px] border-muted-foreground/40 border-t-muted-foreground" />
                 </div>
-                <div>
-                  <h3 className="text-xs font-medium text-foreground">
-                    {t('archived.loadingTitle', 'Loading archive...')}
-                  </h3>
-                  <p className="text-[11px] text-muted-foreground">
-                    {t('archived.loadingDescription', 'Fetching hidden workspaces and sessions you can restore later.')}
-                  </p>
-                </div>
+                <h3 className="text-xs font-medium text-foreground">
+                  {t('archived.loadingTitle', 'Loading archive...')}
+                </h3>
               </div>
               {[0, 1].map((skeleton) => (
                 <div key={skeleton} className="animate-pulse rounded-xl border border-border/50 bg-card/40 p-3">
@@ -485,40 +446,10 @@ export default function SidebarContent({
                     ? t('archived.noMatchingSessions', 'No matching archived items')
                     : t('archived.emptyTitle', 'No archived items')}
                 </h3>
-                <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                  {archivedSessionsCount > 0
-                    ? t('archived.tryDifferentSearch', 'Try a different search term.')
-                    : t('archived.emptyDescription', 'Archived workspaces and sessions will appear here when you hide them from the active list.')}
-                </p>
               </div>
             </div>
           ) : (
             <div className="space-y-2.5 px-2 pb-3">
-              <div className="flex items-center justify-between px-1 pb-0.5 pt-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground">
-                    <Archive className="h-3.5 w-3.5" />
-                  </span>
-                  <div>
-                    <h2 className="text-xs font-medium leading-none text-foreground">
-                      {t('archived.title', 'Archive')}
-                    </h2>
-                    <p className="mt-1 text-[10px] leading-none text-muted-foreground">
-                      {t('archived.restoreHint', 'Restore items whenever you need them')}
-                    </p>
-                  </div>
-                </div>
-                <span
-                  className="rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[10px] tabular-nums text-muted-foreground"
-                  title={visibleArchivedItemsCount !== archivedSessionsCount
-                    ? `${visibleArchivedItemsCount} of ${archivedSessionsCount}`
-                    : undefined}
-                >
-                  {visibleArchivedItemsCount !== archivedSessionsCount
-                    ? `${visibleArchivedItemsCount}/${archivedSessionsCount}`
-                    : archivedSessionsCount}
-                </span>
-              </div>
               {archivedProjects.map((project) => {
                 const projectSessions = getAllSessions(project);
 
@@ -702,17 +633,31 @@ export default function SidebarContent({
               ))}
             </div>
           )
-        ) : projectsSearchActive ? (
-          projectListProps.filteredProjects.length > 0 ? (
-            <>
-              <SidebarProjectList {...projectListProps} />
-              {conversationResultsList}
-            </>
-          ) : (
-            conversationSearchBody
-          )
-        ) : (
+        ) : showProjectMatches ? (
+          <>
+            <SidebarProjectList {...projectListProps} />
+            {conversationResultsList}
+          </>
+        ) : searchActive ? (
+          conversationSearchBody
+        ) : groupByProject ? (
           <SidebarProjectList {...projectListProps} />
+        ) : (
+          <SidebarRecentConversations
+            conversations={flatConversations}
+            hasMore={flatHasMore}
+            isLoading={isFlatLoading}
+            isLoadingMore={isLoadingMoreFlat}
+            hasError={flatError}
+            isFiltered={statusFilter !== 'all'}
+            selectedSession={projectListProps.selectedSession}
+            currentTime={projectListProps.currentTime}
+            sessionActions={projectListProps}
+            onConversationSelect={onConversationResultClick}
+            onLoadMore={onLoadMoreFlat}
+            onRetry={onRetryFlat}
+            t={t}
+          />
         )}
       </ScrollArea>
 

@@ -42,15 +42,8 @@ vi.mock('@/modules/sidebar/SessionOptions', () => ({
   },
 }));
 
-// The breakpoint hook caches one MediaQueryList for the whole module, so the
-// compact layout is selected through the mock rather than by resizing jsdom.
-let isCompactLayout = false;
-
-vi.mock('@/modules/sidebar/hooks/useCompactSidebar', () => ({
-  useCompactSidebar: () => isCompactLayout,
-}));
-
 const { default: SidebarProjectSessions } = await import('@/modules/sidebar/SidebarProjectSessions');
+const { default: SidebarProjectItem } = await import('@/modules/sidebar/SidebarProjectItem');
 const { useSidebarController } = await import('@/modules/sidebar/hooks/useSidebarController');
 
 const NOW = new Date('2026-08-21T10:00:00.000Z');
@@ -100,6 +93,7 @@ const renderSessions = (overrides: ListOverrides = {}) =>
       project: PROJECT,
       isExpanded: true,
       sessions: SESSIONS,
+      showCompletedInline: false,
       selectedSession: null,
       initialSessionsLoaded: true,
       hasMoreSessions: false,
@@ -107,6 +101,7 @@ const renderSessions = (overrides: ListOverrides = {}) =>
       activeSessions: NO_IDS,
       backgroundSessionIds: NO_IDS,
       attentionSessionIds: NO_IDS,
+      waitingSessionIds: NO_IDS,
       currentTime: NOW,
       sessionRenameId: null,
       sessionRenameDraft: '',
@@ -114,12 +109,11 @@ const renderSessions = (overrides: ListOverrides = {}) =>
       onStartEditingSession: noop,
       onCancelEditingSession: noop,
       onSaveEditingSession: noop,
-      onProjectSelect: noop,
       onSessionSelect: noop,
       onDeleteSession: noop,
+      onArchiveSession: noop,
       onSetSessionStatus: noop,
       onLoadMoreSessions: noop,
-      onNewSession: noop,
       selectedSessionIds: null,
       onSetSessionSelection: noop,
       onToggleSessionSelected: noop,
@@ -139,7 +133,7 @@ const checkboxes = (container: HTMLElement): HTMLElement[] =>
 const jsonResponse = (data: unknown) => Promise.resolve({ ok: true, json: async () => ({ data }) });
 
 beforeEach(() => {
-  isCompactLayout = false;
+  localStorage.clear();
   recordedOptionsProps.length = 0;
   deleteSession.mockReset();
   deleteSession.mockResolvedValue({ ok: true, text: async () => '' });
@@ -155,26 +149,92 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test('the idle list offers Select and opens an empty selection with it', () => {
-  const onSetSessionSelection = vi.fn();
-  const { container } = renderSessions({ onSetSessionSelection });
+// The project group header, whose "..." menu is where selecting starts.
+const renderProjectHeader = (overrides: { activeSessions?: ReadonlySet<string>; onSetSessionSelection?: (selection: SidebarSessionSelection) => void } = {}) =>
+  render(
+    React.createElement(SidebarProjectItem, {
+      project: PROJECT,
+      selectedSession: null,
+      isExpanded: true,
+      isDeleting: false,
+      isStarred: false,
+      isEditing: false,
+      renameDraft: '',
+      sessions: SESSIONS,
+      sessionCount: SESSIONS.length,
+      showCompletedInline: false,
+      initialSessionsLoaded: true,
+      isLoadingMoreSessions: false,
+      currentTime: NOW,
+      sessionRenameId: null,
+      sessionRenameDraft: '',
+      tasksEnabled: false,
+      mcpServerStatus: null,
+      onRenameDraftChange: noop,
+      onToggleProject: noop,
+      onToggleStarProject: noop,
+      onStartEditingProject: noop,
+      onCancelEditingProject: noop,
+      onSaveProjectName: noop,
+      onDeleteProject: noop,
+      onSessionSelect: noop,
+      onDeleteSession: noop,
+      onArchiveSession: noop,
+      onSetSessionStatus: noop,
+      onLoadMoreSessions: noop,
+      activeSessions: overrides.activeSessions ?? NO_IDS,
+      backgroundSessionIds: NO_IDS,
+      attentionSessionIds: NO_IDS,
+      waitingSessionIds: NO_IDS,
+      onNewSession: noop,
+      onStartEditingSession: noop,
+      onCancelEditingSession: noop,
+      onSaveEditingSession: noop,
+      selectedSessionIds: null,
+      onSetSessionSelection: overrides.onSetSessionSelection ?? noop,
+      onToggleSessionSelected: noop,
+      onCancelSessionSelection: noop,
+      onDeleteSelectedSessions: noop,
+      t,
+    }),
+  );
+
+const openProjectMenu = (container: HTMLElement) => {
+  const trigger = container.querySelector<HTMLButtonElement>('[aria-label^="projectMenu.options"]');
+  assert.ok(trigger, 'the group header has its options menu');
+  fireEvent.click(trigger);
+};
+
+test('the idle list has no selection controls and every row keeps its options', () => {
+  const { container } = renderSessions();
 
   assert.equal(checkboxes(container).length, 0, 'no row acts as a checkbox before selecting');
   assert.equal(recordedOptionsProps.length, SESSIONS.length, 'every row still has its options menu');
+  assert.equal(buttonWithText(container, 'sessions.select'), null, 'selecting starts from the group menu');
+});
 
-  const selectButton = buttonWithText(container, 'sessions.select');
-  assert.ok(selectButton, 'the idle list offers to start selecting');
+test('the group menu offers Select and opens an empty selection with it', () => {
+  const onSetSessionSelection = vi.fn();
+  const { container } = renderProjectHeader({ onSetSessionSelection });
+  openProjectMenu(container);
 
-  fireEvent.click(selectButton);
+  const selectItem = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+    .find((item) => item.textContent?.trim() === 'sessions.select');
+  assert.ok(selectItem, 'the menu offers to start selecting');
+
+  fireEvent.click(selectItem);
   const selection = onSetSessionSelection.mock.calls[0][0] as SidebarSessionSelection;
   assert.equal(selection.projectId, PROJECT.projectId);
   assert.deepEqual([...selection.sessionIds], [], 'selection mode opens with nothing ticked');
 });
 
-test('a list whose every session is running has nothing to offer Select for', () => {
-  const { container } = renderSessions({ activeSessions: new Set(['s1', 's2', 's3']) });
+test('a group whose every session is running has nothing to offer Select for', () => {
+  const { container } = renderProjectHeader({ activeSessions: new Set(['s1', 's2', 's3']) });
+  openProjectMenu(container);
 
-  assert.equal(buttonWithText(container, 'sessions.select'), null);
+  const labels = [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent?.trim());
+  assert.ok(labels.length > 0);
+  assert.equal(labels.includes('sessions.select'), false);
 });
 
 test('selection mode replaces the row options with a checkbox on every row', () => {
@@ -297,7 +357,7 @@ test('a page emptied by deleting every loaded row keeps Load more', () => {
     false,
     'the server still has sessions, so the list must not say there are none',
   );
-  const loadMore = buttonWithText(emptied.container, 'Load more sessions');
+  const loadMore = buttonWithText(emptied.container, 'sessions.loadMore:defaultValue=Load more sessions');
   assert.ok(loadMore, 'the rest of the sessions stay reachable without a refresh');
   fireEvent.click(loadMore);
   assert.deepEqual(onLoadMoreSessions.mock.calls, [['project-1']]);
@@ -305,35 +365,7 @@ test('a page emptied by deleting every loaded row keeps Load more', () => {
 
   const reallyEmpty = renderSessions({ sessions: [], hasMoreSessions: false });
   assert.equal(reallyEmpty.container.textContent?.includes('sessions.noSessions'), true);
-  assert.equal(buttonWithText(reallyEmpty.container, 'Load more sessions'), null);
-});
-
-test('the compact layout selects with the same rules and hides its options button', () => {
-  isCompactLayout = true;
-  const onToggleSessionSelected = vi.fn();
-  const { container } = renderSessions({
-    selectedSessionIds: new Set(['s1']),
-    activeSessions: new Set(['s3']),
-    onToggleSessionSelected,
-  });
-
-  const rows = checkboxes(container);
-  assert.equal(rows.length, SESSIONS.length);
-  assert.deepEqual(rows.map((row) => row.getAttribute('aria-checked')), ['true', 'false', 'false']);
-  assert.equal(
-    container.querySelector('[aria-label^="Session options for"]'),
-    null,
-    'the mobile row hides its "..." button while selecting',
-  );
-
-  fireEvent.click(rows[1]);
-  assert.deepEqual(onToggleSessionSelected.mock.calls[0], ['project-1', 's2']);
-
-  fireEvent.keyDown(rows[1], { key: ' ' });
-  assert.deepEqual(onToggleSessionSelected.mock.calls[1], ['project-1', 's2']);
-
-  fireEvent.click(rows[2]);
-  assert.equal(onToggleSessionSelected.mock.calls.length, 2, 'the running row stays locked on touch too');
+  assert.equal(buttonWithText(reallyEmpty.container, 'sessions.loadMore:defaultValue=Load more sessions'), null);
 });
 
 type SessionActivity = {
@@ -442,7 +474,7 @@ test('a bulk delete prunes the recents feed, lowers its total and refetches the 
   const { result } = renderController();
 
   act(() => {
-    result.current.setSearchMode('conversations');
+    result.current.setGroupByProject(false);
   });
   await waitFor(() => assert.equal(result.current.recentConversations.length, 3));
   assert.equal(result.current.recentConversationsTotal, 7);
@@ -561,7 +593,7 @@ test('ticking a row of another project starts that project over', () => {
   assert.deepEqual([...(result.current.sessionSelection?.sessionIds ?? [])], ['other']);
 });
 
-test('the selection is dropped when the project collapses or the tab changes', () => {
+test('the selection is dropped when the project collapses or the view changes', () => {
   const { result } = renderController();
 
   act(() => {
@@ -576,9 +608,9 @@ test('the selection is dropped when the project collapses or the tab changes', (
     result.current.toggleSessionSelected('project-1', 's1');
   });
   act(() => {
-    result.current.setSearchMode('conversations');
+    result.current.setStatusFilter('unread');
   });
-  assert.equal(result.current.sessionSelection, null, 'so does leaving the Projects tab');
+  assert.equal(result.current.sessionSelection, null, 'so does narrowing the list to another status');
 });
 
 test('an empty selection opens no confirmation', () => {

@@ -4,12 +4,13 @@ import { fireEvent, render } from '@testing-library/react';
 import React from 'react';
 import { beforeEach, test, vi } from 'vitest';
 
-import type { Project, SessionWithProvider, SidebarProjectListProps } from '@/shared/types';
+import type { SessionWithProvider, SidebarProjectListProps } from '@/shared/types';
 
 /**
- * Sidebar status: an unread session shows a steady blue dot, a pinned one a pin,
- * a completed one is dimmed; the row's options carry the toggles and, where
- * split view is available, "Open in split view", which Ctrl/Cmd-click also does.
+ * Sidebar status: one icon at the row's left edge — amber hand while a prompt
+ * is open, spinner while responding, steady blue dot when unread, grey check
+ * when completed. The row's options carry the toggles and, where split view is
+ * available, "Open in split view", which Ctrl/Cmd-click also does.
  */
 
 const recordedOptionsProps: Record<string, unknown>[] = [];
@@ -27,13 +28,12 @@ vi.mock('@/modules/sidebar/SessionOptions', () => ({
 
 const { default: SidebarSessionItem } = await import('@/modules/sidebar/SidebarSessionItem');
 const { partitionSessionsByStatus } = await import('@/modules/sidebar/SidebarProjectSessions');
-const { buildSessionStatusItems } = await import('@/modules/sidebar/utils/sessionStatusMenuItems');
+const { buildSessionMenuItems, buildSessionStatusItems } = await import('@/modules/sidebar/utils/sessionStatusMenuItems');
 
 const t = ((key: string) => key) as unknown as SidebarProjectListProps['t'];
 const NOW = new Date('2026-08-21T10:00:00.000Z');
 const noop = () => {};
 
-const PROJECT = { projectId: 'project-1', displayName: 'project one', fullPath: '/tmp/project-1', sessions: [] } as unknown as Project;
 // Old enough that the green "recently active" dot does not apply.
 const session = (id: string, flags: Partial<SessionWithProvider> = {}) => ({
   id,
@@ -45,12 +45,13 @@ const session = (id: string, flags: Partial<SessionWithProvider> = {}) => ({
 
 const renderRow = (overrides: Record<string, unknown> = {}) => render(
   React.createElement(SidebarSessionItem, {
-    project: PROJECT,
+    projectId: 'project-1',
     session: session('s1'),
     selectedSession: null,
     isProcessing: false,
     hasBackgroundWork: false,
     needsAttention: false,
+    isWaiting: false,
     currentTime: NOW,
     isEditing: false,
     renameDraft: '',
@@ -58,7 +59,6 @@ const renderRow = (overrides: Record<string, unknown> = {}) => render(
     onStartEditingSession: noop,
     onCancelEditingSession: noop,
     onSaveEditingSession: noop,
-    onProjectSelect: noop,
     onSessionSelect: noop,
     onDeleteSession: noop,
     onSetSessionStatus: noop,
@@ -100,10 +100,27 @@ test('an unread session shows a steady blue dot until it is the selected one', (
   assert.equal(selected.container.querySelector('[role="status"]'), null);
 });
 
-test('pinned rows show a pin and completed rows are dimmed', () => {
-  const { container } = renderRow({ session: session('s1', { isPinned: true, isCompleted: true }) });
-  assert.ok(container.querySelector('[aria-label="sessionStatus.pinned"]'));
-  assert.ok(container.querySelector('a')?.className.includes('opacity-60'));
+test('completed rows show the grey check and a muted title', () => {
+  const { container } = renderRow({ session: session('s1', { isCompleted: true }) });
+  assert.ok(container.querySelector('[aria-label="sessionStatus.completed"]'));
+  assert.ok(container.querySelector('[title="session s1"]')?.className.includes('text-muted-foreground'));
+});
+
+test('activity seen elsewhere reads as unread, and an open prompt outranks the spinner', () => {
+  const attention = renderRow({ needsAttention: true });
+  assert.ok(attention.container.querySelector('[role="status"].bg-blue-500'));
+  attention.unmount();
+
+  const waiting = renderRow({ isWaiting: true, isProcessing: true });
+  const hand = waiting.container.querySelector('[role="status"]');
+  assert.equal(hand?.getAttribute('aria-label'), 'tooltips.waitingSessionIndicator');
+  assert.equal(waiting.container.querySelectorAll('.animate-spin').length, 0);
+});
+
+test('a row has a single line: title and age, no message count', () => {
+  const { container } = renderRow({ session: session('s1', { messageCount: 4321 }) });
+  assert.equal(container.querySelectorAll('time').length, 1);
+  assert.equal(container.textContent?.includes('4321'), false);
 });
 
 test('Ctrl/Cmd-click opens split view where available, and a plain click still selects', () => {
@@ -144,4 +161,33 @@ test('status toggles flip the current flag', () => {
     ['s1', { isCompleted: true }],
   ]);
   assert.deepEqual(buildSessionStatusItems('s1', {}, undefined, t), []);
+});
+
+test('the session menu archives directly, asks before deleting, and withholds both while responding', () => {
+  const onArchiveSession = vi.fn();
+  const onDeleteSession = vi.fn();
+  const build = (isProcessing: boolean) => buildSessionMenuItems({
+    sessionId: 's1',
+    sessionName: 'session s1',
+    projectId: 'project-1',
+    status: {},
+    isProcessing,
+    canFork: false,
+    canDelete: true,
+    copy: { label: 'copy', icon: (() => null) as never, loading: false, onSelect: noop },
+    onStartEditingSession: noop,
+    onSetSessionStatus: noop,
+    onArchiveSession,
+    onDeleteSession,
+    t,
+  });
+
+  const items = build(false);
+  assert.deepEqual(items.map((item) => item.key), ['rename', 'pin', 'unread', 'completed', 'copy', 'archive', 'delete']);
+  items.find((item) => item.key === 'archive')?.onSelect();
+  items.find((item) => item.key === 'delete')?.onSelect();
+  assert.deepEqual(onArchiveSession.mock.calls, [['s1']]);
+  assert.deepEqual(onDeleteSession.mock.calls, [['s1', 'session s1']]);
+
+  assert.deepEqual(build(true).map((item) => item.key), ['rename', 'pin', 'unread', 'completed', 'copy']);
 });

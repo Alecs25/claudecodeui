@@ -7,9 +7,9 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 import type { Project } from '@/shared/types';
 
 /**
- * The Projects tab used to filter names and titles only, so a word that
- * appeared in a chat but in no title found nothing. It now runs the same
- * transcript search as the Conversations tab; these pin which modes do.
+ * The sidebar search used to filter project names and titles only, so a word
+ * that appeared in a chat but in no title found nothing. It now runs the
+ * transcript search alongside; these pin when it does.
  */
 
 const openedUrls: string[] = [];
@@ -72,10 +72,12 @@ afterEach(() => {
   delete (globalThis as { EventSource?: unknown }).EventSource;
 });
 
-test('a query in the Projects tab also searches transcripts', async () => {
+test('a query in the search field filters the projects and also searches transcripts', async () => {
   const { result } = renderController();
-  assert.equal(result.current.searchMode, 'projects');
 
+  act(() => {
+    result.current.toggleSearch();
+  });
   act(() => {
     result.current.setSearchFilter('odm');
   });
@@ -87,11 +89,31 @@ test('a query in the Projects tab also searches transcripts', async () => {
   assert.deepEqual(result.current.filteredProjects, []);
 });
 
-test('the Archive tab does not search transcripts', async () => {
+test('a session title match keeps its project, narrowed to that session and opened', async () => {
   const { result } = renderController();
 
   act(() => {
-    result.current.setSearchMode('archived');
+    result.current.toggleSearch();
+  });
+  act(() => {
+    result.current.setSearchFilter('wos 19');
+  });
+
+  await waitFor(() => {
+    assert.equal(result.current.filteredProjects.length, 1);
+  }, { timeout: 3000 });
+  assert.deepEqual(result.current.filteredProjects[0].sessions?.map((session) => session.id), ['s1']);
+  assert.equal(result.current.isProjectExpanded('project-1'), true);
+});
+
+test('the archive does not search transcripts', async () => {
+  const { result } = renderController();
+
+  act(() => {
+    result.current.openArchive();
+    result.current.toggleSearch();
+  });
+  act(() => {
     result.current.setSearchFilter('odm');
   });
 
