@@ -45,7 +45,8 @@
     "completedSection": "Completate",
     "newSessionIn": "Nuova sessione in {{project}}",
     "showMoreCount": "Altre {{count}}",
-    "loadMore": "Carica altre sessioni"
+    "loadMore": "Carica altre sessioni",
+    "needsAttention": "Sessioni da guardare"
   },
   "tooltips": {
     "viewEnvironments": "Visualizza ambienti",

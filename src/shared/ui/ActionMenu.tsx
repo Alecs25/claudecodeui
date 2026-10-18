@@ -172,7 +172,7 @@ export function ActionMenu({
         top: rect.bottom + 6 + estimatedHeight <= window.innerHeight - 8
           ? rect.bottom + 6
           : Math.max(8, rect.top - estimatedHeight - 6),
-        left: Math.max(8, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8)),
+        left: Math.max(8, Math.min(align === 'left' ? rect.left : rect.right - menuWidth, window.innerWidth - menuWidth - 8)),
       });
     }
     setMenuOpen(true);

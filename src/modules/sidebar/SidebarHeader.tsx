@@ -1,4 +1,4 @@
-import { Archive, ArrowLeft, ChevronDown, FolderOpen, FolderPlus, ListTree, MoreHorizontal, PanelLeftClose, Plus, RefreshCw, Search, X } from 'lucide-react';
+import { Archive, ArrowLeft, ChevronDown, FolderPlus, ListTree, MoreHorizontal, PanelLeftClose, RefreshCw, Search, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { ActionMenu, Input } from '@/shared/ui';
@@ -7,6 +7,7 @@ import { IS_PLATFORM, cn } from '@/shared/utils';
 import type { Project, SessionStatusFilter } from '@/shared/types';
 
 import { SIDEBAR_VIEW_FILTERS_ENABLED } from '@/modules/sidebar/hooks/useSidebarViewPreferences';
+import NewSessionMenu from '@/modules/sidebar/NewSessionMenu';
 
 const STATUS_FILTERS: SessionStatusFilter[] = ['all', 'running', 'waiting', 'unread', 'pinned', 'completed'];
 
@@ -27,7 +28,7 @@ type SidebarHeaderProps = {
   isMobile: boolean;
   /** Hides the docked panel (tablet and up). */
   onCollapseSidebar: () => void;
-  /** Closes the drawer (phone); absent where there is no drawer. */
+  /** Closes the drawer (phone) or the rail's overlay panel; absent where the sidebar is docked. */
   onCloseSidebar?: () => void;
   isSearchOpen: boolean;
   onToggleSearch: () => void;
@@ -56,15 +57,22 @@ type SidebarHeaderProps = {
   t: TFunction;
 };
 
+/** The app's chat-bubble mark; also tops the collapsed rail. */
+export function SidebarLogoMark() {
+  return (
+    <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-primary/90 shadow-sm" aria-hidden="true">
+      <svg className="h-3.5 w-3.5 text-primary-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      </svg>
+    </div>
+  );
+}
+
 /** Module-level, not a nested render function, so the wordmark is not remounted on every SidebarHeader render. */
 function LogoBlock({ t }: { t: TFunction }) {
   return (
     <div className="flex min-w-0 items-center gap-2.5">
-      <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-primary/90 shadow-sm">
-        <svg className="h-3.5 w-3.5 text-primary-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-        </svg>
-      </div>
+      <SidebarLogoMark />
       <h1
         className="truncate text-sm font-bold tracking-tight text-foreground"
         style={{ fontFamily: CLOUDCLI_WORDMARK_FONT_FAMILY }}
@@ -153,13 +161,6 @@ export default function SidebarHeader({
   onGroupByProjectChange,
   t,
 }: SidebarHeaderProps) {
-  const newSessionLabel = t('sessions.newSession');
-  const folderLabel = t('sessions.folder', { defaultValue: 'Folder' });
-  const currentFolderLabel = t('sessions.currentFolder', { defaultValue: 'Current' });
-  const chooseFolderLabel = t('sessions.chooseFolder', { defaultValue: 'Choose folder…' });
-  const orderedSessionProjects = newSessionProject
-    ? [newSessionProject, ...projects.filter((project) => project.projectId !== newSessionProject.projectId)]
-    : projects;
   const statusLabel = t('filters.status', { defaultValue: 'Status' });
   const projectLabel = t('filters.project', { defaultValue: 'Project' });
   const statusOptions = STATUS_FILTERS.map((filter) => ({
@@ -175,18 +176,9 @@ export default function SidebarHeader({
   const groupLabel = t('filters.groupByProject', { defaultValue: 'Group by project' });
   const searchLabel = t('search.open', { defaultValue: 'Search' });
   const moreLabel = t('actions.more', { defaultValue: 'More' });
-  const closeLabel = isMobile
+  const closeLabel = onCloseSidebar
     ? t('actions.close', { defaultValue: 'Close' })
     : t('tooltips.hideSidebar');
-
-  const newSessionContent = (
-    <>
-      <Plus className="h-4 w-4 flex-shrink-0" />
-      <span className="truncate">{newSessionLabel}</span>
-    </>
-  );
-  const newSessionClassName =
-    'flex h-10 w-full items-center gap-2 rounded-xl border border-border/70 bg-card px-3 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-accent';
 
   return (
     <div className="flex-shrink-0">
@@ -252,7 +244,7 @@ export default function SidebarHeader({
             },
           ]}
         />
-        {isMobile && onCloseSidebar ? (
+        {onCloseSidebar ? (
           <button type="button" className={iconButtonClassName} onClick={onCloseSidebar} aria-label={closeLabel} title={closeLabel}>
             <X className="h-4 w-4" />
           </button>
@@ -264,44 +256,15 @@ export default function SidebarHeader({
       </div>
 
       <div className="px-3 pb-2">
-        {projects.length > 0 ? (
-          // Asks where, as Claude Code does: the folder in view first, the
-          // other projects, then any folder on the machine. Ctrl/Cmd+N skips
-          // the question and uses the folder in view.
-          <ActionMenu
-            label={newSessionLabel}
-            icon={Plus}
-            portal
-            variant="ghost"
-            className="flex w-full"
-            triggerClassName={cn(newSessionClassName, 'justify-start [&>span]:flex-1 [&>span]:text-left')}
-            menuClassName="max-h-[60vh] w-[260px] overflow-y-auto rounded-xl p-1.5 shadow-xl"
-            header={(
-              <p className="px-3 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                {folderLabel}
-              </p>
-            )}
-            items={[
-              ...orderedSessionProjects.map((project) => ({
-                key: project.projectId,
-                label: project.displayName,
-                description: project.projectId === newSessionProject?.projectId ? currentFolderLabel : undefined,
-                onSelect: () => onNewSession(project),
-              })),
-              {
-                key: 'choose-folder',
-                label: chooseFolderLabel,
-                icon: FolderOpen,
-                showDividerBefore: true,
-                onSelect: onChooseFolderForSession,
-              },
-            ]}
-          />
-        ) : (
-          <button type="button" className={newSessionClassName} onClick={onChooseFolderForSession}>
-            {newSessionContent}
-          </button>
-        )}
+        {/* Ctrl/Cmd+N skips the question and uses the folder in view. */}
+        <NewSessionMenu
+          projects={projects}
+          newSessionProject={newSessionProject}
+          onNewSession={onNewSession}
+          onChooseFolderForSession={onChooseFolderForSession}
+          variant="button"
+          t={t}
+        />
       </div>
 
       {isSearchOpen && (

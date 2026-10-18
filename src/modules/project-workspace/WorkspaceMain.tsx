@@ -16,6 +16,7 @@ import {
   getTranscriptViewModePreferences,
   type TranscriptViewMode,
 } from '@/shared/uiPreferences';
+import { useReportWorkspaceRightColumn } from '@/modules/project-workspace/context/WorkspaceLayoutContext';
 import { useFileOpenResolver } from '@/modules/project-workspace/hooks/useFileOpenResolver';
 import { EditorSidebar, useEditorSidebar, useSentFilesAutoOpen } from '@/modules/code-editor';
 import WorkspaceHeader from '@/modules/project-workspace/WorkspaceHeader';
@@ -238,6 +239,17 @@ function WorkspaceMain({
   // Stable arguments keep usePaletteOpsRegister's effect from tearing down and
   // rewriting the whole palette registry on every render.
   usePaletteOpsRegister({ openFile, openFileInEditor, openDirectory });
+
+  // What sits right of the chat, for the sidebar's auto-collapse to the rail.
+  // A phone has no docked column: panes and the editor cover the chat there.
+  const rightColumnKey = (() => {
+    if (isMobile || !selectedProject) return null;
+    if (editingFile) return 'editor';
+    if (isPaneOpen) return `pane:${activeTab}`;
+    if (splitSession) return 'split';
+    return null;
+  })();
+  useReportWorkspaceRightColumn(rightColumnKey, rightColumnKey === 'split' ? 'split' : editorWidth);
 
   if (isLoading) {
     return <WorkspaceStateView mode="loading" isMobile={isMobile} onMenuClick={onMenuClick} />;

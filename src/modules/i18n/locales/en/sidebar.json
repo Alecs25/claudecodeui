@@ -45,7 +45,8 @@
     "completedSection": "Completed",
     "newSessionIn": "New session in {{project}}",
     "showMoreCount": "Show {{count}} more",
-    "loadMore": "Load more sessions"
+    "loadMore": "Load more sessions",
+    "needsAttention": "Sessions need attention"
   },
   "tooltips": {
     "viewEnvironments": "View Environments",
