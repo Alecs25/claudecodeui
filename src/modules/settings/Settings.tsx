@@ -17,7 +17,9 @@ import { PluginSettingsTab } from '@/modules/plugins';
 import AboutTab from '@/modules/settings/tabs/AboutTab';
 import { useSettingsController } from '@/modules/settings/hooks/useSettingsController';
 import { useWebPush } from '@/modules/settings/hooks/useWebPush';
-import type { AgentSettingsProject } from '@/shared/types';
+import type { AgentCategory, AgentSettingsProject } from '@/shared/types';
+
+const AGENT_CATEGORIES: AgentCategory[] = ['account', 'permissions', 'mcp', 'skills'];
 
 type SettingsProps = {
   isOpen: boolean;
@@ -37,6 +39,11 @@ type DesktopNotificationsState = {
 /** Exported as the settings module's public entry point and rendered by the sidebar module as its settings dialog. */
 function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: SettingsProps) {
   const { t } = useTranslation('settings');
+  // The section after "agents:" in a deep link, e.g. the sidebar's "Customize" → MCP servers.
+  const requestedAgentCategory = initialTab.split(':')[1] as AgentCategory | undefined;
+  const initialAgentCategory = requestedAgentCategory && AGENT_CATEGORIES.includes(requestedAgentCategory)
+    ? requestedAgentCategory
+    : undefined;
   const desktopNotificationsBridge = useMemo(() => (
     typeof window === 'undefined'
       ? null
@@ -245,6 +252,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                   codexPermissionMode={codexPermissionMode}
                   onCodexPermissionModeChange={setCodexPermissionMode}
                   projects={projects}
+                  initialCategory={initialAgentCategory}
                 />
               )}
 
