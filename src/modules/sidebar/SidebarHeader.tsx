@@ -6,6 +6,8 @@ import { CLOUDCLI_WORDMARK_FONT_FAMILY } from '@/shared/constants';
 import { IS_PLATFORM, cn } from '@/shared/utils';
 import type { Project, SessionStatusFilter } from '@/shared/types';
 
+import { SIDEBAR_VIEW_FILTERS_ENABLED } from '@/modules/sidebar/hooks/useSidebarViewPreferences';
+
 const MOD_KEY =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
 
@@ -333,7 +335,7 @@ export default function SidebarHeader({
           </button>
           <span className="ml-auto pr-2 text-xs tabular-nums text-muted-foreground">{archivedCount}</span>
         </div>
-      ) : (
+      ) : SIDEBAR_VIEW_FILTERS_ENABLED ? (
         <div className="flex items-center gap-1.5 px-3 pb-2">
           <FilterSelect
             label={statusLabel}
@@ -365,7 +367,7 @@ export default function SidebarHeader({
             <ListTree className="h-4 w-4" />
           </button>
         </div>
-      )}
+      ) : null}
 
       <div className="nav-divider" />
     </div>

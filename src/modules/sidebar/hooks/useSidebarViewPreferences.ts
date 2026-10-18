@@ -9,6 +9,14 @@ const COLLAPSED_PROJECTS_KEY = 'sidebar.collapsedProjects';
 
 const STATUS_FILTERS: readonly SessionStatusFilter[] = ['all', 'running', 'waiting', 'unread', 'pinned', 'completed'];
 
+/**
+ * The Stato / Progetto / grouping row is switched off for now: on a tablet it
+ * crowded one line and glitched on focus. While it is off the list always uses
+ * the defaults (every status, every project, grouped), so a choice stored
+ * earlier cannot silently narrow a list the user has no control to widen.
+ */
+export const SIDEBAR_VIEW_FILTERS_ENABLED = false;
+
 // Storage can be missing or throw (private windows, blocked site data); the
 // sidebar then simply starts from the defaults every time.
 const readStored = (key: string): string | null => {
@@ -28,6 +36,9 @@ const writeStored = (key: string, value: string) => {
 };
 
 const readStatusFilter = (): SessionStatusFilter => {
+  if (!SIDEBAR_VIEW_FILTERS_ENABLED) {
+    return 'all';
+  }
   const stored = readStored(STATUS_FILTER_KEY);
   return STATUS_FILTERS.includes(stored as SessionStatusFilter) ? (stored as SessionStatusFilter) : 'all';
 };
@@ -50,9 +61,9 @@ export function useSidebarViewPreferences() {
   // Narrows every list to one status; read by the grouped list and sent to the recents endpoint.
   const [statusFilter, setStatusFilterState] = useState<SessionStatusFilter>(readStatusFilter);
   // The one project shown, or null for all of them; a stale id (project removed) is treated as null by the controller.
-  const [projectFilter, setProjectFilterState] = useState<string | null>(() => readStored(PROJECT_FILTER_KEY) || null);
+  const [projectFilter, setProjectFilterState] = useState<string | null>(() => (SIDEBAR_VIEW_FILTERS_ENABLED ? readStored(PROJECT_FILTER_KEY) || null : null));
   // Grouped by project (the default) or one flat list ordered by recency.
-  const [groupByProject, setGroupByProjectState] = useState<boolean>(() => readStored(GROUP_BY_PROJECT_KEY) !== 'false');
+  const [groupByProject, setGroupByProjectState] = useState<boolean>(() => !SIDEBAR_VIEW_FILTERS_ENABLED || readStored(GROUP_BY_PROJECT_KEY) !== 'false');
   // Groups are open unless folded, so only the folded ones need remembering.
   const [collapsedProjectIds, setCollapsedProjectIds] = useState<Set<string>>(readCollapsedProjects);
 
