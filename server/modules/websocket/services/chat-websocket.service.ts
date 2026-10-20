@@ -837,13 +837,17 @@ function handleClientPresence(
 
 /**
  * Tells a socket that just connected which sessions wait for the user, so a
- * reloaded tab shows the hand on rows it never subscribed to. Sent in full;
- * the client replaces what it knew.
+ * reloaded tab shows the hand on rows it never subscribed to. Sent in full,
+ * and only when some session waits: a reconnecting client forgets what it
+ * knew on its own, so silence means "none".
  */
 function sendWaitingSessionsSnapshot(ws: WebSocket, userId: string | number | null): void {
   const sessions = chatRunRegistry.listWaitingSessions()
     .filter((session) => session.userId === null || userId === null || String(session.userId) === String(userId))
     .map((session) => buildSessionWaitingEvent(session.sessionId, session.openPrompts));
+  if (sessions.length === 0) {
+    return;
+  }
   sendJson(ws, {
     kind: 'sessions_waiting_snapshot',
     sessions,
