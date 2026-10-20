@@ -39,6 +39,8 @@ import { useFileMentions } from '@/modules/chat/hooks/useFileMentions';
 import { useInputHistory } from '@/modules/chat/hooks/useInputHistory';
 import { useSlashCommands } from '@/modules/chat/hooks/useSlashCommands';
 
+const CLIPBOARD_NOTICE_MS = 5000;
+
 type UseChatComposerStateArgs = {
   selectedProject: Project | null;
   selectedSession: ProjectSession | null;
@@ -674,7 +676,19 @@ export function useChatComposerState({
       denied: t('composer.pasteImage.denied', { defaultValue: 'Clipboard access denied' }),
       unsupported: t('composer.pasteImage.unsupported', { defaultValue: 'This browser cannot read clipboard images' }),
     }[result.error];
-    setFileErrors((previous) => new Map(previous).set(t('composer.pasteImage.label', { defaultValue: 'Clipboard' }), message));
+    const label = t('composer.pasteImage.label', { defaultValue: 'Clipboard' });
+    setFileErrors((previous) => new Map(previous).set(label, message));
+    // A notice about the tap that just failed, not about a file: it goes away by itself.
+    window.setTimeout(() => {
+      setFileErrors((previous) => {
+        if (!previous.has(label)) {
+          return previous;
+        }
+        const next = new Map(previous);
+        next.delete(label);
+        return next;
+      });
+    }, CLIPBOARD_NOTICE_MS);
   }, [handleAttachmentFiles, t]);
 
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({

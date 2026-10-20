@@ -32,6 +32,7 @@ export async function readClipboardImages(now: () => number = Date.now): Promise
   } catch (error) {
     // NotAllowedError when the user refuses or the page is not focused; anything
     // else means the browser could not hand the clipboard over.
+    console.warn('Clipboard read failed:', error);
     return { error: (error as DOMException)?.name === 'NotAllowedError' ? 'denied' : 'unsupported' };
   }
 
@@ -41,7 +42,15 @@ export async function readClipboardImages(now: () => number = Date.now): Promise
     if (!imageType) {
       continue;
     }
-    const blob = await item.getType(imageType);
+    let blob: Blob;
+    try {
+      blob = await item.getType(imageType);
+    } catch (error) {
+      // Android lists the image type and then may fail to decode it; without this
+      // the rejection escaped the menu handler and the tap did nothing visible.
+      console.warn('Clipboard image could not be read:', error);
+      return { error: 'unsupported' };
+    }
     const extension = EXTENSION_BY_TYPE[imageType] ?? 'png';
     files.push(new File([blob], `appunti-${now()}-${files.length + 1}.${extension}`, { type: imageType }));
   }

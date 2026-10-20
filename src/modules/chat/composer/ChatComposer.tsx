@@ -220,6 +220,10 @@ export default function ChatComposer({
   sendByCtrlEnter,
 }: ChatComposerProps) {
   const { t } = useTranslation('chat');
+  const orphanFileErrors = useMemo(() => {
+    const attachedNames = new Set(attachedFiles.map((file) => file.name));
+    return Array.from(fileErrors).filter(([name]) => !attachedNames.has(name));
+  }, [attachedFiles, fileErrors]);
   const fileDropdownRef = useRef<HTMLDivElement | null>(null);
   const selectedFileRef = useRef<HTMLDivElement | null>(null);
   const commandMenuPosition = useMemo(() => {
@@ -444,6 +448,17 @@ export default function ChatComposer({
                     />
                   ))}
                 </div>
+              </div>
+            </PromptInputHeader>
+          )}
+
+          {/* Errors with no attachment to sit on: a rejected file, a clipboard with no image. */}
+          {orphanFileErrors.length > 0 && (
+            <PromptInputHeader>
+              <div role="alert" className="space-y-0.5 text-xs text-destructive">
+                {orphanFileErrors.map(([name, message]) => (
+                  <p key={name}>{`${name}: ${message}`}</p>
+                ))}
               </div>
             </PromptInputHeader>
           )}
