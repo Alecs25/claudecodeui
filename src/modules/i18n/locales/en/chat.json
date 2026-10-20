@@ -156,6 +156,7 @@
     "loading": "Loading…"
   },
   "input": {
+    "ariaLabel": "Message",
     "placeholder": "Message {{provider}}…",
     "placeholderDefault": "Type your message...",
     "disabled": "Input disabled",
@@ -198,7 +199,7 @@
       "title": "Replacing an earlier message",
       "filesNotReverted": "files the agent already changed are not reverted",
       "cancel": "Cancel"
-    },
+    },
     "pasteImage": {
       "label": "Clipboard",
       "empty": "No image on the clipboard",

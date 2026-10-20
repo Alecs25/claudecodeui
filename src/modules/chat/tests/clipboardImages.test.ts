@@ -30,6 +30,7 @@ test('images on the clipboard come back as named files', async () => {
 });
 
 test('an empty, refused or missing clipboard is reported, not thrown', async () => {
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
   setClipboard({ read: async () => [{ types: ['text/plain'], getType: async () => new Blob(['x']) }] });
   assert.deepEqual(await readClipboardImages(), { error: 'empty' });
 
@@ -37,5 +38,13 @@ test('an empty, refused or missing clipboard is reported, not thrown', async () 
   assert.deepEqual(await readClipboardImages(), { error: 'denied' });
 
   setClipboard(undefined);
+  assert.deepEqual(await readClipboardImages(), { error: 'unsupported' });
+});
+
+test('an image the browser lists but cannot decode is reported, not thrown', async () => {
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
+  setClipboard({
+    read: async () => [{ types: ['image/png'], getType: async () => { throw new DOMException('bad', 'DataError'); } }],
+  });
   assert.deepEqual(await readClipboardImages(), { error: 'unsupported' });
 });
