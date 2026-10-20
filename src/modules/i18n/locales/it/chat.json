@@ -116,7 +116,8 @@
     "feedback": "Commento",
     "feedbackPlaceholder": "Cosa va cambiato? (facoltativo)",
     "approved": "Approvato",
-    "rejected": "Rifiutato"
+    "rejected": "Rifiutato",
+    "waiting": "In attesa della tua approvazione"
   },
   "usageLimit": {
     "resetAt": "Limite di utilizzo Claude raggiunto. Il tuo limite verrà ripristinato alle **{{time}} {{timezone}}** - {{date}}"
@@ -429,7 +430,13 @@
   },
   "questions": {
     "title": "Domande",
-    "skipped": "Saltata"
+    "skipped": "Saltata",
+    "answers_one": "{{count}} risposta",
+    "answers_other": "{{count}} risposte",
+    "pending": "in attesa",
+    "skippedState": "saltata",
+    "cancelled": "annullata",
+    "question": "Domanda"
   },
   "sideChat": {
     "title": "Chat laterale",
@@ -445,5 +452,26 @@
     "dismiss": "Ignora",
     "started": "Sessione avviata",
     "dismissed": "Ignorato"
+  },
+  "prompt": {
+    "waiting": "{{provider}} aspetta una tua risposta",
+    "question": "Domanda",
+    "progress": "{{current}} di {{total}}",
+    "multiSelect": "scelta multipla",
+    "recommended": "consigliata",
+    "other": "Altro",
+    "otherPlaceholder": "Altro: scrivi una risposta…",
+    "skip": "Salta",
+    "next": "Avanti",
+    "back": "Indietro",
+    "submit": "Invia",
+    "submitAll": "Invia risposte",
+    "preview": "Anteprima",
+    "planChip": "Piano",
+    "planQuestion": "Approvi questo piano?",
+    "approve": "Approva",
+    "rejectWithReason": "Rifiuta con motivo",
+    "reasonPlaceholder": "Cosa va cambiato?",
+    "reason": "Motivo"
   }
 }

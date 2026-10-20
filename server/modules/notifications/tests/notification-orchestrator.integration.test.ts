@@ -20,6 +20,8 @@ import {
 } from '../services/desktop-notification-clients.service.js';
 import {
   buildNotificationPayload,
+  createNotificationEvent,
+  notifyUserIfEnabled,
   notifyRunFailed,
   notifyRunStopped,
   setSessionViewedCheck,
@@ -89,6 +91,56 @@ test('completion notifications skip a session on screen, other kinds still go ou
       assert.equal(sent.length, 2);
       assert.ok(sent.some((message) => message.includes('done-elsewhere')));
       assert.ok(sent.some((message) => message.includes('boom-watched')));
+    } finally {
+      setSessionViewedCheck(null);
+      unregisterDesktopNotificationClient(fakeSocket as unknown as WebSocket);
+    }
+  });
+});
+
+test('a question or plan waiting reads as Claude waiting for an answer, and skips a session on screen', async () => {
+  await withIsolatedDatabase(async () => {
+    const payload = buildNotificationPayload({
+      provider: 'claude',
+      sessionId: null,
+      kind: 'action_required',
+      code: 'question.pending',
+      meta: { toolName: 'AskUserQuestion', sessionName: 'LICENSEPLANET' },
+    });
+    assert.equal(payload.title, 'LICENSEPLANET');
+    assert.equal(payload.body, 'Claude is waiting for your answer');
+    assert.equal(payload.data.code, 'question.pending');
+
+    const { id: userId } = userDb.createUser('asker', 'hash');
+    notificationPreferencesDb.updatePreferences(Number(userId), {
+      channels: { desktop: true },
+      events: { stop: true, error: true, actionRequired: true },
+    });
+    const sent: string[] = [];
+    const fakeSocket = { readyState: 1, OPEN: 1, send: (message: string) => sent.push(message), close: () => {} };
+    registerDesktopNotificationClient({ userId: Number(userId), deviceId: 'device-1', ws: fakeSocket as unknown as WebSocket });
+    setSessionViewedCheck((sessionId: string) => sessionId === 'watched');
+
+    try {
+      const notify = notifyUserIfEnabled as unknown as (input: Record<string, unknown>) => void;
+      const create = createNotificationEvent as unknown as (input: Record<string, unknown>) => unknown;
+      for (const sessionId of ['watched', 'elsewhere']) {
+        notify({
+          userId,
+          event: create({
+            provider: 'claude',
+            sessionId,
+            kind: 'action_required',
+            code: 'question.pending',
+            meta: { toolName: 'AskUserQuestion' },
+            dedupeKey: `question:${sessionId}`,
+          }),
+        });
+      }
+      await new Promise((resolve) => setImmediate(resolve));
+
+      assert.equal(sent.length, 1);
+      assert.ok(sent[0].includes('elsewhere'));
     } finally {
       setSessionViewedCheck(null);
       unregisterDesktopNotificationClient(fakeSocket as unknown as WebSocket);

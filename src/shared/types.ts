@@ -1,5 +1,5 @@
 import type { TFunction } from 'i18next';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, MutableRefObject } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 
 //----------------- LLM PROVIDER MODEL CATALOG ------------
@@ -503,6 +503,8 @@ export type ToolResult = {
 type QuestionOption = {
   label: string;
   description?: string;
+  /** Content to look at while choosing (a mock, a snippet), shown under the options when this one has focus. */
+  preview?: string;
 };
 
 /** What restoring a session's files to an earlier user message changed (or would, on a dry run); `canRewind` false with `error` when the session kept no checkpoint for it. Returned by the rewind-files endpoint and shown by chat's rewind dialog. */
@@ -928,7 +930,17 @@ export type PermissionPanelProps = {
     requestIds: string | string[],
     decision: { allow?: boolean; message?: string; updatedInput?: unknown },
   ) => void;
+  /** Where the panel installs its handler for text sent from the composer while it is open. */
+  textAnswerRef?: MutableRefObject<PromptTextAnswerHandler | null>;
 };
+
+/**
+ * Takes a message the user sent while a question or plan card is open as that
+ * card's free-text answer (the question's "Other", the plan's rejection
+ * reason). Returns false when the card cannot take it, so the message is sent
+ * as usual.
+ */
+export type PromptTextAnswerHandler = (text: string) => boolean;
 
 // ---------------------------
 

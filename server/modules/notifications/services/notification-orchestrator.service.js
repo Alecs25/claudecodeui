@@ -29,10 +29,12 @@ function setSessionViewedCheck(check) {
   isSessionViewed = typeof check === 'function' ? check : () => false;
 }
 
-// A finished run the user just watched needs no notification. Only completion
-// kinds are suppressed: an approval request or an error still notifies.
+// A finished run the user just watched needs no notification, nor does a
+// question asked on the screen it is answered from. A tool approval or an
+// error still notifies.
 function isWatchedCompletion(event, userId) {
-  return event.kind === 'stop' && Boolean(event.sessionId) && isSessionViewed(event.sessionId, userId);
+  const suppressedWhenViewed = event.kind === 'stop' || event.code === 'question.pending';
+  return suppressedWhenViewed && Boolean(event.sessionId) && isSessionViewed(event.sessionId, userId);
 }
 const DEDUPE_WINDOW_MS = 20000;
 
@@ -171,6 +173,7 @@ function buildNotificationPayload(event) {
     'permission.required': normalizedEvent.meta?.toolName
       ? `Action Required: Tool "${normalizedEvent.meta.toolName}" needs approval`
       : 'Action Required: A tool needs your approval',
+    'question.pending': 'is waiting for your answer',
     'run.stopped': normalizedEvent.meta?.stopReason || 'Run Stopped: The run has stopped',
     'run.background_completed': 'Background work finished',
     'run.failed': normalizedEvent.meta?.error ? `Run Failed: ${normalizedEvent.meta.error}` : 'Run Failed: The run encountered an error',
@@ -180,10 +183,14 @@ function buildNotificationPayload(event) {
   const providerLabel = PROVIDER_LABELS[normalizedEvent.provider] || 'Assistant';
   const sessionName = resolveSessionName(normalizedEvent);
   const message = CODE_MAP[normalizedEvent.code] || 'You have a new notification';
+  // "Claude is waiting for your answer" reads as one sentence, not "Claude: ...".
+  const body = normalizedEvent.code === 'question.pending'
+    ? `${providerLabel} ${message}`
+    : `${providerLabel}: ${message}`;
 
   return {
     title: sessionName || 'CloudCLI',
-    body: `${providerLabel}: ${message}`,
+    body,
     data: {
       sessionId: normalizedEvent.sessionId || null,
       code: normalizedEvent.code,

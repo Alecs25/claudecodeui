@@ -71,6 +71,18 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
+// The server writes push texts in English; the one asking the user to come
+// back and answer reads in the device's language when we have it.
+const LOCALIZED_PUSH_BODIES = {
+  'question.pending': { it: 'Claude aspetta una tua risposta' }
+};
+
+function localizePushBody(payload) {
+  const byLanguage = LOCALIZED_PUSH_BODIES[payload.data?.code];
+  const language = String(self.navigator?.language || '').slice(0, 2).toLowerCase();
+  return (byLanguage && byLanguage[language]) || payload.body || '';
+}
+
 // Push notification event
 self.addEventListener('push', event => {
   if (!event.data) return;
@@ -83,7 +95,7 @@ self.addEventListener('push', event => {
   }
 
   const options = {
-    body: payload.body || '',
+    body: localizePushBody(payload),
     icon: '/logo-256.png',
     badge: '/logo-128.png',
     data: payload.data || {},

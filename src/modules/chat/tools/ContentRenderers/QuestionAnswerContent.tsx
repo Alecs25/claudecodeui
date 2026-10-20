@@ -203,11 +203,6 @@ export const QuestionAnswerContent: React.FC<QuestionAnswerContentProps> = ({
         );
       })}
 
-      {!hasAnyAnswer && total === 1 && (
-        <div className="text-[11px] italic text-gray-400 dark:text-gray-500">
-          Skipped
-        </div>
-      )}
     </div>
   );
 };

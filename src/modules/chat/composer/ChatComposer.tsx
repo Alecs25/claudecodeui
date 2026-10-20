@@ -6,6 +6,7 @@ import type {
   FormEvent,
   KeyboardEvent,
   MouseEvent,
+  MutableRefObject,
   ReactNode,
   Ref,
   RefObject,
@@ -15,7 +16,8 @@ import { XIcon, Loader2, ArrowUpIcon, PencilIcon } from 'lucide-react';
 
 import { useVoiceInput } from '@/modules/chat/hooks/useVoiceInput';
 import { useVoiceAvailable } from '@/modules/chat/hooks/useVoiceAvailable';
-import type { BackgroundSendChoice, BackgroundSendPrompt, QueuedDraft, ScheduledMessage, SlashCommand,SessionActivity,PendingPermissionRequest,PermissionMode,ProviderModelOption } from '@/shared/types';
+import type { BackgroundSendChoice, BackgroundSendPrompt, QueuedDraft, ScheduledMessage, SlashCommand,SessionActivity,PendingPermissionRequest,PermissionMode,PromptTextAnswerHandler,ProviderModelOption } from '@/shared/types';
+import { hasInteractivePromptCard } from '@/modules/chat/utils/interactivePrompts';
 import {
   PromptInput,
   PromptInputHeader,
@@ -54,6 +56,8 @@ type ChatComposerProps = {
     decision: { allow?: boolean; message?: string; rememberEntry?: string | null; updatedInput?: unknown },
   ) => void;
   handleGrantToolPermission: (suggestion: { entry: string; toolName: string }) => { success: boolean };
+  /** Where an open question or plan card installs its handler for text the user sends. */
+  promptTextAnswerRef?: MutableRefObject<PromptTextAnswerHandler | null>;
   activity: SessionActivity | null;
   isLoading: boolean;
   onAbortSession: () => void;
@@ -148,6 +152,7 @@ export default function ChatComposer({
   pendingPermissionRequests,
   handlePermissionDecision,
   handleGrantToolPermission,
+  promptTextAnswerRef,
   activity,
   isLoading,
   onAbortSession,
@@ -283,10 +288,9 @@ export default function ChatComposer({
   const isRecording = voiceState === 'recording';
   const isTranscribing = voiceState === 'transcribing';
 
-  // Detect if the AskUserQuestion interactive panel is active
-  const hasQuestionPanel = pendingPermissionRequests.some(
-    (r) => r.toolName === 'AskUserQuestion'
-  );
+  // A question or plan on screen takes the input's place, as in Claude Code:
+  // the card is the way to answer, and nothing else looks like the next step.
+  const hasPromptCard = hasInteractivePromptCard(pendingPermissionRequests);
 
   // Hide the thinking/status bar while any permission request is pending
   const hasPendingPermissions = pendingPermissionRequests.length > 0;
@@ -328,6 +332,7 @@ export default function ChatComposer({
             pendingPermissionRequests={pendingPermissionRequests}
             handlePermissionDecision={handlePermissionDecision}
             handleGrantToolPermission={handleGrantToolPermission}
+            textAnswerRef={promptTextAnswerRef}
           />
         </div>
       )}
@@ -373,7 +378,7 @@ export default function ChatComposer({
         />
       )}
 
-      {!hasQuestionPanel && <div className="relative mx-auto max-w-[54.25rem]">
+      {!hasPromptCard && <div className="relative mx-auto max-w-[54.25rem]">
         {showFileDropdown && filteredFiles.length > 0 && (
           <div
             ref={fileDropdownRef}

@@ -6,6 +6,7 @@ import type {
   FormEvent,
   KeyboardEvent,
   MouseEvent,
+  MutableRefObject,
   SetStateAction,
   TouchEvent,
 } from 'react';
@@ -17,7 +18,7 @@ import { PROVIDER_PERMISSION_PREFERENCE_KEYS, START_SUGGESTED_SESSION_EVENT } fr
 import { readUserPreference } from '@/shared/userSettings';
 import { useOptionalUiPreferences } from '@/shared/context/UiPreferencesContext';
 import { isOnScreenKeyboardDevice } from '@/shared/utils';
-import type { BackgroundSendChoice, BackgroundSendPrompt, CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,SlashCommand } from '@/shared/types';
+import type { BackgroundSendChoice, BackgroundSendPrompt, CommandModalPayload, CostCommandData, HelpCommandData, MarkSessionProcessing, ModelCommandData, QueuedDraft, SessionActivityMap, StatusCommandData,QueuedSendOptions,ChatAttachment,ChatMessage,PendingPermissionRequest,PermissionMode,SessionEstablishedContext,Project,ProjectSession,LLMProvider,PromptTextAnswerHandler,SlashCommand } from '@/shared/types';
 import { grantClaudeToolPermission } from '@/modules/chat/utils/chatPermissions';
 import {
   clearQueuedMessage,
@@ -78,6 +79,12 @@ type UseChatComposerStateArgs = {
   setPendingPermissionRequests: Dispatch<SetStateAction<PendingPermissionRequest[]>>;
   /** Whether the provider can take a message into the turn it is running (`chat.steer`). */
   supportsSteering?: boolean;
+  /**
+   * Set by an open question or plan card. A message sent while one is open is
+   * its answer (the question's "Other", the plan's rejection reason) rather
+   * than a new message queued behind a turn that is waiting on that answer.
+   */
+  promptTextAnswerRef?: MutableRefObject<PromptTextAnswerHandler | null>;
 };
 
 type MentionableFile = {
@@ -213,6 +220,7 @@ export function useChatComposerState({
   setIsUserScrolledUp,
   setPendingPermissionRequests,
   supportsSteering = false,
+  promptTextAnswerRef,
 }: UseChatComposerStateArgs) {
   const { t } = useTranslation('chat');
   // On unless turned off in Quick settings; the composer's own tests mount no provider.
@@ -835,6 +843,26 @@ export function useChatComposerState({
         return;
       }
 
+      // Plain text (no files, no command) answers the question Claude is waiting on.
+      const answerPrompt = promptTextAnswerRef?.current;
+      if (
+        answerPrompt
+        && !queuedSubmission
+        && currentAttachments.length === 0
+        && !currentInput.trim().startsWith('/')
+        && answerPrompt(currentInput.trim())
+      ) {
+        recordSentMessage(currentInput);
+        setInput('');
+        inputValueRef.current = '';
+        resetCommandMenuState();
+        setIsTextareaExpanded(false);
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+        }
+        return;
+      }
+
       // /btw goes to the side chat, which answers from a fork of the session:
       // it works mid-turn, so it must be caught before the queueing below.
       const btwQuestion = submitOptions?.skipCommandInterception || queuedSubmission
@@ -1106,6 +1134,7 @@ export function useChatComposerState({
       isLoading,
       onSessionProcessing,
       onSessionEstablished,
+      promptTextAnswerRef,
       provider,
       queueMessage,
       recordSentMessage,

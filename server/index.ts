@@ -120,6 +120,7 @@ chatRunRegistry.setRetentionGuard((sessionId) => providerRuntimeService.hasBackg
 chatRunRegistry.setLifecycleListeners({
     onRunStarted: (sessionId) => sessionRunStatus.handleRunStarted(sessionId),
     onRunCompleted: (sessionId, userId) => sessionRunStatus.handleRunCompleted(sessionId, userId),
+    onPromptsChanged: (sessionId, userId, change) => sessionRunStatus.handlePromptsChanged(sessionId, userId, change),
 });
 // Completion notifications are skipped for a session on screen in a visible tab.
 setSessionViewedCheck((sessionId: string, userId: string | number | null) => viewerPresence.isSessionViewed(sessionId, userId));

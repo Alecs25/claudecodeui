@@ -68,7 +68,7 @@
     "openCommandPalette": "Apri tavolozza comandi",
     "attentionRequiredIndicator": "La sessione richiede attenzione",
     "unreadSessionIndicator": "Non letta",
-    "waitingSessionIndicator": "In attesa di un permesso",
+    "waitingSessionIndicator": "Aspetta una tua risposta",
     "processingSessionIndicator": "Sessione in elaborazione",
     "backgroundWorkIndicator": "Attività in background"
   },
@@ -252,5 +252,10 @@
     "emptyTitle": "Nessun elemento archiviato",
     "noMatchingSessions": "Nessun elemento archiviato corrispondente",
     "loadingTitle": "Caricamento archivio..."
+  },
+  "sessionWaiting": {
+    "message": "Claude aspetta una tua risposta",
+    "open": "Apri",
+    "dismiss": "Chiudi"
   }
 }
