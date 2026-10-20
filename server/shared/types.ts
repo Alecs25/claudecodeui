@@ -289,6 +289,11 @@ export type SessionUpsertedEvent = {
     isPinned: boolean;
     isUnread: boolean;
     isCompleted: boolean;
+    /**
+     * App session id of the session this one was spawned from (a Claude
+     * desktop task chip), so the sidebar can nest it; null when there is none.
+     */
+    parentSessionId: string | null;
   };
   project: SessionUpsertedProject | null;
   timestamp: string;

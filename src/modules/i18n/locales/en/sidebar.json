@@ -44,6 +44,8 @@
     "deleteSelected_other": "Delete {{count}} sessions",
     "completedSection": "Completed",
     "newSessionIn": "New session in {{project}}",
+    "collapseChildSessions": "Hide {{count}} sessions started from here",
+    "expandChildSessions": "Show {{count}} sessions started from here",
     "showMoreCount": "Show {{count}} more",
     "loadMore": "Load more sessions",
     "needsAttention": "Sessions need attention"

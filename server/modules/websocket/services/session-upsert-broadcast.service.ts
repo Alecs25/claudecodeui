@@ -2,6 +2,7 @@ import path from 'node:path';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
 import { generateDisplayName } from '@/modules/projects/index.js';
+import { loadSessionParentResolver } from '@/modules/providers/index.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
 import type { SessionUpsertedEvent } from '@/shared/types.js';
 
@@ -31,6 +32,9 @@ async function buildSessionUpsertedEvent(
     return null;
   }
 
+  // Only Claude sessions can have a desktop-app parent; the others skip the
+  // (cached) metadata read, so their upsert is not delayed by it.
+  const parentSessionId = row.provider === 'claude' ? (await loadSessionParentResolver())(row) : null;
   const projectPath = row.project_path;
   const project = projectPath ? projectsDb.getProjectPath(projectPath) : null;
   const displayName = project?.custom_project_name?.trim()
@@ -52,6 +56,7 @@ async function buildSessionUpsertedEvent(
       isPinned: Boolean(row.isPinned),
       isUnread: Boolean(row.isUnread),
       isCompleted: Boolean(row.isCompleted),
+      parentSessionId,
     },
     project: project
       ? {

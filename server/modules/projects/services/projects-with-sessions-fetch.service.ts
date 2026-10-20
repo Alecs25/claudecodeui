@@ -2,7 +2,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { projectsDb, sessionsDb } from '@/modules/database/index.js';
-import { sessionSynchronizerService } from '@/modules/providers/index.js';
+import { loadSessionParentResolver, sessionSynchronizerService } from '@/modules/providers/index.js';
+import type { SessionParentResolver } from '@/modules/providers/index.js';
 import { WS_OPEN_STATE, connectedClients } from '@/modules/websocket/index.js';
 import type { RealtimeClientConnection } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
@@ -17,11 +18,14 @@ type SessionSummary = {
   isPinned: boolean;
   isUnread: boolean;
   isCompleted: boolean;
+  /** App session id of the session this one was spawned from, when it is known. */
+  parentSessionId: string | null;
 };
 
 type SessionRepositoryRow = {
   provider: string;
   session_id: string;
+  provider_session_id?: string | null;
   custom_name?: string | null;
   updated_at?: string | null;
   created_at?: string | null;
@@ -144,7 +148,7 @@ function normalizeSessionPagination(options: SessionPaginationOptions = {}): { l
   };
 }
 
-function mapSessionRowToSummary(row: SessionRepositoryRow): SessionSummary {
+function mapSessionRowToSummary(row: SessionRepositoryRow, resolveParent: SessionParentResolver): SessionSummary {
   return {
     id: row.session_id,
     provider: row.provider,
@@ -154,14 +158,18 @@ function mapSessionRowToSummary(row: SessionRepositoryRow): SessionSummary {
     isPinned: Boolean(row.isPinned),
     isUnread: Boolean(row.isUnread),
     isCompleted: Boolean(row.isCompleted),
+    parentSessionId: resolveParent(row),
   };
 }
 
-function readProjectSessionsIncludingArchived(projectPath: string): ProjectSessionsPageResult {
+function readProjectSessionsIncludingArchived(
+  projectPath: string,
+  resolveParent: SessionParentResolver,
+): ProjectSessionsPageResult {
   const rows = sessionsDb.getSessionsByProjectPathIncludingArchived(projectPath) as SessionRepositoryRow[];
 
   return {
-    sessions: rows.map(mapSessionRowToSummary),
+    sessions: rows.map((sessionRow) => mapSessionRowToSummary(sessionRow, resolveParent)),
     total: rows.length,
     hasMore: false,
   };
@@ -172,6 +180,7 @@ function readProjectSessionsIncludingArchived(projectPath: string): ProjectSessi
  */
 function readProjectSessionsPageByPath(
   projectPath: string,
+  resolveParent: SessionParentResolver,
   options: SessionPaginationOptions = {},
 ): ProjectSessionsPageResult {
   const pagination = normalizeSessionPagination(options);
@@ -183,7 +192,7 @@ function readProjectSessionsPageByPath(
   const total = sessionsDb.countSessionsByProjectPath(projectPath);
 
   return {
-    sessions: rows.map(mapSessionRowToSummary),
+    sessions: rows.map((sessionRow) => mapSessionRowToSummary(sessionRow, resolveParent)),
     total,
     hasMore: pagination.offset + rows.length < total,
   };
@@ -222,6 +231,7 @@ export async function getProjectsWithSessions(
   }>;
   const totalProjects = projectRows.length;
   const projects: ProjectListItem[] = [];
+  const resolveParent = await loadSessionParentResolver();
   let processedProjects = 0;
 
   for (const row of projectRows) {
@@ -239,7 +249,7 @@ export async function getProjectsWithSessions(
 
     const displayName = await resolveProjectDisplayName(row.custom_project_name, projectPath);
 
-    const sessionsPage = readProjectSessionsPageByPath(projectPath, {
+    const sessionsPage = readProjectSessionsPageByPath(projectPath, resolveParent, {
       limit: options.sessionsLimit,
       offset: options.sessionsOffset,
     });
@@ -287,11 +297,12 @@ export async function getArchivedProjectsWithSessions(
   }>;
 
   const archivedProjects: ArchivedProjectListItem[] = [];
+  const resolveParent = await loadSessionParentResolver();
 
   for (const row of projectRows) {
     const displayName = await resolveProjectDisplayName(row.custom_project_name, row.project_path);
 
-    const sessionsPage = readProjectSessionsIncludingArchived(row.project_path);
+    const sessionsPage = readProjectSessionsIncludingArchived(row.project_path, resolveParent);
 
     archivedProjects.push({
       projectId: row.project_id,
@@ -326,7 +337,11 @@ export async function getProjectSessionsPage(
     });
   }
 
-  const sessionsPage = readProjectSessionsPageByPath(projectRow.project_path, options);
+  const sessionsPage = readProjectSessionsPageByPath(
+    projectRow.project_path,
+    await loadSessionParentResolver(),
+    options,
+  );
   return {
     projectId: projectRow.project_id,
     sessions: sessionsPage.sessions,

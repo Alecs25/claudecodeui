@@ -44,6 +44,8 @@
     "deleteSelected_other": "Elimina {{count}} sessioni",
     "completedSection": "Completate",
     "newSessionIn": "Nuova sessione in {{project}}",
+    "collapseChildSessions": "Nascondi le {{count}} sessioni avviate da qui",
+    "expandChildSessions": "Mostra le {{count}} sessioni avviate da qui",
     "showMoreCount": "Altre {{count}}",
     "loadMore": "Carica altre sessioni",
     "needsAttention": "Sessioni da guardare"

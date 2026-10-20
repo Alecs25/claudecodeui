@@ -49,7 +49,7 @@ const getSessionProvider = (session: ProjectSession): LLMProvider => {
     : 'claude';
 };
 
-const getSessionDate = (session: SessionWithProvider): Date => {
+export const getSessionDate = (session: SessionWithProvider): Date => {
   return new Date(getUpdatedTimestamp(session) || getCreatedTimestamp(session) || 0);
 };
 
