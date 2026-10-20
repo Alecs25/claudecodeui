@@ -43,7 +43,7 @@ export default function FileViewerPageStage({ content, title, pageWidth }: FileV
       sandbox={HTML_PREVIEW_SANDBOX}
       srcDoc={content}
       referrerPolicy="no-referrer"
-      className="block border-0 bg-white"
+      className="block max-w-none border-0 bg-white"
       style={style}
     />
   );

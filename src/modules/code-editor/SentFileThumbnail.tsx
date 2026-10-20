@@ -111,7 +111,7 @@ export default function SentFileThumbnail({ file, label, onOpen }: SentFileThumb
           loading="lazy"
           tabIndex={-1}
           aria-hidden="true"
-          className="pointer-events-none absolute left-0 top-0 border-0 bg-white"
+          className="pointer-events-none absolute left-0 top-0 max-w-none border-0 bg-white"
           style={{
             width: THUMBNAIL_PAGE_WIDTH,
             height: THUMBNAIL_HEIGHT_PX / scale,
