@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, MouseEvent } from 'react';
-import { Archive, Check, CheckSquare, CircleCheck, Hand, Loader2, Square, X } from 'lucide-react';
+import { Archive, Check, CheckSquare, ChevronRight, CircleCheck, Hand, Loader2, Square, X } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 import { LLMProviderLogo } from '@/shared/ui';
@@ -47,6 +47,10 @@ type SidebarSessionItemProps = {
   /** Ticked for the pending bulk delete. Resolved by the list, which never ticks a running row. */
   isChecked?: boolean;
   onToggleSessionSelected?: (projectId: string, sessionId: string) => void;
+  /** Sessions nested under this row in a project group; 0 or absent = no fold toggle. */
+  childCount?: number;
+  areChildrenExpanded?: boolean;
+  onToggleChildren?: (sessionId: string) => void;
   t: TFunction;
 };
 
@@ -120,6 +124,9 @@ function SidebarSessionItem({
   isSelecting = false,
   isChecked = false,
   onToggleSessionSelected,
+  childCount = 0,
+  areChildrenExpanded = true,
+  onToggleChildren,
   t,
 }: SidebarSessionItemProps) {
   const sessionView = createSessionViewModel(session, currentTime, t);
@@ -219,6 +226,10 @@ function SidebarSessionItem({
   };
 
   const SelectionIcon = isChecked ? CheckSquare : Square;
+  const hasChildrenToggle = childCount > 0 && Boolean(onToggleChildren) && !isSelecting;
+  const childrenToggleLabel = areChildrenExpanded
+    ? t('sessions.collapseChildSessions', { count: childCount, defaultValue: 'Hide {{count}} sessions started from here' })
+    : t('sessions.expandChildSessions', { count: childCount, defaultValue: 'Show {{count}} sessions started from here' });
   const canArchive = Boolean(onArchiveSession) && !isProcessing;
   const archiveLabel = t('sessionMenu.archive', { defaultValue: 'Archive' });
 
@@ -291,7 +302,16 @@ function SidebarSessionItem({
             aria-hidden="true"
           />
         )}
-        <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center">
+        <span
+          className={cn(
+            'flex h-4 w-4 flex-shrink-0 items-center justify-center',
+            // The fold toggle sits over this slot: an idle row shows only the
+            // toggle, a row with a status shows the status until hovered.
+            hasChildrenToggle && (status === 'none'
+              ? 'invisible'
+              : '[@media(hover:hover)]:group-hover/row:invisible'),
+          )}
+        >
           <SessionStatusIcon status={status} t={t} />
         </span>
         <span
@@ -320,6 +340,25 @@ function SidebarSessionItem({
           </time>
         )}
       </a>
+
+      {hasChildrenToggle && (
+        // A sibling of the link, laid over its status slot, so toggling never
+        // opens the session.
+        <button
+          type="button"
+          className={cn(
+            'absolute left-1 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground',
+            status !== 'none' && 'opacity-0 [@media(hover:hover)]:group-hover/row:opacity-100 focus-visible:opacity-100',
+          )}
+          onClick={() => onToggleChildren?.(session.id)}
+          aria-expanded={areChildrenExpanded}
+          aria-label={childrenToggleLabel}
+          title={childrenToggleLabel}
+          data-testid="session-children-toggle"
+        >
+          <ChevronRight className={cn('h-3 w-3 transition-transform', areChildrenExpanded && 'rotate-90')} />
+        </button>
+      )}
 
       {!isSelecting && (
         <div

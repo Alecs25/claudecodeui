@@ -105,6 +105,11 @@ export type ProjectSession = {
   isPinned?: boolean;
   isUnread?: boolean;
   isCompleted?: boolean;
+  /**
+   * App session id of the session this one was spawned from (a Claude desktop
+   * task chip); the project list nests it under that row when both are shown.
+   */
+  parentSessionId?: string | null;
   // Tags the session with the owning project's DB `projectId` so UI handlers
   // (session switching, sidebar focus, etc.) can match against selectedProject.
   __projectId?: string;

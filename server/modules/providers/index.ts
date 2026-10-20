@@ -21,3 +21,8 @@ export { closeSessionsWatcher } from './services/sessions-watcher.service.js';
 
 // startClaudeSideChat: used by the side-chat module for /btw questions, which only Claude can fork without a trace.
 export { startClaudeSideChat } from './list/claude/claude-side-chat.js';
+
+// loadSessionParentResolver: used by the projects module and the session_upserted
+// broadcast to nest sessions the Claude desktop app spawned from another one.
+export { loadSessionParentResolver } from './services/session-parents.service.js';
+export type { SessionParentResolver } from './services/session-parents.service.js';
