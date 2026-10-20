@@ -241,3 +241,15 @@ export const OPEN_SIDE_CHAT_EVENT = 'cloudcli:open-side-chat';
  * project and the composer of that new session sends the queued prompt.
  */
 export const START_SUGGESTED_SESSION_EVENT = 'cloudcli:start-suggested-session';
+
+// ---------------------------
+
+//----------------- HTML PREVIEW ------------
+
+/**
+ * Sandbox of every iframe that renders an HTML file (side panel, central file
+ * viewer, chat card thumbnail, "open in new tab"). No `allow-same-origin`: the
+ * document gets an opaque origin, so its scripts run but can never read the
+ * app's auth token or call the API as the user.
+ */
+export const HTML_PREVIEW_SANDBOX = 'allow-forms allow-modals allow-popups allow-scripts';

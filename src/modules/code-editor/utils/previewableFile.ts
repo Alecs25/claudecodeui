@@ -62,3 +62,13 @@ export const getPreviewKind = (filename: string): PreviewKind | null => {
 // Returns undefined for non-previewable extensions.
 export const getPreviewMimeType = (filename: string): string | undefined =>
   EXTENSION_MIME[extensionOf(filename)];
+
+// Reject a "PDF" whose bytes aren't actually a PDF before handing it to the
+// same-origin iframe, so a mislabeled HTML/SVG file can't run in the app origin.
+const PDF_HEADER_SCAN_BYTES = 1024;
+
+export const looksLikePdf = async (blob: Blob): Promise<boolean> => {
+  const header = await blob.slice(0, PDF_HEADER_SCAN_BYTES).arrayBuffer();
+  // PDFs must contain the "%PDF-" marker at the very start of the file.
+  return new TextDecoder('latin1').decode(header).includes('%PDF-');
+};

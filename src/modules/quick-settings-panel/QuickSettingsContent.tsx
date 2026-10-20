@@ -1,6 +1,7 @@
 import {
   Braces,
   Brain,
+  FileText,
   Languages,
   Lightbulb,
   MessageSquareText,
@@ -55,6 +56,15 @@ const INPUT_SETTING_TOGGLES: PreferenceToggleItem[] = [
     key: 'promptSuggestions',
     labelKey: 'quickSettings.promptSuggestions',
     icon: Lightbulb,
+  },
+];
+
+// Chat behaviour that is not about typing: where files sent by an agent open.
+const CHAT_SETTING_TOGGLES: PreferenceToggleItem[] = [
+  {
+    key: 'autoOpenSentFiles',
+    labelKey: 'quickSettings.autoOpenSentFiles',
+    icon: FileText,
   },
 ];
 
@@ -127,6 +137,7 @@ export default function QuickSettingsContent({
             );
           })}
         </PillBar>
+        {renderToggleRows(CHAT_SETTING_TOGGLES)}
       </QuickSettingsSection>
 
       <QuickSettingsSection title={t('quickSettings.sections.inputSettings')}>
