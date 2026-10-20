@@ -35,6 +35,18 @@ type ChatRun = {
   completedAt: number | null;
   /** Who started the run; null for a scheduled message fired by a timer. */
   userId: string | number | null;
+  /**
+   * The prompts the run is blocked on (permission requests, questions, plan
+   * approvals), by request id with their tool. Read by the sidebar's
+   * "waiting for you" state for sessions a tab never subscribed to.
+   */
+  openPrompts: Map<string, string>;
+};
+
+/** What changed in a run's open prompts: the one just opened, when one was. */
+export type ChatRunPromptChange = {
+  openPrompts: Array<{ requestId: string; toolName: string }>;
+  opened: { requestId: string; toolName: string } | null;
 };
 
 /**
@@ -45,6 +57,7 @@ type ChatRun = {
 type ChatRunLifecycleListeners = {
   onRunStarted?: (appSessionId: string) => void;
   onRunCompleted?: (appSessionId: string, userId: string | number | null) => void;
+  onPromptsChanged?: (appSessionId: string, userId: string | number | null, change: ChatRunPromptChange) => void;
 };
 
 let lifecycleListeners: ChatRunLifecycleListeners = {};
@@ -113,6 +126,42 @@ function evictRunLater(run: ChatRun): void {
   timer.unref?.();
 }
 
+function listOpenPrompts(run: ChatRun): ChatRunPromptChange['openPrompts'] {
+  return Array.from(run.openPrompts, ([requestId, toolName]) => ({ requestId, toolName }));
+}
+
+/**
+ * Keeps a run's open prompts in step with the prompt events passing through
+ * it, and tells the listener when they change. The end of a run closes them
+ * all: a prompt cannot outlive the process waiting on it.
+ */
+function trackOpenPrompts(run: ChatRun, message: NormalizedMessage): void {
+  const requestId = typeof message.requestId === 'string' ? message.requestId : null;
+  let opened: ChatRunPromptChange['opened'] = null;
+
+  if (message.kind === 'permission_request' && requestId && !run.openPrompts.has(requestId)) {
+    const toolName = typeof message.toolName === 'string' ? message.toolName : 'UnknownTool';
+    run.openPrompts.set(requestId, toolName);
+    opened = { requestId, toolName };
+  } else if ((message.kind === 'permission_resolved' || message.kind === 'permission_cancelled') && requestId) {
+    if (!run.openPrompts.delete(requestId)) {
+      return;
+    }
+  } else if (message.kind === 'complete' && run.openPrompts.size > 0) {
+    run.openPrompts.clear();
+  } else {
+    return;
+  }
+
+  const { onPromptsChanged } = lifecycleListeners;
+  if (onPromptsChanged) {
+    notifyLifecycleListener('onPromptsChanged', () => onPromptsChanged(run.appSessionId, run.userId, {
+      openPrompts: listOpenPrompts(run),
+      opened,
+    }));
+  }
+}
+
 /**
  * Decorates one outbound live event for a run and records it in the event log.
  *
@@ -152,6 +201,8 @@ function decorateAndRecordEvent(run: ChatRun, message: NormalizedMessage): Norma
       notifyLifecycleListener('onRunCompleted', () => onRunCompleted(run.appSessionId, run.userId));
     }
   }
+
+  trackOpenPrompts(run, outbound);
 
   run.events.push(outbound);
   if (run.events.length > MAX_BUFFERED_EVENTS_PER_RUN) {
@@ -249,6 +300,7 @@ export const chatRunRegistry = {
       startedAt: Date.now(),
       completedAt: null,
       userId: input.userId,
+      openPrompts: new Map(),
     };
 
     run.writer = new ChatSessionWriter({
@@ -268,6 +320,13 @@ export const chatRunRegistry = {
       notifyLifecycleListener('onRunStarted', () => onRunStarted(input.appSessionId));
     }
     return run;
+  },
+
+  /** The sessions whose run is blocked on a prompt right now, with those prompts. */
+  listWaitingSessions(): Array<{ sessionId: string; userId: string | number | null; openPrompts: ChatRunPromptChange['openPrompts'] }> {
+    return Array.from(runs.values())
+      .filter((run) => run.openPrompts.size > 0)
+      .map((run) => ({ sessionId: run.appSessionId, userId: run.userId, openPrompts: listOpenPrompts(run) }));
   },
 
   getRun(appSessionId: string): ChatRun | undefined {

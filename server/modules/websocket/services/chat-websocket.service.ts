@@ -7,7 +7,7 @@ import { providerModelsService, sessionsService } from '@/modules/providers/inde
 import { sideChatService } from '@/modules/side-chat/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
-import { sessionRunStatus } from '@/modules/websocket/services/session-run-status.service.js';
+import { buildSessionWaitingEvent, sessionRunStatus } from '@/modules/websocket/services/session-run-status.service.js';
 import { viewerPresence } from '@/modules/websocket/services/viewer-presence.service.js';
 import {
   getGlobalImageAssetsDir,
@@ -835,6 +835,22 @@ function handleClientPresence(
   }
 }
 
+/**
+ * Tells a socket that just connected which sessions wait for the user, so a
+ * reloaded tab shows the hand on rows it never subscribed to. Sent in full;
+ * the client replaces what it knew.
+ */
+function sendWaitingSessionsSnapshot(ws: WebSocket, userId: string | number | null): void {
+  const sessions = chatRunRegistry.listWaitingSessions()
+    .filter((session) => session.userId === null || userId === null || String(session.userId) === String(userId))
+    .map((session) => buildSessionWaitingEvent(session.sessionId, session.openPrompts));
+  sendJson(ws, {
+    kind: 'sessions_waiting_snapshot',
+    sessions,
+    timestamp: new Date().toISOString(),
+  });
+}
+
 export function handleChatConnection(
   ws: WebSocket,
   request: AuthenticatedWebSocketRequest,
@@ -844,6 +860,7 @@ export function handleChatConnection(
   connectedClients.add(ws);
 
   const userId = readRequestUserId(request);
+  sendWaitingSessionsSnapshot(ws, userId);
 
   ws.on('message', async (rawMessage) => {
     try {

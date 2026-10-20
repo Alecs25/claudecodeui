@@ -1,4 +1,5 @@
 import { notificationPreferencesDb, sessionsDb } from '@/modules/database/index.js';
+import type { ChatRunPromptChange } from '@/modules/websocket/services/chat-run-registry.service.js';
 import { viewerPresence } from '@/modules/websocket/services/viewer-presence.service.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
 
@@ -59,6 +60,74 @@ function broadcastSessionStatus(row: SessionRow, extra: Pick<SessionStatusEvent,
       client.send(payload);
     }
   });
+}
+
+/**
+ * The `session_waiting` frame: the prompts a session's run is blocked on, in
+ * full, so a client replaces what it had. `requestIds` empty means the session
+ * no longer waits. `openedUnseen` is set on the frame announcing a prompt that
+ * opened while no visible tab shows the session; the client toasts it when
+ * `notify` says "action required" notifications are on.
+ */
+export type SessionWaitingEvent = {
+  kind: 'session_waiting';
+  sessionId: string;
+  sessionTitle: string;
+  requestIds: string[];
+  toolNames: string[];
+  openedUnseen?: boolean;
+  openedToolName?: string;
+  notify?: boolean;
+  timestamp: string;
+};
+
+function readSessionTitle(sessionId: string): string {
+  try {
+    return sessionsDb.getSessionById(sessionId)?.custom_name?.trim() || '';
+  } catch (error) {
+    console.error('[SessionRunStatus] Could not read the session title:', error);
+    return '';
+  }
+}
+
+/** The waiting frame for one session's open prompts. */
+export function buildSessionWaitingEvent(
+  sessionId: string,
+  openPrompts: ChatRunPromptChange['openPrompts'],
+  extra: Pick<SessionWaitingEvent, 'openedUnseen' | 'openedToolName' | 'notify'> = {},
+): SessionWaitingEvent {
+  return {
+    kind: 'session_waiting',
+    sessionId,
+    sessionTitle: readSessionTitle(sessionId),
+    requestIds: openPrompts.map((prompt) => prompt.requestId),
+    toolNames: openPrompts.map((prompt) => prompt.toolName),
+    ...extra,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+function broadcastToAllClients(event: SessionWaitingEvent): void {
+  const payload = JSON.stringify(event);
+  connectedClients.forEach((client) => {
+    if (client.readyState === WS_OPEN_STATE) {
+      client.send(payload);
+    }
+  });
+}
+
+// Same lookup as the completion toast, for the "action required" preference.
+function isActionRequiredNotificationEnabled(userId: string | number | null): boolean {
+  const numericUserId = Number(userId);
+  if (userId === null || !Number.isInteger(numericUserId)) {
+    return true;
+  }
+  try {
+    return notificationPreferencesDb.getPreferences(numericUserId).events.actionRequired;
+  } catch (error) {
+    console.error('[SessionRunStatus] Could not read notification preferences:', error);
+    return true;
+  }
 }
 
 // The toast follows the same "run stopped" preference as push and desktop
@@ -132,6 +201,22 @@ export const sessionRunStatus = {
       finishedUnseen: true,
       notify: isCompletionNotificationEnabled(userId),
     });
+  },
+
+  /**
+   * A run's open prompts changed: every tab learns which sessions wait for the
+   * user, including ones it never subscribed to. Installed as the run
+   * registry's prompt listener.
+   */
+  handlePromptsChanged(sessionId: string, userId: string | number | null, change: ChatRunPromptChange): void {
+    const openedUnseen = Boolean(change.opened) && !viewerPresence.isSessionViewed(sessionId, userId);
+    broadcastToAllClients(buildSessionWaitingEvent(sessionId, change.openPrompts, openedUnseen
+      ? {
+          openedUnseen: true,
+          openedToolName: change.opened?.toolName,
+          notify: isActionRequiredNotificationEnabled(userId),
+        }
+      : {}));
   },
 
   /** Opening a session in a visible tab reads it. Called on each presence report. */

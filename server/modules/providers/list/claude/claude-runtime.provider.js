@@ -1586,7 +1586,8 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         provider: 'claude',
         sessionId: sessionId || capturedSessionId || null,
         kind: 'action_required',
-        code: 'permission.required',
+        // A question or a plan is Claude waiting for an answer, not a tool to approve.
+        code: requiresInteraction ? 'question.pending' : 'permission.required',
         meta: { toolName, sessionName: sessionSummary },
         severity: 'warning',
         requiresUserAction: true,
