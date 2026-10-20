@@ -1,6 +1,6 @@
 import React, { memo, useMemo, useCallback } from 'react';
 
-import type { DiffLine, Project,ToolStatus } from '@/shared/types';
+import type { DiffLine, Project, ToolStatus } from '@/shared/types';
 import { formatToolDisplayName, getToolConfig } from '@/modules/chat/tools/configs/toolConfigs';
 import { SentFilesCard, isSendUserFileTool, parseSentFilesResult } from '@/modules/code-editor';
 import { OneLineDisplay } from '@/modules/chat/tools/OneLineDisplay';
@@ -22,8 +22,7 @@ import { isShellTool } from '@/modules/chat/utils/toolActivity';
 import { isShowWidgetTool, readWidgetInput } from '@/modules/chat/utils/inlineWidget';
 import { InlineWidget } from '@/modules/chat/tools/InlineWidget';
 import { RawParameters } from '@/modules/chat/tools/RawParameters';
-import { QuestionSummary } from '@/modules/chat/tools/QuestionSummary';
-import { hasQuestionAnswers, readQuestions } from '@/modules/chat/utils/questionAnswers';
+import { QuestionCall } from '@/modules/chat/tools/QuestionCall';
 import { useIsVerboseTranscript } from '@/modules/chat/context/TranscriptViewModeContext';
 import { readToolDenial } from '@/modules/chat/utils/toolDenial';
 import { i18n } from '@/modules/i18n';
@@ -131,13 +130,11 @@ export const ToolRenderer: React.FC<ToolRendererProps> = memo(({
   }
 
   // An answered question reads as a compact summary of the answers; the full
-  // card, with every option, stays one click away. Unanswered (still pending
-  // or skipped entirely) keeps the full card.
+  // card, with every option, stays one click away. One still open is asked by
+  // the card in the composer's place, so here it is only a "waiting" line.
   if (mode === 'input' && toolName === 'AskUserQuestion') {
     const { questions, answers } = (parsedData && typeof parsedData === 'object' ? parsedData : {}) as { questions?: unknown; answers?: unknown };
-    if (hasQuestionAnswers(questions, answers)) {
-      return <QuestionSummary questions={readQuestions(questions)} answers={answers as Record<string, string>} />;
-    }
+    return <QuestionCall questions={questions} answers={answers} toolResult={toolResult} />;
   }
 
   // show_widget: the fragment itself is the content, drawn inline; its result is

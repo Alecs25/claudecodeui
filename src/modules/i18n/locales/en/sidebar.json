@@ -69,7 +69,7 @@
     "attentionRequiredIndicator": "Session needs attention",
     "backgroundWorkIndicator": "Background work running",
     "unreadSessionIndicator": "Unread",
-    "waitingSessionIndicator": "Waiting for permission",
+    "waitingSessionIndicator": "Waiting for your answer",
     "processingSessionIndicator": "Processing session"
   },
   "navigation": {
@@ -246,5 +246,10 @@
   },
   "archived": {
     "title": "Archive"
+  },
+  "sessionWaiting": {
+    "message": "Claude is waiting for your answer",
+    "open": "Open",
+    "dismiss": "Dismiss"
   }
 }

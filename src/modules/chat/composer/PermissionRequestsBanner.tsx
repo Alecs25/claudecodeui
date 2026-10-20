@@ -1,8 +1,9 @@
 import React from 'react';
+import type { MutableRefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ShieldAlertIcon } from 'lucide-react';
 
-import type { PendingPermissionRequest } from '@/shared/types';
+import type { PendingPermissionRequest, PromptTextAnswerHandler } from '@/shared/types';
 import {
   buildClaudeToolPermissionEntry,
   formatToolInputForDisplay,
@@ -13,6 +14,7 @@ import type { PermissionSubjectKind } from '@/modules/chat/utils/chatPermissions
 import { getClaudeSettings } from '@/modules/chat/utils/chatStorage';
 import { getPermissionPanel, registerPermissionPanel } from '@/modules/chat/tools/configs/permissionPanelRegistry';
 import { AskUserQuestionPanel } from '@/modules/chat/tools/InteractiveRenderers/AskUserQuestionPanel';
+import { PlanApprovalPanel } from '@/modules/chat/tools/InteractiveRenderers/PlanApprovalPanel';
 import {
   Confirmation,
   ConfirmationAction,
@@ -22,6 +24,8 @@ import {
 } from '@/modules/chat/composer/Confirmation';
 
 registerPermissionPanel('AskUserQuestion', AskUserQuestionPanel);
+registerPermissionPanel('ExitPlanMode', PlanApprovalPanel);
+registerPermissionPanel('exit_plan_mode', PlanApprovalPanel);
 
 const SUBJECT_LABELS: Record<PermissionSubjectKind, string> = {
   command: 'Command',
@@ -39,6 +43,8 @@ type PermissionRequestsBannerProps = {
     decision: { allow?: boolean; message?: string; rememberEntry?: string | null; updatedInput?: unknown },
   ) => void;
   handleGrantToolPermission: (suggestion: { entry: string; toolName: string }) => { success: boolean };
+  /** Handed to a question or plan card, which installs its handler for text sent from the composer. */
+  textAnswerRef?: MutableRefObject<PromptTextAnswerHandler | null>;
 };
 
 /**
@@ -53,12 +59,10 @@ export default function PermissionRequestsBanner({
   pendingPermissionRequests,
   handlePermissionDecision,
   handleGrantToolPermission,
+  textAnswerRef,
 }: PermissionRequestsBannerProps) {
   const { t } = useTranslation();
-  // Filter out plan tool requests — they are handled inline by PlanDisplay
-  const filteredRequests = orderPermissionRequests(pendingPermissionRequests.filter(
-    (r) => r.toolName !== 'ExitPlanMode' && r.toolName !== 'exit_plan_mode'
-  ));
+  const filteredRequests = orderPermissionRequests(pendingPermissionRequests);
 
   if (!filteredRequests.length) {
     return null;
@@ -83,8 +87,10 @@ export default function PermissionRequestsBanner({
             <div key={request.requestId}>
               {position && <div className="mb-1 text-right">{position}</div>}
               <CustomPanel
+                key={request.requestId}
                 request={request}
                 onDecision={handlePermissionDecision}
+                textAnswerRef={textAnswerRef}
               />
             </div>
           );

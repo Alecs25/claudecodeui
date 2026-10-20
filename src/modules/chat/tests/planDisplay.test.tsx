@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 
 import '@/modules/i18n';
 import PermissionContext from '@/modules/chat/context/PermissionContext';
@@ -32,18 +32,10 @@ describe('the plan approval card', () => {
     expect(screen.getByRole('cell', { name: 'a.ts' })).toBeTruthy();
   });
 
-  it('approves the pending plan', () => {
-    const decide = renderPlan();
-    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
-    expect(decide).toHaveBeenCalledWith('req-1', { allow: true });
-  });
-
-  it('rejects with the feedback the user typed', () => {
-    const decide = renderPlan();
-    fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
-    fireEvent.change(screen.getByRole('textbox', { name: 'Feedback' }), { target: { value: 'Skip the migration' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Reject and send' }));
-    expect(decide).toHaveBeenCalledWith('req-1', { allow: false, message: `${REVISE}: Skip the migration` });
+  it('while the plan waits, says so and leaves the answer to the card in the composer', () => {
+    renderPlan();
+    expect(screen.getByTestId('plan-waiting').textContent).toContain('Waiting for your approval');
+    expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
   });
 
   it('says how an answered plan went, with the feedback, and offers no actions', () => {

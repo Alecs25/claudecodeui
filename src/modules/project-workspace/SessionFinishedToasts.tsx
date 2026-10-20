@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CheckCircle2, X } from 'lucide-react';
+import { CheckCircle2, Hand, X } from 'lucide-react';
 import type { NavigateFunction } from 'react-router-dom';
 
 import { useWebSocket } from '@/shared/context/WebSocketContext';
@@ -9,6 +9,8 @@ import type { ServerEvent } from '@/shared/types';
 type FinishedSessionToast = {
   sessionId: string;
   title: string;
+  /** 'waiting': Claude asked something there and waits for the answer. */
+  variant: 'finished' | 'waiting';
 };
 
 /** How long a toast stays up on its own. The unread dot keeps the signal after it goes. */
@@ -18,11 +20,15 @@ const MAX_VISIBLE_TOASTS = 3;
 
 /**
  * Rendered by ProjectWorkspaceShell: a toast for each session whose run ended
- * while no tab was showing it, with a button that opens the session.
+ * while no tab was showing it, and for each one where Claude started waiting
+ * for an answer (a question, a plan, a permission), with a button that opens
+ * the session.
  *
- * It reacts to the server's `session_status` frame marked `finishedUnseen`, so
- * "not viewing" is decided once, server-side, for every tab alike; `notify` is
- * false when the user turned off "run stopped" notifications in Settings.
+ * It reacts to the server's `session_status` frame marked `finishedUnseen` and
+ * `session_waiting` frame marked `openedUnseen`, so "not viewing" is decided
+ * once, server-side, for every tab alike; `notify` is false when the user
+ * turned that kind of notification off in Settings. A waiting toast goes away
+ * by itself once the session no longer waits.
  */
 function SessionFinishedToasts({ navigate }: { navigate: NavigateFunction }) {
   const { t } = useTranslation('sidebar');
@@ -40,20 +46,34 @@ function SessionFinishedToasts({ navigate }: { navigate: NavigateFunction }) {
   }, []);
 
   useEffect(() => subscribe((event: ServerEvent) => {
-    if (event.kind !== 'session_status' || event.finishedUnseen !== true || event.notify === false) {
-      return;
-    }
     if (typeof event.sessionId !== 'string' || !event.sessionId) {
       return;
     }
     const sessionId = event.sessionId;
+    const isWaitingOver = event.kind === 'session_waiting'
+      && (!Array.isArray(event.requestIds) || event.requestIds.length === 0);
+    if (isWaitingOver) {
+      setToasts((previous) => previous.some((toast) => toast.sessionId === sessionId && toast.variant === 'waiting')
+        ? previous.filter((toast) => toast.sessionId !== sessionId)
+        : previous);
+      return;
+    }
+
+    const variant: FinishedSessionToast['variant'] | null = event.kind === 'session_status' && event.finishedUnseen === true
+      ? 'finished'
+      : event.kind === 'session_waiting' && event.openedUnseen === true
+        ? 'waiting'
+        : null;
+    if (!variant || event.notify === false) {
+      return;
+    }
     const title = typeof event.sessionTitle === 'string' && event.sessionTitle.trim()
       ? event.sessionTitle.trim()
       : t('sessionFinished.untitled', { defaultValue: 'Session' });
 
     setToasts((previous) => [
       ...previous.filter((toast) => toast.sessionId !== sessionId),
-      { sessionId, title },
+      { sessionId, title, variant },
     ].slice(-MAX_VISIBLE_TOASTS));
 
     const existingTimer = timersRef.current.get(sessionId);
@@ -84,14 +104,18 @@ function SessionFinishedToasts({ navigate }: { navigate: NavigateFunction }) {
         <div
           key={toast.sessionId}
           role="status"
-          data-testid="session-finished-toast"
+          data-testid={toast.variant === 'waiting' ? 'session-waiting-toast' : 'session-finished-toast'}
           className="pointer-events-auto flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 shadow-lg"
         >
-          <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-emerald-500" />
+          {toast.variant === 'waiting'
+            ? <Hand className="h-4 w-4 flex-shrink-0 text-amber-500" />
+            : <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-emerald-500" />}
           <div className="min-w-0 flex-1">
             <p className="truncate text-xs font-medium text-foreground" title={toast.title}>{toast.title}</p>
             <p className="text-[11px] text-muted-foreground">
-              {t('sessionFinished.message', { defaultValue: 'Finished' })}
+              {toast.variant === 'waiting'
+                ? t('sessionWaiting.message', { defaultValue: 'Claude is waiting for your answer' })
+                : t('sessionFinished.message', { defaultValue: 'Finished' })}
             </p>
           </div>
           <button

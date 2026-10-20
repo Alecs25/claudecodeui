@@ -318,6 +318,7 @@ function SidebarSessionItem({
           className={cn(
             'min-w-0 flex-1 truncate',
             status === 'unread' && 'font-medium',
+            status === 'waiting' && 'font-semibold',
             session.isCompleted && !isSelected && 'text-muted-foreground',
           )}
           title={sessionView.sessionName}

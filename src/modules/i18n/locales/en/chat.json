@@ -124,7 +124,8 @@
     "feedback": "Feedback",
     "feedbackPlaceholder": "What should change? (optional)",
     "approved": "Approved",
-    "rejected": "Rejected"
+    "rejected": "Rejected",
+    "waiting": "Waiting for your approval"
   },
   "usageLimit": {
     "resetAt": "Claude usage limit reached. Your limit will reset at **{{time}} {{timezone}}** - {{date}}"
@@ -541,7 +542,13 @@
   },
   "questions": {
     "title": "Questions",
-    "skipped": "Skipped"
+    "skipped": "Skipped",
+    "answers_one": "{{count}} answer",
+    "answers_other": "{{count}} answers",
+    "pending": "waiting",
+    "skippedState": "skipped",
+    "cancelled": "cancelled",
+    "question": "Question"
   },
   "sideChat": {
     "title": "Side chat",
@@ -557,5 +564,26 @@
     "dismiss": "Dismiss",
     "started": "Session started",
     "dismissed": "Dismissed"
+  },
+  "prompt": {
+    "waiting": "{{provider}} is waiting for your answer",
+    "question": "Question",
+    "progress": "{{current}} of {{total}}",
+    "multiSelect": "multiple choice",
+    "recommended": "recommended",
+    "other": "Other",
+    "otherPlaceholder": "Other: type an answer…",
+    "skip": "Skip",
+    "next": "Next",
+    "back": "Back",
+    "submit": "Send",
+    "submitAll": "Send answers",
+    "preview": "Preview",
+    "planChip": "Plan",
+    "planQuestion": "Approve this plan?",
+    "approve": "Approve",
+    "rejectWithReason": "Reject with reason",
+    "reasonPlaceholder": "What should change?",
+    "reason": "Reason"
   }
 }

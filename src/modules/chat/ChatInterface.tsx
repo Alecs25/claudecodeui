@@ -14,6 +14,7 @@ import type {
   FileRewindResult,
   Project,
   ProjectSession,
+  PromptTextAnswerHandler,
   SessionEstablishedContext,
   SessionNavigationOptions,
   SettingsOpenTarget,
@@ -32,6 +33,8 @@ import {
 import ChatMessagesPane from '@/modules/chat/transcript/ChatMessagesPane';
 import { useTranscriptViewModeShortcut } from '@/modules/chat/hooks/useTranscriptViewModeShortcut';
 import ChatComposer from '@/modules/chat/composer/ChatComposer';
+import PromptWaitingBar from '@/modules/chat/composer/PromptWaitingBar';
+import { hasInteractivePromptCard } from '@/modules/chat/utils/interactivePrompts';
 import { hasForegroundBackgroundableCall } from '@/modules/chat/utils/backgroundTasks';
 import CommandResultModal from '@/modules/chat/modals/CommandResultModal';
 import RewindDialog from '@/modules/chat/modals/RewindDialog';
@@ -90,6 +93,8 @@ function ChatInterface({
   isSecondaryPane = false,
 }: ChatInterfaceProps) {
   const paneRef = useRef<HTMLDivElement>(null);
+  // The open question or plan card puts its answer handler here for the composer's submit.
+  const promptTextAnswerRef = useRef<PromptTextAnswerHandler | null>(null);
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const { subscribe } = useWebSocket();
   const { t } = useTranslation('chat');
@@ -294,6 +299,7 @@ function ChatInterface({
     setPendingPermissionRequests,
     resolvePermissionModeForProvider,
     supportsSteering,
+    promptTextAnswerRef,
   });
 
   // On WebSocket reconnect, request a bounded persisted-tail sync (deferred
@@ -512,7 +518,11 @@ function ChatInterface({
   }), [selectedProject?.projectId]);
 
   // Lets a workflow card fetch its agents' timelines for this session.
-  const transcriptSessionValue = useMemo(() => ({ sessionId: currentSessionId }), [currentSessionId]);
+  const transcriptSessionValue = useMemo(
+    () => ({ sessionId: currentSessionId, isRunning: isProcessing }),
+    [currentSessionId, isProcessing],
+  );
+  const hasPromptCard = hasInteractivePromptCard(pendingPermissionRequests);
 
   // A composer pick becomes the default for new chats and, when a session is
   // open, is recorded against that session so reopening it restores this model.
@@ -565,6 +575,7 @@ function ChatInterface({
   return (
     <PermissionContext.Provider value={permissionContextValue}>
       <div ref={paneRef} data-chat-pane="" className="cq-column flex h-full min-h-0 flex-col">
+        {hasPromptCard && <PromptWaitingBar providerLabel={selectedProviderLabel} />}
         <MarkdownWorkspaceContext.Provider value={markdownWorkspaceValue}>
           <TranscriptSessionContext.Provider value={transcriptSessionValue}>
             <ChatMessagesPane
@@ -648,6 +659,7 @@ function ChatInterface({
           pendingPermissionRequests={pendingPermissionRequests}
           handlePermissionDecision={handlePermissionDecision}
           handleGrantToolPermission={handleGrantToolPermission}
+          promptTextAnswerRef={promptTextAnswerRef}
           activity={sessionActivity}
           isLoading={isProcessing}
           onAbortSession={handleAbortSession}

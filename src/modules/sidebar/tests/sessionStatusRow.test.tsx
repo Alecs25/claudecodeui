@@ -115,6 +115,8 @@ test('activity seen elsewhere reads as unread, and an open prompt outranks the s
   const hand = waiting.container.querySelector('[role="status"]');
   assert.equal(hand?.getAttribute('aria-label'), 'tooltips.waitingSessionIndicator');
   assert.equal(waiting.container.querySelectorAll('.animate-spin').length, 0);
+  // A session waiting for the user stands out in the list.
+  assert.ok(waiting.container.querySelector('[title="session s1"].font-semibold'));
 });
 
 test('a row has a single line: title and age, no message count', () => {

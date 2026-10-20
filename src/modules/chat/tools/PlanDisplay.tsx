@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronsUpDown, FileText, X } from 'lucide-react';
+import { Check, ChevronsUpDown, FileText, Hand, X } from 'lucide-react';
 
 import {
   Card,
@@ -8,7 +8,6 @@ import {
   CardTitle,
   CardContent,
   CardFooter,
-  Button,
   Collapsible,
   CollapsibleTrigger,
   CollapsibleContent,
@@ -50,8 +49,9 @@ function findPlanRequest(requests: PendingPermissionRequest[], content: string):
 
 /**
  * Rendered by chat's ToolRenderer for plan tools (ExitPlanMode): the proposed
- * plan as Markdown (tables included) with Approve, or Reject with optional
- * feedback for the agent to revise against. Once answered, the footer says how.
+ * plan as Markdown (tables included). While it waits, the card in the
+ * composer's place takes the answer and this footer says so; once answered,
+ * the footer says how.
  */
 export const PlanDisplay: React.FC<PlanDisplayProps> = ({
   title,
@@ -66,31 +66,9 @@ export const PlanDisplay: React.FC<PlanDisplayProps> = ({
   const { t } = useTranslation('chat');
   const decision = readPlanDecision(toolResult, t('misc.userAskedRevise'));
   const permissionCtx = usePermission();
-  const [isRejecting, setIsRejecting] = useState(false);
-  const [feedback, setFeedback] = useState('');
 
+  // The answer is given on the card that takes the composer's place; this one only says it waits.
   const pendingRequest = decision ? undefined : findPlanRequest(permissionCtx?.pendingPermissionRequests ?? [], content);
-
-  const handleApprove = () => {
-    if (pendingRequest && permissionCtx) {
-      permissionCtx.handlePermissionDecision(pendingRequest.requestId, { allow: true });
-    }
-  };
-
-  const handleReject = () => {
-    if (!pendingRequest || !permissionCtx) {
-      return;
-    }
-    const revise = t('misc.userAskedRevise');
-    const trimmed = feedback.trim();
-    // The deny message is what the agent reads back as the tool result.
-    permissionCtx.handlePermissionDecision(pendingRequest.requestId, {
-      allow: false,
-      message: trimmed ? `${revise}: ${trimmed}` : revise,
-    });
-    setIsRejecting(false);
-    setFeedback('');
-  };
 
   return (
     <Collapsible defaultOpen={defaultOpen}>
@@ -128,50 +106,11 @@ export const PlanDisplay: React.FC<PlanDisplayProps> = ({
         </CollapsibleContent>
 
         {pendingRequest && (
-          <CardFooter className="flex-col items-stretch gap-2 border-t border-border/40 px-4 pb-3 pt-3">
-            {isRejecting && (
-              <textarea
-                autoFocus
-                value={feedback}
-                onChange={(event) => setFeedback(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-                    event.preventDefault();
-                    handleReject();
-                  } else if (event.key === 'Escape') {
-                    setIsRejecting(false);
-                  }
-                }}
-                rows={3}
-                placeholder={t('plan.feedbackPlaceholder', { defaultValue: 'What should change? (optional)' })}
-                aria-label={t('plan.feedback', { defaultValue: 'Feedback' })}
-                className="w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
-              />
-            )}
-            <div className="flex flex-wrap justify-end gap-2">
-              {isRejecting ? (
-                <>
-                  <Button variant="ghost" size="sm" onClick={() => setIsRejecting(false)} className="text-muted-foreground">
-                    {t('plan.cancel', { defaultValue: 'Cancel' })}
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={handleReject}>
-                    <X className="mr-1 h-3.5 w-3.5" />
-                    {t('plan.sendRejection', { defaultValue: 'Reject and send' })}
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button variant="outline" size="sm" onClick={() => setIsRejecting(true)}>
-                    <X className="mr-1 h-3.5 w-3.5" />
-                    {t('plan.reject', { defaultValue: 'Reject' })}
-                  </Button>
-                  <Button size="sm" onClick={handleApprove}>
-                    <Check className="mr-1 h-3.5 w-3.5" />
-                    {t('plan.approve', { defaultValue: 'Approve' })}
-                  </Button>
-                </>
-              )}
-            </div>
+          <CardFooter className="border-t border-border/40 px-4 pb-3 pt-2 text-xs" data-testid="plan-waiting">
+            <span className="inline-flex items-center gap-1 font-medium text-amber-700 dark:text-amber-300">
+              <Hand className="h-3.5 w-3.5" aria-hidden />
+              {t('plan.waiting')}
+            </span>
           </CardFooter>
         )}
 
