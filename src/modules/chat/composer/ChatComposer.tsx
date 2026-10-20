@@ -7,6 +7,7 @@ import type {
   KeyboardEvent,
   MouseEvent,
   ReactNode,
+  Ref,
   RefObject,
   TouchEvent,
 } from 'react';
@@ -25,6 +26,8 @@ import {
   PromptInputButton,
   PromptInputSubmit,
 } from '@/modules/chat/composer/PromptInput';
+import { PromptInputEditable } from '@/modules/chat/composer/PromptInputEditable';
+import type { TextareaLikeElement } from '@/modules/chat/composer/PromptInputEditable';
 import { isOnScreenKeyboardDevice } from '@/shared/utils';
 import CommandMenu from '@/modules/chat/composer/CommandMenu';
 import ActivityIndicator from '@/modules/chat/composer/ActivityIndicator';
@@ -220,6 +223,8 @@ export default function ChatComposer({
   sendByCtrlEnter,
 }: ChatComposerProps) {
   const { t } = useTranslation('chat');
+  // Phone keyboards insert clipboard images only into a rich editor; read once, a device does not change.
+  const [isEditableInput] = useState(isOnScreenKeyboardDevice);
   const orphanFileErrors = useMemo(() => {
     const attachedNames = new Set(attachedFiles.map((file) => file.name));
     return Array.from(fileErrors).filter(([name]) => !attachedNames.has(name));
@@ -472,22 +477,42 @@ export default function ChatComposer({
               </div>
             </div>
 
-            <PromptInputTextarea
-              ref={textareaRef}
-              dir="auto"
-              value={input}
-              onChange={onInputChange}
-              onClick={onTextareaClick}
-              onKeyDown={onTextareaKeyDown}
-              onPaste={onTextareaPaste}
-              onScroll={(event) => onTextareaScrollSync(event.target as HTMLTextAreaElement)}
-              onFocus={() => onInputFocusChange?.(true)}
-              onBlur={() => onInputFocusChange?.(false)}
-              onInput={onTextareaInput}
-              placeholder={promptSuggestion ?? placeholder}
-              className={promptSuggestion ? 'pr-16 cq-compact:pr-4' : undefined}
-              enterKeyHint={isOnScreenKeyboardDevice() ? 'enter' : 'send'}
-            />
+            {isEditableInput ? (
+              <PromptInputEditable
+                ref={textareaRef as unknown as Ref<TextareaLikeElement>}
+                dir="auto"
+                value={input}
+                onChange={onInputChange}
+                onClick={onTextareaClick}
+                onKeyDown={onTextareaKeyDown}
+                onPaste={onTextareaPaste}
+                onScroll={(event) => onTextareaScrollSync(event.target as HTMLTextAreaElement)}
+                onFocus={() => onInputFocusChange?.(true)}
+                onBlur={() => onInputFocusChange?.(false)}
+                onInput={onTextareaInput}
+                placeholder={promptSuggestion ?? placeholder}
+                aria-label={t('input.ariaLabel', { defaultValue: 'Message' })}
+                className={promptSuggestion ? 'pr-16 cq-compact:pr-4' : undefined}
+                enterKeyHint="enter"
+              />
+            ) : (
+              <PromptInputTextarea
+                ref={textareaRef}
+                dir="auto"
+                value={input}
+                onChange={onInputChange}
+                onClick={onTextareaClick}
+                onKeyDown={onTextareaKeyDown}
+                onPaste={onTextareaPaste}
+                onScroll={(event) => onTextareaScrollSync(event.target as HTMLTextAreaElement)}
+                onFocus={() => onInputFocusChange?.(true)}
+                onBlur={() => onInputFocusChange?.(false)}
+                onInput={onTextareaInput}
+                placeholder={promptSuggestion ?? placeholder}
+                className={promptSuggestion ? 'pr-16 cq-compact:pr-4' : undefined}
+                enterKeyHint={isOnScreenKeyboardDevice() ? 'enter' : 'send'}
+              />
+            )}
 
             {/* A keyboard takes the suggestion with Tab or →; a phone has neither, so it gets a chip to tap. */}
             {promptSuggestion && onAcceptPromptSuggestion && (

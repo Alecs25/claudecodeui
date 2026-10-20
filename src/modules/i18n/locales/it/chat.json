@@ -140,6 +140,7 @@
     "technicalDetails": "Dettagli tecnici"
   },
   "input": {
+    "ariaLabel": "Messaggio",
     "placeholder": "Scrivi a {{provider}}…",
     "placeholderDefault": "Scrivi il tuo messaggio...",
     "disabled": "Input disabilitato",
@@ -278,7 +279,7 @@
       "title": "Sostituzione di un messaggio precedente",
       "filesNotReverted": "i file già modificati non vengono ripristinati",
       "cancel": "Annulla"
-    },
+    },
     "pasteImage": {
       "label": "Appunti",
       "empty": "Nessuna immagine negli appunti",
