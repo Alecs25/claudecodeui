@@ -48,8 +48,32 @@
     "indicator": "Unsaved changes"
   },
   "sentFiles": {
-    "open": "Open in side panel",
+    "open": "Open",
     "downloadError": "Download failed",
-    "openError": "Could not open the file"
+    "openError": "Could not open the file",
+    "thumbnail": "Preview of {{name}}"
+  },
+  "fileViewer": {
+    "loading": "Loading…",
+    "error": "Unable to display this file.",
+    "noPreview": "No preview for this file type.",
+    "pdfInNewTab": "Open the PDF in a new tab to read it.",
+    "view": "View",
+    "preview": "Preview",
+    "code": "Code",
+    "pageWidth": "Page width",
+    "widths": {
+      "phone": "Phone",
+      "tablet": "Tablet",
+      "desktop": "Desktop"
+    },
+    "dock": "Side by side",
+    "openInNewTab": "Open in new tab",
+    "close": "Close",
+    "back": "Back",
+    "ask": "Ask Claude about this file…",
+    "askShort": "Ask Claude…",
+    "send": "Send",
+    "sent": "Sent"
   }
 }

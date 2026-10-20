@@ -43,8 +43,32 @@
     "indicator": "Modifiche non salvate"
   },
   "sentFiles": {
-    "open": "Apri nel pannello laterale",
+    "open": "Apri",
     "downloadError": "Download non riuscito",
-    "openError": "Impossibile aprire il file"
+    "openError": "Impossibile aprire il file",
+    "thumbnail": "Anteprima di {{name}}"
+  },
+  "fileViewer": {
+    "loading": "Caricamento…",
+    "error": "Impossibile mostrare il file.",
+    "noPreview": "Anteprima non disponibile per questo tipo di file.",
+    "pdfInNewTab": "Apri il PDF in una nuova scheda per leggerlo.",
+    "view": "Vista",
+    "preview": "Anteprima",
+    "code": "Codice",
+    "pageWidth": "Larghezza pagina",
+    "widths": {
+      "phone": "Telefono",
+      "tablet": "Tablet",
+      "desktop": "Desktop"
+    },
+    "dock": "Affianca",
+    "openInNewTab": "Apri in una nuova scheda",
+    "close": "Chiudi",
+    "back": "Indietro",
+    "ask": "Chiedi a Claude su questo file…",
+    "askShort": "Chiedi a Claude…",
+    "send": "Invia",
+    "sent": "Inviato"
   }
 }

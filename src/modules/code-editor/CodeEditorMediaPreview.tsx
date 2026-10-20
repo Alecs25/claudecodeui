@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { api } from '@/shared/api';
 import type { CodeEditorFile,PreviewKind } from '@/shared/types';
-import { getPreviewMimeType } from '@/modules/code-editor/utils/previewableFile';
+import { getPreviewMimeType, looksLikePdf } from '@/modules/code-editor/utils/previewableFile';
 
 type CodeEditorMediaPreviewProps = {
   file: CodeEditorFile;
@@ -22,16 +22,6 @@ type CodeEditorMediaPreviewProps = {
     exitFullscreen: string;
     close: string;
   };
-};
-
-// Reject a "PDF" whose bytes aren't actually a PDF before handing it to the
-// same-origin iframe, so a mislabeled HTML/SVG file can't run in the app origin.
-const PDF_HEADER_SCAN_BYTES = 1024;
-
-const looksLikePdf = async (blob: Blob): Promise<boolean> => {
-  const header = await blob.slice(0, PDF_HEADER_SCAN_BYTES).arrayBuffer();
-  // PDFs must contain the "%PDF-" marker at the very start of the file.
-  return new TextDecoder('latin1').decode(header).includes('%PDF-');
 };
 
 /** Rendered by CodeEditor inside the code-editor module to preview image and PDF files instead of opening them as text. */

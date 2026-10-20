@@ -11,6 +11,7 @@ import { usePaletteOpsRegister } from '@/modules/command-palette';
 import { TaskMasterPanel, useTaskMasterProjectSync, useTasksSettings } from '@/modules/task-master';
 import type { AppTab, DirectoryRevealRequest, Project, ProjectSession, SessionEstablishedContext, SessionNavigationOptions, SettingsOpenTarget } from '@/shared/types';
 import { useSetUiPreferences, useUiPreferences } from '@/shared/context/UiPreferencesContext';
+import { getSessionTitle } from '@/shared/utils';
 import {
   getTranscriptViewMode,
   getTranscriptViewModePreferences,
@@ -18,7 +19,7 @@ import {
 } from '@/shared/uiPreferences';
 import { useReportWorkspaceRightColumn } from '@/modules/project-workspace/context/WorkspaceLayoutContext';
 import { useFileOpenResolver } from '@/modules/project-workspace/hooks/useFileOpenResolver';
-import { EditorSidebar, useEditorSidebar, useSentFilesAutoOpen } from '@/modules/code-editor';
+import { EditorSidebar, FileViewer, useEditorSidebar, useFileViewer, useSentFilesAutoOpen } from '@/modules/code-editor';
 import WorkspaceHeader from '@/modules/project-workspace/WorkspaceHeader';
 import WorkspaceStateView from '@/modules/project-workspace/WorkspaceStateView';
 import WorkspaceErrorBoundary from '@/modules/project-workspace/WorkspaceErrorBoundary';
@@ -130,10 +131,15 @@ function WorkspaceMain({
     isMobile,
   });
   useSentFilesAutoOpen();
+  const { viewerTarget, closeViewer, dockViewerFile, openFileFromLink } = useFileViewer({
+    projectId: selectedProject?.projectId,
+    openInSidePanel: handleFileOpen,
+  });
 
   // Resolves bare/partial file references (e.g. links inside chat messages) to
-  // real project files before opening them in the in-app editor.
-  const resolvedFileOpen = useFileOpenResolver(selectedProject, handleFileOpen);
+  // real project files before opening them: HTML pages in the central viewer,
+  // everything else in the in-app editor.
+  const resolvedFileOpen = useFileOpenResolver(selectedProject, openFileFromLink);
 
   useEffect(() => {
     if (!shouldShowTasksTab && activeTab === 'tasks') {
@@ -213,6 +219,12 @@ function WorkspaceMain({
       setActiveTab('chat');
     }
   }, [isMobile, selectedSessionId, setActiveTab]);
+
+  const askAboutViewerFile = useCallback((prompt: string) => {
+    if (selectedSessionId) {
+      requestSessionPrompt(selectedSessionId, prompt);
+    }
+  }, [selectedSessionId]);
 
   // Stable so React.memo(ChatInterface) can bail out: an inline arrow here made
   // every WorkspaceMain render re-render the whole chat tree, including during
@@ -430,6 +442,19 @@ function WorkspaceMain({
           projectPath={selectedProject.path}
         />
       </div>
+
+      {viewerTarget && (
+        <FileViewer
+          // A new file starts on its rendered view with a fresh question field.
+          key={viewerTarget.source === 'sent' ? viewerTarget.file.id : viewerTarget.path}
+          target={viewerTarget}
+          sessionLabel={selectedSession ? getSessionTitle(selectedSession) : null}
+          isMobile={isMobile}
+          onAsk={selectedSessionId ? askAboutViewerFile : undefined}
+          onDock={dockViewerFile}
+          onClose={closeViewer}
+        />
+      )}
     </div>
   );
 }

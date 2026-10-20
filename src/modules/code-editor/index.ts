@@ -5,3 +5,5 @@ export { default as MermaidDiagram } from '@/modules/code-editor/markdown/Mermai
 export { default as SentFilesCard } from '@/modules/code-editor/SentFilesCard';
 export { isSendUserFileTool, parseSentFilesResult } from '@/modules/code-editor/utils/sentFiles';
 export { useSentFilesAutoOpen } from '@/modules/code-editor/hooks/useSentFilesAutoOpen';
+export { default as FileViewer } from '@/modules/code-editor/FileViewer';
+export { useFileViewer } from '@/modules/code-editor/hooks/useFileViewer';

@@ -259,3 +259,16 @@ export const getQuickSettingsTabId = (tab: QuickSettingsTab): string => `quick-s
 
 /** DOM id of the tabpanel a quick settings tab controls; pairs with `getQuickSettingsTabId`. */
 export const getQuickSettingsTabPanelId = (tab: QuickSettingsTab): string => `quick-settings-tabpanel-${tab}`;
+
+// ---------------------------
+
+//----------------- FILE SIZE ------------
+
+const BYTES_PER_KB = 1024;
+
+/** Formats a byte count as B, KB or MB with one decimal, for file cards and viewer headers. */
+export const formatFileSize = (bytes: number): string => {
+  if (bytes < BYTES_PER_KB) return `${bytes} B`;
+  if (bytes < BYTES_PER_KB * BYTES_PER_KB) return `${(bytes / BYTES_PER_KB).toFixed(1)} KB`;
+  return `${(bytes / BYTES_PER_KB / BYTES_PER_KB).toFixed(1)} MB`;
+};
