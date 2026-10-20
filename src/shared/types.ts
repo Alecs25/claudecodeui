@@ -1402,7 +1402,8 @@ export type PreferenceToggleKey =
   | 'showThinking'
   | 'sendByCtrlEnter'
   | 'voiceEnabled'
-  | 'promptSuggestions';
+  | 'promptSuggestions'
+  | 'autoOpenSentFiles';
 
 /** The full set of quick settings booleans keyed by PreferenceToggleKey, held together so the panel can read every toggle from one object. */
 export type QuickSettingsPreferences = Record<PreferenceToggleKey, boolean>;

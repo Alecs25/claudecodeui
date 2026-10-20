@@ -16,6 +16,8 @@ export type UiPreferences = {
   sidebarVisible: boolean;
   voiceEnabled: boolean;
   promptSuggestions: boolean;
+  /** Files an agent sends open in the central viewer when they arrive on screen. */
+  autoOpenSentFiles: boolean;
 };
 
 export type UiPreferenceKey = keyof UiPreferences;
@@ -31,6 +33,7 @@ const DEFAULTS: UiPreferences = {
   sidebarVisible: true,
   voiceEnabled: false,
   promptSuggestions: true,
+  autoOpenSentFiles: true,
 };
 
 const PREFERENCE_KEYS = Object.keys(DEFAULTS) as UiPreferenceKey[];
