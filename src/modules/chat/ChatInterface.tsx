@@ -236,6 +236,7 @@ function ChatInterface({
     getInputProps,
     isDragActive,
     openAttachmentPicker,
+    pasteImageFromClipboard,
     handleSubmit,
     backgroundSendPrompt,
     resolveBackgroundSendPrompt,
@@ -707,6 +708,7 @@ function ChatInterface({
           getRootProps={getRootProps as (...args: unknown[]) => Record<string, unknown>}
           getInputProps={getInputProps as (...args: unknown[]) => Record<string, unknown>}
           openAttachmentPicker={openAttachmentPicker}
+          onPasteImage={pasteImageFromClipboard}
           inputHighlightRef={inputHighlightRef}
           renderInputWithMentions={renderInputWithMentions}
           textareaRef={textareaRef}

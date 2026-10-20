@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { Clock, Mic, Paperclip, Plug, PlusIcon, SquareSlash } from 'lucide-react';
+import { ClipboardPaste, Clock, Mic, Paperclip, Plug, PlusIcon, SquareSlash } from 'lucide-react';
 
 import { cn } from '@/shared/utils';
 import { useComposerMenuAnchor } from '@/modules/chat/hooks/useComposerMenuAnchor';
@@ -10,6 +10,8 @@ import { ScheduleMessagePanel } from '@/modules/chat/composer/ScheduleMessagePan
 
 type ComposerPlusMenuProps = {
   onAttachFiles: () => void;
+  /** Pastes images from the system clipboard; absent where the browser cannot read them. */
+  onPasteImage?: () => void;
   onOpenCommands: () => void;
   /** Number of slash commands available, shown beside "Commands". */
   commandCount: number;
@@ -31,6 +33,7 @@ const ICON_CLASS = 'h-4 w-4 text-muted-foreground';
  */
 export default function ComposerPlusMenu({
   onAttachFiles,
+  onPasteImage,
   onOpenCommands,
   commandCount,
   onOpenMcpSettings,
@@ -93,6 +96,15 @@ export default function ComposerPlusMenu({
                 isSelected={false}
                 onSelect={runAndClose(onAttachFiles)}
               />
+              {onPasteImage && (
+                <ComposerMenuItem
+                  role="menuitem"
+                  icon={<ClipboardPaste className={ICON_CLASS} />}
+                  label={t('composer.plusMenu.pasteImage', { defaultValue: 'Paste image' })}
+                  isSelected={false}
+                  onSelect={runAndClose(onPasteImage)}
+                />
+              )}
               <ComposerMenuItem
                 role="menuitem"
                 icon={<SquareSlash className={ICON_CLASS} />}

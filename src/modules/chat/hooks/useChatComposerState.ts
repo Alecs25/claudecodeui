@@ -34,6 +34,7 @@ import { readBtwQuestion, requestSideChat } from '@/modules/chat/utils/sideChat'
 import { takePendingSuggestedPrompt } from '@/modules/chat/utils/sessionSuggestions';
 import { readSessionPromptDetail, SESSION_PROMPT_EVENT } from '@/modules/chat/utils/sessionPrompt';
 import { describeBackgroundTask, ownBackgroundTasks } from '@/modules/chat/utils/backgroundTasks';
+import { canReadClipboardImages, readClipboardImages } from '@/modules/chat/utils/clipboardImages';
 import { useFileMentions } from '@/modules/chat/hooks/useFileMentions';
 import { useInputHistory } from '@/modules/chat/hooks/useInputHistory';
 import { useSlashCommands } from '@/modules/chat/hooks/useSlashCommands';
@@ -660,6 +661,21 @@ export function useChatComposerState({
     },
     [handleAttachmentFiles],
   );
+
+  // "Paste image" in the + menu: phone keyboards never paste images into a textarea.
+  const pasteImageFromClipboard = useCallback(async () => {
+    const result = await readClipboardImages();
+    if ('files' in result) {
+      handleAttachmentFiles(result.files);
+      return;
+    }
+    const message = {
+      empty: t('composer.pasteImage.empty', { defaultValue: 'No image on the clipboard' }),
+      denied: t('composer.pasteImage.denied', { defaultValue: 'Clipboard access denied' }),
+      unsupported: t('composer.pasteImage.unsupported', { defaultValue: 'This browser cannot read clipboard images' }),
+    }[result.error];
+    setFileErrors((previous) => new Map(previous).set(t('composer.pasteImage.label', { defaultValue: 'Clipboard' }), message));
+  }, [handleAttachmentFiles, t]);
 
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     maxSize: MAX_ATTACHMENT_SIZE,
@@ -1724,6 +1740,7 @@ export function useChatComposerState({
     handleInputChange,
     handleKeyDown,
     handlePaste,
+    pasteImageFromClipboard: canReadClipboardImages() ? pasteImageFromClipboard : undefined,
     handleTextareaClick,
     handleTextareaInput,
     syncInputOverlayScroll,

@@ -278,8 +278,15 @@
       "title": "Sostituzione di un messaggio precedente",
       "filesNotReverted": "i file già modificati non vengono ripristinati",
       "cancel": "Annulla"
+    },
+    "pasteImage": {
+      "label": "Appunti",
+      "empty": "Nessuna immagine negli appunti",
+      "denied": "Accesso agli appunti negato",
+      "unsupported": "Questo browser non legge le immagini dagli appunti"
     },
     "plusMenu": {
+      "pasteImage": "Incolla immagine",
       "label": "Aggiungi",
       "attach": "Allega file",
       "commands": "Comandi",

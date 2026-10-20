@@ -198,8 +198,15 @@
       "title": "Replacing an earlier message",
       "filesNotReverted": "files the agent already changed are not reverted",
       "cancel": "Cancel"
+    },
+    "pasteImage": {
+      "label": "Clipboard",
+      "empty": "No image on the clipboard",
+      "denied": "Clipboard access denied",
+      "unsupported": "This browser cannot read clipboard images"
     },
     "plusMenu": {
+      "pasteImage": "Paste image",
       "label": "Add",
       "attach": "Attach files",
       "commands": "Commands",

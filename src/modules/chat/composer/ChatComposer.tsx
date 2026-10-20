@@ -110,6 +110,8 @@ type ChatComposerProps = {
   getRootProps: (...args: unknown[]) => Record<string, unknown>;
   getInputProps: (...args: unknown[]) => Record<string, unknown>;
   openAttachmentPicker: () => void;
+  /** Reads images from the system clipboard; absent where the browser cannot. */
+  onPasteImage?: () => void;
   inputHighlightRef: RefObject<HTMLDivElement>;
   renderInputWithMentions: (text: string) => ReactNode;
   textareaRef: RefObject<HTMLTextAreaElement>;
@@ -196,6 +198,7 @@ export default function ChatComposer({
   getRootProps,
   getInputProps,
   openAttachmentPicker,
+  onPasteImage,
   inputHighlightRef,
   renderInputWithMentions,
   textareaRef,
@@ -509,6 +512,7 @@ export default function ChatComposer({
           <PromptInputTools className="min-w-0 flex-1 flex-nowrap gap-1.5">
             <ComposerPlusMenu
               onAttachFiles={openAttachmentPicker}
+              onPasteImage={onPasteImage}
               onOpenCommands={onToggleCommandMenu}
               commandCount={slashCommandsCount}
               onOpenMcpSettings={onOpenMcpSettings}
