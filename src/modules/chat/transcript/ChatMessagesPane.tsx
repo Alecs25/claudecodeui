@@ -358,6 +358,7 @@ function ChatMessagesPane({
                   <Fragment key={`tool-group-${getMessageKey(item.messages[0])}`}>
                     <LazyMessageRow
                       lazyRows={lazyRows}
+                      scrollContainerRef={scrollContainerRef}
                       timestamp={item.timestamp}
                       initiallyNearViewport={initiallyNearViewport}
                     >
@@ -387,6 +388,7 @@ function ChatMessagesPane({
                 <Fragment key={getMessageKey(item)}>
                   <LazyMessageRow
                     lazyRows={lazyRows}
+                    scrollContainerRef={scrollContainerRef}
                     timestamp={item.timestamp}
                     initiallyNearViewport={initiallyNearViewport}
                   >

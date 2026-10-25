@@ -175,6 +175,7 @@ function TranscriptPane({
           <LazyMessageRow
             key={row.id}
             lazyRows={lazyRows}
+            scrollContainerRef={scrollContainerRef}
             timestamp={row.id}
             initiallyNearViewport={row.mounted}
           >
@@ -197,7 +198,7 @@ function ObservedRows({ scrollContainerRef, rows }: { scrollContainerRef: React.
   return (
     <>
       {rows.map((row) => (
-        <LazyMessageRow key={row.id} lazyRows={lazyRows} timestamp={row.id} initiallyNearViewport={row.mounted}>
+        <LazyMessageRow key={row.id} lazyRows={lazyRows} scrollContainerRef={scrollContainerRef} timestamp={row.id} initiallyNearViewport={row.mounted}>
           <div className="chat-message">{row.id}</div>
         </LazyMessageRow>
       ))}
