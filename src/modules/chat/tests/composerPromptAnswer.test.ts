@@ -52,7 +52,14 @@ const submit = async (view: ReturnType<typeof renderComposer>['view'], text: str
 
 beforeEach(() => {
   localStorage.clear();
-  vi.stubGlobal('fetch', vi.fn(async () => new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } })));
+  // The queue append answers with the message the server stored.
+  vi.stubGlobal('fetch', vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+    const body = init?.method === 'POST' ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+    return new Response(JSON.stringify(body ? { queuedMessage: body.queuedMessage, appended: false } : []), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }));
 });
 
 afterEach(() => {
