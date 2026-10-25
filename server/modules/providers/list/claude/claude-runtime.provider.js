@@ -52,10 +52,12 @@ const activeSessions = new Map();
 // session is removed, and reset when a newer run takes the key over.
 const backgroundWork = createBackgroundWorkTracker();
 const pendingToolApprovals = new Map();
-// Sessions cancelled via abort-session. The abort handler already sent the
-// terminal `complete` (aborted: true) to the client, so the run loop must not
-// emit a second one when its generator winds down.
-const abortedSessionIds = new Set();
+// Query instances cancelled via abort-session. The abort handler already sent
+// the terminal `complete` (aborted: true) to the client, so the run loop must
+// not emit a second one when its generator winds down. Keyed by instance, not
+// session: an aborted process can still be winding down when the next turn on
+// the same session starts.
+const abortedInstances = new WeakSet();
 // Query instances interrupted because a newer run took over their session id
 // (see addSession). Their run loops must stay silent on wind-down: the map
 // entry, the abort flag, and all client-facing events belong to the new run.
@@ -75,6 +77,39 @@ const runsWaitingForHeldTurn = new Map();
 // took the session over here would run next to it, both making tool calls and
 // both appending to the same transcript.
 const heldTurns = new Map();
+// Query instances whose run loop has finished, i.e. whose CLI process is gone.
+const finishedInstances = new WeakSet();
+
+// Closing stdin does not end a CLI that still has background shells or agents
+// going: it waits for them, up to its background-wait ceiling, and keeps
+// running turns of its own (task notifications, messages from other sessions)
+// that no client can see or stop. A stopped or superseded process gets this
+// long to exit on its own before it is killed.
+const ABORTED_PROCESS_GRACE_MS = 5 * 1000;
+const SUPERSEDED_PROCESS_GRACE_MS = 30 * 1000;
+
+/**
+ * Kills a released process that has not exited after `graceMs`.
+ * @param {Object} instance - SDK query instance
+ * @param {number} graceMs - How long to wait first
+ */
+function closeIfStillRunning(instance, graceMs) {
+  if (!instance || typeof instance.close !== 'function') {
+    return;
+  }
+  const timer = setTimeout(() => {
+    if (finishedInstances.has(instance)) {
+      return;
+    }
+    console.warn('[Claude SDK] released CLI process did not exit; closing it');
+    try {
+      instance.close();
+    } catch (error) {
+      console.error('Error closing Claude query:', error?.message || error);
+    }
+  }, graceMs);
+  timer.unref?.();
+}
 
 const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS, 10) || 55000;
 // How long the process stays open after a turn that took a steering message.
@@ -372,6 +407,8 @@ function matchesToolPermission(entry, toolName, input) {
  * Claude Code turns the Artifact tools off for SDK-driven sessions unless
  * CLAUDE_CODE_ARTIFACT is set, so a session continued from this UI would lose them.
  * Default it on; a host value (e.g. CLAUDE_CODE_ARTIFACT=0) still wins.
+ * @param {Record<string, string | undefined>} [hostEnv]
+ * @returns {Record<string, string | undefined>}
  */
 export function buildClaudeSdkEnv(hostEnv = process.env) {
   return {
@@ -520,9 +557,8 @@ function addSession(sessionId, queryInstance, writer = null, releaseInput = null
   // superseded without being stopped (e.g. an abort that raced run setup and
   // found nothing to interrupt). Overwriting it here would strand its
   // generator forever — this map entry is the only handle for interrupting
-  // it. Stop it directly rather than via abortClaudeSDKSession, whose
-  // session-keyed abortedSessionIds flag would be consumed by the new run
-  // and suppress its terminal `complete`.
+  // it. Stop it directly rather than via abortClaudeSDKSession, which would
+  // mark it aborted and send the client an aborted `complete` for it.
   const superseding = Boolean(
     existing && existing.status === 'active' && existing.instance && existing.instance !== queryInstance
   );
@@ -540,6 +576,7 @@ function addSession(sessionId, queryInstance, writer = null, releaseInput = null
       reportInterruptError(error);
     }
     existing.releaseInput?.();
+    closeIfStillRunning(existing.instance, SUPERSEDED_PROCESS_GRACE_MS);
     // Whatever the superseded process had outstanding dies with it and will
     // never report, so the new run starts from an empty task set.
     backgroundWork.clear(sessionId);
@@ -576,17 +613,27 @@ function addSession(sessionId, queryInstance, writer = null, releaseInput = null
  * @param {Object} session - The session's entry in the active sessions map
  */
 function stopTasksAndReleaseInput(sessionId, session) {
+  stopOutstandingTasks(sessionId, session.instance);
+  session.releaseInput?.();
+}
+
+/**
+ * Asks the CLI to stop every background task it still has going for a session.
+ * Not awaited; see stopTasksAndReleaseInput.
+ * @param {string} sessionId - Session identifier
+ * @param {Object} instance - SDK query instance
+ */
+function stopOutstandingTasks(sessionId, instance) {
   for (const task of backgroundWork.outstanding(sessionId)) {
     // A stop that cannot be delivered changes nothing about what happens
     // next: the process is on its way out either way. Guard the synchronous
-    // call too, so a failing stop can never skip the release below.
+    // call too, so a failing stop can never skip the release after it.
     try {
-      Promise.resolve(session.instance?.stopTask?.(task.taskId)).catch(() => {});
+      Promise.resolve(instance?.stopTask?.(task.taskId)).catch(() => {});
     } catch {
       // Same as a rejected stop.
     }
   }
-  session.releaseInput?.();
 }
 
 /**
@@ -621,6 +668,7 @@ function releaseHeldSession(sessionId, { interrupt = true } = {}) {
     }
   }
   stopTasksAndReleaseInput(sessionId, held);
+  closeIfStillRunning(held.instance, SUPERSEDED_PROCESS_GRACE_MS);
 }
 
 /**
@@ -1727,7 +1775,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     // waiting for the next one. Refused once the client has been told the turn
     // is over (or it was stopped): the message then goes as a turn of its own.
     const steerTurn = (message) => {
-      if (turnCompleteSent || (sessionKey() && abortedSessionIds.has(sessionKey()))) {
+      if (turnCompleteSent || abortedInstances.has(queryInstance)) {
         return false;
       }
       if (!heldPrompt.push(message)) {
@@ -1883,7 +1931,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       if (message.type === 'result') {
         endHeldTurn(sessionKey(), queryInstance);
         // The turn is done as far as the client is concerned.
-        const abortPending = sessionKey() ? abortedSessionIds.has(sessionKey()) : false;
+        const abortPending = abortedInstances.has(queryInstance);
         const stillOutstanding = backgroundWork.hasOutstanding(sessionKey());
         if (!turnCompleteSent && !abortPending) {
           turnCompleteSent = true;
@@ -1985,7 +2033,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
     // Send the terminal completion event — skipped for aborted runs, whose
     // terminal `complete` (aborted: true) was already sent by abort-session, and
     // for runs that already reported completion when their `result` arrived.
-    const wasAborted = !superseded && sessionKey() ? abortedSessionIds.delete(sessionKey()) : false;
+    const wasAborted = !superseded && abortedInstances.has(queryInstance);
     if (!turnCompleteSent && !superseded) {
       turnCompleteSent = true;
       if (!wasAborted) {
@@ -2016,7 +2064,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       return;
     }
 
-    const wasAborted = sessionKey() ? abortedSessionIds.delete(sessionKey()) : false;
+    const wasAborted = Boolean(queryInstance) && abortedInstances.has(queryInstance);
     if (wasAborted) {
       // The abort already produced the terminal complete; a generator throw
       // caused by interrupt() is expected noise, not a user-facing error.
@@ -2044,6 +2092,9 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       error
     });
   } finally {
+    if (queryInstance) {
+      finishedInstances.add(queryInstance);
+    }
     // Always close stdin — otherwise an aborted or failed run leaves the CLI
     // process (and its MCP servers) alive until the server exits.
     if (idleReleaseTimer) {
@@ -2081,27 +2132,35 @@ async function abortClaudeSDKSession(sessionId) {
 
     // Mark before interrupting so the run loop knows not to emit its own
     // terminal complete (the abort handler sends the aborted one).
-    abortedSessionIds.add(sessionId);
+    abortedInstances.add(session.instance);
+
+    // A session held open after its turn has nothing to interrupt; Stop there
+    // means its background work.
+    stopOutstandingTasks(sessionId, session.instance);
 
     // Call interrupt() on the query instance
     await session.instance.interrupt();
 
-    // Stop the background tasks the run started and release the held stdin
-    // stream; without this the CLI stays up for the rest of the post-turn hold,
-    // and its background agents keep working, even though the user cancelled.
-    stopTasksAndReleaseInput(sessionId, session);
+    // Release the held stdin stream; without this the CLI stays up for the
+    // rest of the post-turn hold. The background tasks were stopped above,
+    // while stdin was still open.
+    session.releaseInput?.();
+    closeIfStillRunning(session.instance, ABORTED_PROCESS_GRACE_MS);
 
     // Update session status
     session.status = 'aborted';
 
-    // Clean up session
-    removeSession(sessionId);
+    // Clean up session, unless a new turn took the entry over during the
+    // interrupt.
+    if (getSession(sessionId)?.instance === session.instance) {
+      removeSession(sessionId);
+    }
 
     return true;
   } catch (error) {
     console.error(`Error aborting session ${sessionId}:`, error);
     // The run keeps going; let it emit its own terminal complete.
-    abortedSessionIds.delete(sessionId);
+    abortedInstances.delete(session.instance);
     // A run waiting behind it is cancelled all the same.
     return Boolean(waitingRun);
   }

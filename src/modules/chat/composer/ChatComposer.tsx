@@ -63,6 +63,7 @@ type ChatComposerProps = {
   onAbortSession: () => void;
   /** Moves the command or subagent the turn is blocked on to the background; absent when there is none. */
   onRunInBackground?: () => void;
+  onStopBackgroundWork: () => void;
   permissionMode: PermissionMode;
   availablePermissionModes: PermissionMode[];
   onSelectPermissionMode: (mode: PermissionMode) => void;
@@ -157,6 +158,7 @@ export default function ChatComposer({
   isLoading,
   onAbortSession,
   onRunInBackground,
+  onStopBackgroundWork,
   permissionMode,
   availablePermissionModes,
   onSelectPermissionMode,
@@ -321,6 +323,7 @@ export default function ChatComposer({
             activity={activity}
             onAbort={onAbortSession}
             onRunInBackground={onRunInBackground}
+            onStopBackground={onStopBackgroundWork}
             isInputFocused={isInputFocused}
           />
         </div>

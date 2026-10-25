@@ -11,6 +11,8 @@ type ActivityIndicatorProps = {
   onAbort?: () => void;
   /** Moves the command or subagent the turn is blocked on to the background; absent when there is none. */
   onRunInBackground?: () => void;
+  /** Stops a session's background work; offered only while that is all it is doing. */
+  onStopBackground?: () => void;
   isInputFocused?: boolean;
 };
 
@@ -41,13 +43,14 @@ function describeBackgroundTasks(allTasks: BackgroundTaskSummary[], t: TFunction
  * entry is removed.
  *
  * A session whose turn has ended while the tasks it launched still run is
- * drawn in the workflow and agent cards' purple, naming the work, and with no
- * Stop: nothing is responding, and the composer can send.
+ * drawn in the workflow and agent cards' purple, naming the work. Its Stop
+ * ends that work and has no Escape shortcut: nothing is responding, and a
+ * stray key should not kill a long workflow.
  *
  * Rendered by chat's ChatComposer above the input so the user can see and
  * interrupt the in-flight turn without leaving the composer.
  */
-export default function ActivityIndicator({ activity, onAbort, onRunInBackground, isInputFocused = false }: ActivityIndicatorProps) {
+export default function ActivityIndicator({ activity, onAbort, onRunInBackground, onStopBackground, isInputFocused = false }: ActivityIndicatorProps) {
   const { t } = useTranslation('chat');
   const [renderedActivity, setRenderedActivity] = useState<SessionActivity | null>(activity);
   const [isExiting, setIsExiting] = useState(false);
@@ -89,6 +92,7 @@ export default function ActivityIndicator({ activity, onAbort, onRunInBackground
     : (renderedActivity.statusText || actionWords[Math.floor(elapsedSeconds / 4) % actionWords.length])
       .replace(/\.+$/, '');
   const detail = isBackground ? describeBackgroundTasks(renderedActivity.tasks ?? [], t) : '';
+  const onStop = isBackground ? onStopBackground : (renderedActivity.canInterrupt ? onAbort : undefined);
 
   const minutes = Math.floor(elapsedSeconds / 60);
   const seconds = elapsedSeconds % 60;
@@ -134,10 +138,10 @@ export default function ActivityIndicator({ activity, onAbort, onRunInBackground
             <span>{t('claudeStatus.background', { defaultValue: 'Background' })}</span>
           </button>
         )}
-        {renderedActivity.canInterrupt && onAbort && (
+        {onStop && (
           <button
             type="button"
-            onClick={onAbort}
+            onClick={onStop}
             className={`${tabSurfaceClassName} pointer-events-auto gap-1.5 text-muted-foreground hover:bg-card hover:text-destructive`}
             aria-label={t('claudeStatus.stop', { defaultValue: 'Stop' })}
           >
@@ -145,9 +149,11 @@ export default function ActivityIndicator({ activity, onAbort, onRunInBackground
               <rect x="5" y="5" width="14" height="14" rx="2" />
             </svg>
             <span>{t('claudeStatus.stop', { defaultValue: 'Stop' })}</span>
-            <kbd className="hidden rounded border border-border/60 px-1 text-[10px] text-muted-foreground/70 sm:inline-block">
-              esc
-            </kbd>
+            {!isBackground && (
+              <kbd className="hidden rounded border border-border/60 px-1 text-[10px] text-muted-foreground/70 sm:inline-block">
+                esc
+              </kbd>
+            )}
           </button>
         )}
         </div>
