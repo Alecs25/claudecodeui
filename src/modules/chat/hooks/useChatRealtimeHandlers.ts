@@ -6,7 +6,7 @@ import { showCompletionTitleIndicator } from '@/modules/chat/utils/pageTitleNoti
 import { playChatCompletionSound, playNotificationSound } from '@/shared/utils';
 import type { SessionStore } from '@/modules/chat/hooks/useSessionStore';
 import { normalizedToChatMessages } from '@/modules/chat/hooks/useChatMessages';
-import { collectRunningBackgroundTasks } from '@/modules/chat/utils/backgroundTasks';
+import { collectRunningBackgroundTasks, listRunningBackgroundLaunches, readBackgroundTaskId, readBackgroundTaskStatus } from '@/modules/chat/utils/backgroundTasks';
 
 const isActionablePermissionRequest = (request: { toolName?: unknown } | null | undefined): boolean => {
   return request?.toolName !== 'ExitPlanMode' && request?.toolName !== 'exit_plan_mode';
@@ -191,32 +191,51 @@ export function useChatRealtimeHandlers({
         }
 
         case 'protocol_error': {
-          if (sid && msg.code === 'NO_SUCH_TASK') {
-            // Nothing runs under that id any more: its process ended without
-            // reporting (a restart, a session from the desktop app), so its
-            // chip would stay forever. Settle it instead of reporting an error.
-            if (msg.toolUseId || msg.taskId) {
-              sessionStore.appendRealtime(sid, {
-                id: `task_gone_${msg.taskId ?? msg.toolUseId}_${Date.now()}`,
-                sessionId: sid,
-                timestamp: new Date().toISOString(),
-                provider,
-                kind: 'task_status',
-                event: 'updated',
-                status: 'stopped',
-                ...(msg.taskId ? { taskId: msg.taskId } : {}),
-                ...(msg.toolUseId ? { toolUseId: msg.toolUseId } : {}),
-              } as NormalizedMessage);
-              if (getSessionActivity?.(sid)?.background) {
-                reportRemainingBackgroundWork(sid);
-              }
-            }
-            return;
-          }
           if (msg.code === 'NO_FOREGROUND_TASK') {
             // The call settled before the request to background it arrived;
             // the turn goes on regardless, so there is nothing to report.
             return;
+          }
+          if (sid && msg.code === 'NO_SUCH_TASK') {
+            // The ✕ on a task whose end never reached this client (its process
+            // went away, say): settle its card and chip instead of reporting a
+            // failure the user can do nothing about. The server echoes the
+            // toolUseId when the request named one.
+            const taskId = typeof msg.taskId === 'string' ? msg.taskId : undefined;
+            const rows = taskId
+              ? normalizedToChatMessages(sessionStore.getMessages(sid))
+                .filter((message) => readBackgroundTaskId(message) === taskId)
+              : [];
+            // A resumed agent can name the task on more than one running row.
+            const toolUseIds = new Set<string>(
+              listRunningBackgroundLaunches(rows).map((launch) => launch.toolId as string),
+            );
+            if (typeof msg.toolUseId === 'string' && msg.toolUseId) {
+              toolUseIds.add(msg.toolUseId);
+            }
+            for (const toolUseId of toolUseIds) {
+              handleEvent({
+                kind: 'task_status',
+                event: 'updated',
+                id: `task_gone_${toolUseId}`,
+                sessionId: sid,
+                provider,
+                timestamp: new Date().toISOString(),
+                ...(taskId ? { taskId } : {}),
+                toolUseId,
+                status: 'stopped',
+              });
+            }
+            if (toolUseIds.size > 0) {
+              return;
+            }
+            // Its end arrived before the refusal: the card has settled already.
+            if (rows.some((message) => {
+              const status = readBackgroundTaskStatus(message);
+              return status !== undefined && status !== 'running';
+            })) {
+              return;
+            }
           }
           console.error('[Chat] Protocol error:', msg.code, msg.error);
           if (sid) {
