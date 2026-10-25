@@ -5,7 +5,7 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 
 import '@/modules/i18n';
 import { useChatComposerState } from '@/modules/chat/hooks/useChatComposerState';
-import { clearQueuedMessage, writeQueuedMessage } from '@/shared/chatDrafts';
+import { appendQueuedMessage, clearQueuedMessage } from '@/shared/chatDrafts';
 import type { ChatMessage, PermissionMode, Project, ProjectSession } from '@/shared/types';
 
 /**
@@ -46,8 +46,15 @@ const render = (options: { supportsSteering: boolean }) => {
   return { view, sent, added };
 };
 
-const queue = (content: string) => {
-  writeQueuedMessage(SESSION.id, { content, options: {}, attachments: [] });
+// Queues through the real append, with the server echoing back what it stores.
+const queue = async (content: string) => {
+  vi.stubGlobal('fetch', vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+    const body = init?.method === 'POST' ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+    return new Response(JSON.stringify(body
+      ? { queuedMessage: body.queuedMessage, appended: false }
+      : []), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }));
+  await appendQueuedMessage(SESSION.id, { content, options: {}, attachments: [] });
 };
 
 const keyDown = (key: string, value = '') => {
@@ -80,8 +87,8 @@ afterEach(() => {
   localStorage.clear();
 });
 
-test('Send now steers the queued message and clears it only once accepted', () => {
-  queue('also run the linter');
+test('Send now steers the queued message and clears it only once accepted', async () => {
+  await queue('also run the linter');
   const { view, sent, added } = render({ supportsSteering: true });
   assert.equal(view.result.current.queuedDraft?.content, 'also run the linter');
 
@@ -102,8 +109,8 @@ test('Send now steers the queued message and clears it only once accepted', () =
   assert.equal(added.at(-1)?.content, 'also run the linter');
 });
 
-test('a refused steer keeps the message queued for the next turn', () => {
-  queue('too late');
+test('a refused steer keeps the message queued for the next turn', async () => {
+  await queue('too late');
   const { view, added } = render({ supportsSteering: true });
 
   act(() => { view.result.current.steerQueuedDraft(); });
@@ -114,8 +121,8 @@ test('a refused steer keeps the message queued for the next turn', () => {
   assert.equal(added.length, 0);
 });
 
-test('a provider that cannot steer never sends chat.steer', () => {
-  queue('queued');
+test('a provider that cannot steer never sends chat.steer', async () => {
+  await queue('queued');
   const { view, sent } = render({ supportsSteering: false });
 
   act(() => { view.result.current.steerQueuedDraft(); });
@@ -123,8 +130,8 @@ test('a provider that cannot steer never sends chat.steer', () => {
 });
 
 for (const key of ['ArrowUp', 'Escape']) {
-  test(`${key} in an empty composer pulls the queued message back for editing`, () => {
-    queue('edit me');
+  test(`${key} in an empty composer pulls the queued message back for editing`, async () => {
+    await queue('edit me');
     const { view } = render({ supportsSteering: true });
 
     const { event, prevented } = keyDown(key);
@@ -136,8 +143,8 @@ for (const key of ['ArrowUp', 'Escape']) {
   });
 }
 
-test('ArrowUp with text in the composer leaves the queued message alone', () => {
-  queue('stay queued');
+test('ArrowUp with text in the composer leaves the queued message alone', async () => {
+  await queue('stay queued');
   const { view } = render({ supportsSteering: true });
 
   act(() => { view.result.current.handleKeyDown(keyDown('ArrowUp', 'typing').event); });
