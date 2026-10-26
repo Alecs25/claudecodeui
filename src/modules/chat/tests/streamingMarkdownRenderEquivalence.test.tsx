@@ -9,6 +9,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 
 import { splitStreamingMarkdown } from '@/modules/chat/utils/streamingMarkdown';
+import { remarkLetteredLists } from '@/modules/chat/utils/remarkLetteredLists';
 
 /**
  * The property the split exists to preserve: rendering `settled` and `pending`
@@ -18,7 +19,7 @@ import { splitStreamingMarkdown } from '@/modules/chat/utils/streamingMarkdown';
  */
 
 // Same plugin set as Markdown.tsx.
-const remarkPlugins = [remarkGfm, [remarkMath, { singleDollarTextMath: false }]] as never;
+const remarkPlugins = [remarkGfm, remarkLetteredLists, [remarkMath, { singleDollarTextMath: false }]] as never;
 const rehypePlugins = [rehypeKatex] as never;
 
 /**

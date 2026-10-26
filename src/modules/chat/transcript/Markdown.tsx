@@ -9,9 +9,10 @@ import { useTranslation } from 'react-i18next';
 
 import { MermaidDiagram } from '@/modules/code-editor';
 import { MarkdownImage } from '@/modules/chat/transcript/MarkdownImage';
-import { normalizeInlineCodeFences } from '@/modules/chat/utils/chatFormatting';
+import { normalizeInlineCodeFences, normalizeLetteredLists } from '@/modules/chat/utils/chatFormatting';
+import { LETTERED_LIST_CLASS, remarkLetteredLists } from '@/modules/chat/utils/remarkLetteredLists';
 import { normalizeLatexDelimiters } from '@/modules/chat/utils/latexDelimiters';
-import { copyTextToClipboard } from '@/shared/utils';
+import { cn, copyTextToClipboard } from '@/shared/utils';
 import { SyntaxHighlighter } from '@/shared/syntaxHighlighter';
 import { usePaletteOps } from '@/modules/command-palette';
 import { buildSyntaxTheme } from '@/modules/chat/utils/syntaxHighlightTheme';
@@ -228,9 +229,22 @@ const markdownComponents = {
   ),
   hr: () => <hr className="my-4 border-t border-border" />,
   p: ({ children }: { children?: React.ReactNode }) => <div className="mb-2 last:mb-0">{children}</div>,
-  ul: ({ children }: { children?: React.ReactNode }) => (
-    <ul className="mb-2 list-outside list-disc space-y-1 pl-5 marker:text-current last:mb-0">{children}</ul>
-  ),
+  // A lettered list (see remarkLetteredLists) keeps its letters as the markers:
+  // no bullet dot, and the prose ::before dot is hidden so nothing doubles up.
+  ul: ({ className, children }: { className?: string; children?: React.ReactNode }) => {
+    const isLetteredList = className?.split(/\s+/).includes(LETTERED_LIST_CLASS) ?? false;
+    return (
+      <ul
+        className={cn(
+          'mb-2 list-outside space-y-1 pl-5 marker:text-current last:mb-0',
+          isLetteredList ? 'list-none [&>li]:pl-0 [&>li::before]:hidden' : 'list-disc',
+          className,
+        )}
+      >
+        {children}
+      </ul>
+    );
+  },
   ol: ({ children }: { children?: React.ReactNode }) => (
     <ol className="mb-2 list-outside list-decimal space-y-1 pl-5 marker:text-current last:mb-0">{children}</ol>
   ),
@@ -260,9 +274,10 @@ const markdownComponents = {
  */
 function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 'className'>) {
   const content = useMemo(
-    // The LaTeX pass runs second because it reads the code spans the fence pass
-    // normalizes, and must leave the LaTeX inside them literal.
-    () => normalizeLatexDelimiters(normalizeInlineCodeFences(String(children ?? ''))),
+    // The LaTeX pass runs last because it reads the code spans the fence pass
+    // normalizes, and must leave the LaTeX inside them literal. The lettered-list
+    // pass runs between them: it skips fenced code and does not touch code spans.
+    () => normalizeLatexDelimiters(normalizeLetteredLists(normalizeInlineCodeFences(String(children ?? '')))),
     [children],
   );
   // Math support costs a remark tree pass plus a full KaTeX walk on every
@@ -271,7 +286,7 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
   const hasMath = useMemo(() => MATH_DELIMITER.test(content), [content]);
   const remarkPlugins = useMemo(
     () => {
-      const plugins: unknown[] = [remarkGfm];
+      const plugins: unknown[] = [remarkGfm, remarkLetteredLists];
       if (hasMath) {
         plugins.push([remarkMath, { singleDollarTextMath: false }]);
       }

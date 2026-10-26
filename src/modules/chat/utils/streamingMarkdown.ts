@@ -47,6 +47,7 @@ const MATH_DELIMITER_PATTERN = /^ {0,3}\$\$/;
  */
 const CONTEXT_SENSITIVE_LINE = new RegExp([
   '^\\s*([-*+]|\\d+[.)])\\s',      // list item
+  '^ *[a-z][.)] +\\S',             // lettered item, a list once normalizeLetteredLists runs
   '^( {2,}|\\t)\\S',               // indented continuation or indented code
   '^\\s*>',                        // blockquote
   '^\\s*\\|',                      // table row
